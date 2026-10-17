@@ -5,10 +5,11 @@ use crate::account::{AccountRef, NormalizedEmail};
 use crate::crypto::kdf::KdfParams;
 use crate::error::{Error, Result};
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
+use std::collections::HashSet;
 use std::path::Path;
 use uuid::Uuid;
 
-pub const SCHEMA_VERSION: i64 = 8;
+pub const SCHEMA_VERSION: i64 = 9;
 
 const SCHEMA: &str = "
 CREATE TABLE vault_header (
@@ -53,12 +54,32 @@ CREATE TABLE local_blob (
     name TEXT PRIMARY KEY NOT NULL,
     blob BLOB NOT NULL
 );
+CREATE TABLE attachment_cache (
+    id        TEXT PRIMARY KEY NOT NULL,
+    blob      BLOB NOT NULL,
+    last_used INTEGER NOT NULL
+);
 ";
+
+/// The `attachment_cache` table exactly as `SCHEMA` spells it, so a test can
+/// build a schema-8 database by removing it.
+#[cfg(test)]
+const ATTACHMENT_CACHE_DDL: &str = "CREATE TABLE attachment_cache (\n    id        TEXT PRIMARY KEY NOT NULL,\n    blob      BLOB NOT NULL,\n    last_used INTEGER NOT NULL\n);\n";
 
 /// The `account.pake_confirmed` column exactly as `SCHEMA` spells it, so a
 /// test can build a schema-7 database by removing it.
 #[cfg(test)]
 const PAKE_COLUMN_DDL: &str = ",\n    pake_confirmed INTEGER NOT NULL DEFAULT 0";
+
+/// Schema 8 → 9: sealed attachments this device has downloaded, so they
+/// open offline (spec 2026-10-13-encrypted-attachments). Device-local.
+const MIGRATE_8_TO_9: &str = "
+CREATE TABLE attachment_cache (
+    id        TEXT PRIMARY KEY NOT NULL,
+    blob      BLOB NOT NULL,
+    last_used INTEGER NOT NULL
+);
+";
 
 /// Schema 7 → 8: whether this device has signed in to its account with
 /// OPAQUE (spec 2026-10-13-pake-login §6). Plaintext 0/1: it says only
@@ -251,6 +272,7 @@ impl Store {
                 tx.execute_batch(MIGRATE_5_TO_6)?;
                 tx.execute_batch(MIGRATE_6_TO_7)?;
                 tx.execute_batch(MIGRATE_7_TO_8)?;
+                tx.execute_batch(MIGRATE_8_TO_9)?;
                 tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
                 tx.commit()?;
             }
@@ -258,12 +280,20 @@ impl Store {
                 let tx = conn.unchecked_transaction()?;
                 tx.execute_batch(MIGRATE_6_TO_7)?;
                 tx.execute_batch(MIGRATE_7_TO_8)?;
+                tx.execute_batch(MIGRATE_8_TO_9)?;
                 tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
                 tx.commit()?;
             }
             7 => {
                 let tx = conn.unchecked_transaction()?;
                 tx.execute_batch(MIGRATE_7_TO_8)?;
+                tx.execute_batch(MIGRATE_8_TO_9)?;
+                tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+                tx.commit()?;
+            }
+            8 => {
+                let tx = conn.unchecked_transaction()?;
+                tx.execute_batch(MIGRATE_8_TO_9)?;
                 tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
                 tx.commit()?;
             }
@@ -731,6 +761,55 @@ impl Store {
         Ok(())
     }
 
+    /// A downloaded sealed attachment. Reading it marks it recently used.
+    pub fn cached_attachment(&self, id: &Uuid) -> Result<Option<Vec<u8>>> {
+        let id = id.to_string();
+        self.conn.execute(
+            "UPDATE attachment_cache SET last_used = strftime('%s', 'now') * 1000 WHERE id = ?1",
+            params![id],
+        )?;
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT blob FROM attachment_cache WHERE id = ?1",
+                params![id],
+                |r| r.get(0),
+            )
+            .optional()?)
+    }
+
+    pub fn put_cached_attachment(&self, id: &Uuid, blob: &[u8], now_ms: i64) -> Result<()> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO attachment_cache (id, blob, last_used) VALUES (?1, ?2, ?3)",
+            params![id.to_string(), blob, now_ms],
+        )?;
+        Ok(())
+    }
+
+    /// Drop copies no item holds any more, then the least recently used
+    /// until what is left fits in `cap_bytes`.
+    pub fn prune_attachment_cache(&self, keep: &HashSet<Uuid>, cap_bytes: u64) -> Result<()> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, length(blob) FROM attachment_cache ORDER BY last_used DESC")?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)? as u64))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        let mut total = 0;
+        for (id, len) in rows {
+            let held = Uuid::parse_str(&id).is_ok_and(|id| keep.contains(&id));
+            total += len;
+            if !held || total > cap_bytes {
+                self.conn
+                    .execute("DELETE FROM attachment_cache WHERE id = ?1", params![id])?;
+                total -= len;
+            }
+        }
+        Ok(())
+    }
+
     pub fn write_settings(&self, blob: &[u8]) -> Result<()> {
         self.conn.execute(
             "INSERT OR REPLACE INTO settings (id, blob) VALUES (1, ?1)",
@@ -787,6 +866,7 @@ mod tests {
     fn strip_plan_columns(schema: &str) -> String {
         let stripped = schema
             .replace(PAKE_COLUMN_DDL, "")
+            .replace(ATTACHMENT_CACHE_DDL, "")
             .replace("    plan_status    TEXT,\n", "")
             .replace("    entitlement    TEXT    NOT NULL DEFAULT 'full',\n", "")
             .replace("    trial_ends_at  TEXT,\n", "")
@@ -855,7 +935,9 @@ mod tests {
     #[test]
     fn a_schema_7_vault_gains_the_pake_flag_unset() {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
-        let schema_7 = SCHEMA.replace(PAKE_COLUMN_DDL, "");
+        let schema_7 = SCHEMA
+            .replace(PAKE_COLUMN_DDL, "")
+            .replace(ATTACHMENT_CACHE_DDL, "");
         assert_ne!(schema_7, SCHEMA, "the replace must have removed the column");
         conn.execute_batch(&schema_7).unwrap();
         conn.pragma_update(None, "user_version", 7).unwrap();
@@ -863,6 +945,56 @@ mod tests {
         assert!(!store.pake_confirmed().unwrap());
         let v: i64 = store
             .conn
+            .pragma_query_value(None, "user_version", |r| r.get(0))
+            .unwrap();
+        assert_eq!(v, SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn cache_round_trip_updates_last_used() {
+        let store = Store::open_in_memory().unwrap();
+        let id = Uuid::new_v4();
+        assert!(store.cached_attachment(&id).unwrap().is_none());
+        store.put_cached_attachment(&id, b"sealed", 10).unwrap();
+        assert_eq!(store.cached_attachment(&id).unwrap().unwrap(), b"sealed");
+        let used: i64 = store
+            .conn()
+            .query_row("SELECT last_used FROM attachment_cache", [], |r| r.get(0))
+            .unwrap();
+        assert!(used > 10, "a read refreshes last_used");
+    }
+
+    #[test]
+    fn prune_drops_unknown_ids_then_oldest_over_cap() {
+        let store = Store::open_in_memory().unwrap();
+        let ids: Vec<Uuid> = (0..4).map(|_| Uuid::new_v4()).collect();
+        for (i, id) in ids.iter().enumerate() {
+            store
+                .put_cached_attachment(id, &[0; 1024], i as i64)
+                .unwrap();
+        }
+        // ids[3] is the newest but no item holds it.
+        let keep: HashSet<Uuid> = ids[..3].iter().copied().collect();
+        store.prune_attachment_cache(&keep, 2048).unwrap();
+        assert!(store.cached_attachment(&ids[3]).unwrap().is_none());
+        assert!(store.cached_attachment(&ids[0]).unwrap().is_none());
+        assert!(store.cached_attachment(&ids[1]).unwrap().is_some());
+        assert!(store.cached_attachment(&ids[2]).unwrap().is_some());
+    }
+
+    #[test]
+    fn a_schema_8_vault_gains_the_attachment_cache() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        let schema_8 = SCHEMA.replace(ATTACHMENT_CACHE_DDL, "");
+        assert_ne!(schema_8, SCHEMA, "the replace must have removed the table");
+        conn.execute_batch(&schema_8).unwrap();
+        conn.pragma_update(None, "user_version", 8).unwrap();
+        let store = Store::init(conn).unwrap();
+        let id = Uuid::new_v4();
+        store.put_cached_attachment(&id, b"x", 1).unwrap();
+        assert!(store.cached_attachment(&id).unwrap().is_some());
+        let v: i64 = store
+            .conn()
             .pragma_query_value(None, "user_version", |r| r.get(0))
             .unwrap();
         assert_eq!(v, SCHEMA_VERSION);

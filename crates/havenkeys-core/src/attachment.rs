@@ -9,6 +9,7 @@ use crate::vault::{Session, StagedWrite, VaultService};
 use data_encoding::HEXLOWER;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::collections::HashSet;
 use std::fmt;
 use uuid::Uuid;
 use zeroize::Zeroize;
@@ -18,6 +19,9 @@ pub const MAX_ATTACHMENT_BYTES: usize = 5 * 1024 * 1024;
 pub const MAX_ATTACHMENTS_PER_ITEM: usize = 20;
 /// Committed plus pending attachment bytes per vault.
 pub const MAX_ATTACHMENT_VAULT_BYTES: u64 = 192 * 1024 * 1024;
+
+/// Sealed attachments a desktop keeps for offline opening.
+pub const DESKTOP_CACHE_BYTES: u64 = 64 * 1024 * 1024;
 
 const MAX_NAME_CHARS: usize = 120;
 const MAX_EXTENSION_CHARS: usize = 10;
@@ -196,6 +200,31 @@ impl VaultService {
             .find(|meta| meta.id == *attachment_id)
             .cloned()
             .ok_or(Error::NotFound)
+    }
+
+    /// The sealed copy this device downloaded earlier, if it still has one.
+    pub fn cached_attachment(&self, attachment_id: &Uuid) -> Result<Option<Vec<u8>>> {
+        self.session()?;
+        self.store.cached_attachment(attachment_id)
+    }
+
+    pub fn cache_attachment(&self, attachment_id: &Uuid, blob: &[u8], now_ms: i64) -> Result<()> {
+        self.session()?;
+        self.store
+            .put_cached_attachment(attachment_id, blob, now_ms)
+    }
+
+    /// Forget copies of files no live or trashed item holds, then the least
+    /// recently used until the cache fits `cap_bytes`.
+    pub fn prune_attachment_cache(&self, cap_bytes: u64) -> Result<()> {
+        let session = self.session()?;
+        let keep: HashSet<Uuid> = session
+            .overviews
+            .values()
+            .chain(session.trash.values())
+            .flat_map(|ov| ov.attachments.iter().map(|meta| meta.id))
+            .collect();
+        self.store.prune_attachment_cache(&keep, cap_bytes)
     }
 
     /// Stage the item with its list of files changed and everything else as
