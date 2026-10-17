@@ -54,6 +54,7 @@ export function CustomFieldsEditor({
   disabled,
   onError,
   onAttach,
+  attaching,
 }: {
   /** The saved item, for revealing a kept Password; absent for a new item. */
   itemId?: string;
@@ -63,6 +64,8 @@ export function CustomFieldsEditor({
   onError: (message: string) => void;
   /** "Attach a file", at the end of the add menu. */
   onAttach: () => void;
+  /** A pick is open: no second one, and none landing during a save. */
+  attaching: boolean;
 }) {
   const { t } = useI18n();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -280,6 +283,7 @@ export function CustomFieldsEditor({
               <button
                 type="button"
                 role="menuitem"
+                disabled={attaching}
                 onClick={() => {
                   setMenuOpen(false);
                   onAttach();

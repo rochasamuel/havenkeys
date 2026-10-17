@@ -152,8 +152,7 @@ export function CardEditor({ existing, readOnly, onCancel, onSaved, onDirtyChang
       const input = { itemType: "card" as const, title: draft.title, card, tags };
       onSaved(existing ? await api.updateItem(existing.id, input, edit) : await api.createItem(input, edit));
     } catch (err) {
-      const message = errorMessage(err, t, t.editor.saveFailed);
-      setError(files.dropPending() ? `${message} ${t.attachments.notSaved}` : message);
+      setError(files.saveFailed(err));
     } finally {
       setSaving(false);
     }

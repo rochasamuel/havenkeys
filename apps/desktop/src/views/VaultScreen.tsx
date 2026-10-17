@@ -179,7 +179,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
     return () => window.clearTimeout(timer);
   }, [refresh]);
 
-  // Logins saved from the browser extension.
+  // Items changed by a save here or in the browser extension (ITEMS_CHANGED_EVENT).
   useEffect(() => {
     const unlisten = api.onItemsChanged(itemsChanged);
     return () => void unlisten.then((f) => f());

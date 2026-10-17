@@ -36,6 +36,7 @@ vi.mock("../lib/api", async (importOriginal) => {
 });
 
 import { en } from "../i18n/en";
+import { ApiError } from "../lib/api";
 import type { AttachmentMeta, ItemOverview, SectionView } from "../lib/types";
 import { CardEditor } from "./CardEditor";
 import { IdentityEditor } from "./IdentityEditor";
@@ -267,6 +268,26 @@ describe("Editor files", () => {
     act(() => root.unmount());
     root = createRoot(host);
     expect(discardPendingFiles).not.toHaveBeenCalled();
+  });
+
+  it("says once that picked files were lost when the vault locked", async () => {
+    updateItem.mockRejectedValue(new ApiError("invalid_input", "Invalid input: This file is no longer available."));
+    await renderLogin();
+    await attach();
+    await submit();
+    expect(names()).toEqual(["receipt.png"]);
+    expect(host.querySelector(".form-error")?.textContent).toBe(en.attachments.notSaved);
+  });
+
+  it("offers no second pick while one is open", async () => {
+    let finish: (files: unknown[]) => void = () => undefined;
+    pickFiles.mockReturnValue(new Promise((resolve) => (finish = resolve)));
+    await renderLogin();
+    await attach();
+    await click(en.fields.addField);
+    expect(button(en.attachments.attach)?.disabled).toBe(true);
+    await act(async () => finish([]));
+    expect(button(en.attachments.attach)?.disabled).toBe(false);
   });
 
   it("attaches to a new card from its own row", async () => {

@@ -179,8 +179,7 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
       const saved = existing ? await api.updateItem(existing.id, input, edit) : await api.createItem(input, edit);
       onSaved(saved);
     } catch (err) {
-      const message = errorMessage(err, t, t.editor.saveFailed);
-      setError(files.dropPending() ? `${message} ${t.attachments.notSaved}` : message);
+      setError(files.saveFailed(err));
       setSaving(false);
     }
   }
@@ -431,6 +430,7 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
               disabled={saving || !!readOnly}
               onError={setError}
               onAttach={() => void files.attach()}
+          attaching={files.picking}
             />
           )}
           {fileRows}
@@ -476,6 +476,7 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
           disabled={saving || !!readOnly}
           onError={setError}
           onAttach={() => void files.attach()}
+          attaching={files.picking}
         />
       )}
       {itemType === "secure_note" && fileRows}

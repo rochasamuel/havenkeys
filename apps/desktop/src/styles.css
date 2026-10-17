@@ -1159,6 +1159,10 @@ input::-ms-clear {
   box-shadow: none;
 }
 
+.menu button:disabled {
+  opacity: 0.45;
+}
+
 .menu button svg {
   color: var(--brass-ink);
 }

@@ -79,8 +79,7 @@ export function IdentityEditor({ existing, readOnly, onCancel, onSaved, onDirtyC
       const saved = await api.updateItem(existing.id, { itemType: "identity", title: "", identity: fields, tags: finalTags }, edit);
       onSaved(saved);
     } catch (err) {
-      const message = errorMessage(err, t, t.editor.saveFailed);
-      setError(files.dropPending() ? `${message} ${t.attachments.notSaved}` : message);
+      setError(files.saveFailed(err));
     } finally {
       setSaving(false);
     }

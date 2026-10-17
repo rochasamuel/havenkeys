@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { api } from "../lib/api";
+import { api, ApiError } from "../lib/api";
 import { formatSize } from "../lib/format";
 import type { AttachmentMeta, FilesEdit, PendingFile } from "../lib/types";
 import { useI18n } from "../i18n/context";
+import { errorMessage } from "../i18n/errors";
 import { Icon } from "./Icon";
 
 /** The types Rust sniffs as raster images, the only ones it lets us preview. */
@@ -89,6 +90,7 @@ function release(tokens: string[]) {
  * the editor discards those it still holds when it closes.
  */
 export function useFileEdits(saved: AttachmentMeta[] = [], onError: (e: unknown) => void) {
+  const { t } = useI18n();
   const [removed, setRemoved] = useState<string[]>([]);
   const [pending, setPending] = useState<PendingFile[]>([]);
   const [picking, setPicking] = useState(false);
@@ -137,10 +139,16 @@ export function useFileEdits(saved: AttachmentMeta[] = [], onError: (e: unknown)
     return added.length || removed.length ? { added, removed } : undefined;
   }
 
-  /** After a failed save: its picked files are gone. True when it had any. */
-  function dropPending(): boolean {
+  /**
+   * After a failed save: its picked files are gone, so their rows go and the
+   * message says so once. A file Rust had already dropped (the vault locked)
+   * needs no other words.
+   */
+  function saveFailed(err: unknown): string {
     setPending([]);
-    return pending.length > 0;
+    if (pending.length === 0) return errorMessage(err, t, t.editor.saveFailed);
+    const stale = err instanceof ApiError && err.code === "invalid_input" && err.message.includes("This file is no longer available");
+    return stale ? t.attachments.notSaved : `${errorMessage(err, t, t.editor.saveFailed)} ${t.attachments.notSaved}`;
   }
 
   return {
@@ -149,7 +157,7 @@ export function useFileEdits(saved: AttachmentMeta[] = [], onError: (e: unknown)
     attach,
     remove,
     take,
-    dropPending,
+    saveFailed,
     discard: () => release(held.current.splice(0)),
     dirty: removed.length > 0 || pending.length > 0,
   };
