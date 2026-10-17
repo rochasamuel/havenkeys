@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
   "crates/havenkeys-core",
+  "crates/havenkeys-opaque",
   "crates/havenkeys-protocol",
   "crates/havenkeys-bridge",
   "crates/havenkeys-native-host",
@@ -16,6 +17,7 @@ members = [
 # working on machines without them.
 default-members = [
   "crates/havenkeys-core",
+  "crates/havenkeys-opaque",
   "crates/havenkeys-protocol",
   "crates/havenkeys-bridge",
   "crates/havenkeys-native-host",
