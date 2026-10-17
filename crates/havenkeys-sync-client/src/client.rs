@@ -875,7 +875,10 @@ fn error_from(response: &HttpResponse) -> SyncError {
         code: String,
     }
     let said = serde_json::from_slice::<Body>(&response.body).ok();
-    match (response.status, said.as_ref().map(|b| b.error.code.as_str())) {
+    match (
+        response.status,
+        said.as_ref().map(|b| b.error.code.as_str()),
+    ) {
         (410, Some("account_deleted")) => SyncError::AccountDeleted,
         (402, Some("account_frozen")) => SyncError::AccountFrozen,
         (413, Some("attachments_full")) => SyncError::AttachmentsFull,

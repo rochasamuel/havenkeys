@@ -277,7 +277,7 @@ impl RestorePlan {
     /// once the restored items are written.
     pub fn take_identity_files(&mut self) -> Option<(Uuid, Vec<AttachmentMeta>)> {
         let identity = self.identity.take()?;
-        (!identity.added.is_empty()).then(|| (identity.id, identity.added))
+        (!identity.added.is_empty()).then_some((identity.id, identity.added))
     }
 }
 
