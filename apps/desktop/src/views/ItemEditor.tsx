@@ -11,6 +11,7 @@ import { TagsEditor, type TagsEditorHandle } from "../components/TagsEditor";
 import { SsoPicker } from "../components/SsoPicker";
 import { Switch } from "../components/Switch";
 import { TotpEdit } from "../components/TotpEdit";
+import { useToast } from "../components/Toast";
 import { useI18n } from "../i18n/context";
 import { errorMessage } from "../i18n/errors";
 import { CustomFieldsEditor } from "./CustomFieldsEditor";
@@ -63,7 +64,10 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
   const [globalAutoSignIn, setGlobalAutoSignIn] = useState(true);
   const [signIn, setSignIn] = useState<SignInWith | null>(existing?.signInWith ?? null);
   const [passwordOpen, setPasswordOpen] = useState(!existing?.signInWith || existing.hasPassword);
-  const files = useFileEdits(existing?.attachments, (e) => setError(errorMessage(e, t, t.attachments.attachFailed)));
+  // Side errors (a pick, a scan, a load) are toasts; the form keeps only save errors.
+  const toast = useToast();
+  const sideError = (message: string) => toast(message, "error");
+  const files = useFileEdits(existing?.attachments, (e) => sideError(errorMessage(e, t, t.attachments.attachFailed)));
 
   const snapshot: EditorSnapshot = { title, username, urls, password, totp, notes, autoSignIn, tags, signInWith: signIn, sections };
   const [initialSnapshot, setInitialSnapshot] = useState(snapshot);
@@ -121,7 +125,7 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
         setInitialSnapshot((s) => ({ ...s, sections: loaded }));
       })
       .catch(() => {
-        if (!cancelled) setError(t.fields.loadFailed);
+        if (!cancelled) sideError(t.fields.loadFailed);
       });
     return () => {
       cancelled = true;
@@ -142,7 +146,7 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
       setPassword({ mode: "set", value: g.password });
       setShowPassword(true);
     } catch (e) {
-      setError(errorMessage(e, t, t.editor.generateFailed));
+      sideError(errorMessage(e, t, t.editor.generateFailed));
     }
   }
 
@@ -418,7 +422,7 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
               onChange={setTotp}
               disabled={saving || !!readOnly}
               ariaLabel={t.editor.totpLabel}
-              onError={setError}
+              onError={sideError}
             />
           </div>
 
@@ -428,9 +432,9 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
               sections={sections}
               onChange={setSections}
               disabled={saving || !!readOnly}
-              onError={setError}
+              onError={sideError}
               onAttach={() => void files.attach()}
-          attaching={files.picking}
+              attaching={files.picking}
             />
           )}
           {fileRows}
@@ -474,7 +478,7 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
           sections={sections}
           onChange={setSections}
           disabled={saving || !!readOnly}
-          onError={setError}
+          onError={sideError}
           onAttach={() => void files.attach()}
           attaching={files.picking}
         />

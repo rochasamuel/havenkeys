@@ -5,6 +5,7 @@ import { BRAND_NAMES, CARD_BRAND_CHOICES, capDigits, cardSecretUpdate, digitsOnl
 import { TagsEditor, type TagsEditorHandle } from "../components/TagsEditor";
 import { CardBrandLogo } from "../components/CardBrandLogo";
 import { AttachRow, FileRows, useFileEdits } from "../components/FileRows";
+import { useToast } from "../components/Toast";
 import { useI18n } from "../i18n/context";
 import { errorMessage } from "../i18n/errors";
 
@@ -46,7 +47,8 @@ export function CardEditor({ existing, readOnly, onCancel, onSaved, onDirtyChang
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [has, setHas] = useState({ number: false, verificationNumber: false });
-  const files = useFileEdits(existing?.attachments, (e) => setError(errorMessage(e, t, t.attachments.attachFailed)));
+  const toast = useToast();
+  const files = useFileEdits(existing?.attachments, (e) => toast(errorMessage(e, t, t.attachments.attachFailed), "error"));
 
   useEffect(() => {
     if (!existing) return;

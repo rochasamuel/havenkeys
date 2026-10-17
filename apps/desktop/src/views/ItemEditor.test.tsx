@@ -37,6 +37,7 @@ vi.mock("../lib/api", async (importOriginal) => {
 
 import { en } from "../i18n/en";
 import { ApiError } from "../lib/api";
+import { ToastProvider } from "../components/Toast";
 import type { AttachmentMeta, ItemOverview, SectionView } from "../lib/types";
 import { CardEditor } from "./CardEditor";
 import { IdentityEditor } from "./IdentityEditor";
@@ -197,6 +198,20 @@ describe("Editor files", () => {
     expect(pickFiles).toHaveBeenCalledWith(1);
     expect(names()).toEqual(["receipt.png", "notes.txt"]);
     expect(host.textContent).toContain("2 KB");
+  });
+
+  it("a_failed_pick_is_a_toast_not_a_form_error", async () => {
+    pickFiles.mockRejectedValue(new Error("dialog"));
+    await act(async () =>
+      root.render(
+        <ToastProvider>
+          <ItemEditor itemType="login" existing={login} onCancel={onCancel} onSaved={onSaved} />
+        </ToastProvider>,
+      ),
+    );
+    await attach();
+    expect(host.querySelector(".toast-error")?.textContent).toContain(en.attachments.attachFailed);
+    expect(host.querySelector(".form-error")).toBeNull();
   });
 
   it("remove_pending_discards_it", async () => {

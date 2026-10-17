@@ -3,6 +3,7 @@ import { api } from "../lib/api";
 import type { CustomField, IdentityFields, ItemOverview } from "../lib/types";
 import { IDENTITY_SECTIONS, type IdentityFieldDef } from "../lib/identity";
 import { AttachRow, FileRows, useFileEdits } from "../components/FileRows";
+import { useToast } from "../components/Toast";
 import { Icon } from "../components/Icon";
 import { TagsEditor, type TagsEditorHandle } from "../components/TagsEditor";
 import { Switch } from "../components/Switch";
@@ -35,7 +36,8 @@ export function IdentityEditor({ existing, readOnly, onCancel, onSaved, onDirtyC
   const [initial, setInitial] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const files = useFileEdits(existing.attachments, (e) => setError(errorMessage(e, t, t.attachments.attachFailed)));
+  const toast = useToast();
+  const files = useFileEdits(existing.attachments, (e) => toast(errorMessage(e, t, t.attachments.attachFailed), "error"));
 
   useEffect(() => {
     let cancelled = false;
