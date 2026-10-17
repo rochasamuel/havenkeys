@@ -84,8 +84,7 @@ use uuid::Uuid;
 #[tokio::test]
 async fn an_enrolled_account_signs_in_with_opaque() {
     let server = support::TestServer::start().await;
-    let account = support::activate(&server, "user@example.com", [9u8; 32]).await;
-    support::enrol_directly(&server, &account).await;
+    let account = support::activate_pake(&server, "user@example.com", [9u8; 32]).await;
     let (status, body) =
         support::pake_login(&server, &account.email, &account.auth_key, Uuid::new_v4()).await;
     assert_eq!(status, 200, "{body}");
@@ -97,8 +96,7 @@ async fn an_enrolled_account_signs_in_with_opaque() {
 #[tokio::test]
 async fn a_wrong_key_fails_on_the_client_and_nothing_is_finished() {
     let server = support::TestServer::start().await;
-    let account = support::activate(&server, "user@example.com", [9u8; 32]).await;
-    support::enrol_directly(&server, &account).await;
+    let account = support::activate_pake(&server, "user@example.com", [9u8; 32]).await;
     let (status, _) =
         support::pake_login(&server, &account.email, &[1u8; 32], Uuid::new_v4()).await;
     assert_eq!(status, 0, "the client stops before sending a finalization");
@@ -116,8 +114,7 @@ async fn a_wrong_key_fails_on_the_client_and_nothing_is_finished() {
 #[tokio::test]
 async fn an_unknown_email_and_an_unenrolled_account_look_like_a_real_one() {
     let server = support::TestServer::start().await;
-    let enrolled = support::activate(&server, "a@example.com", [9u8; 32]).await;
-    support::enrol_directly(&server, &enrolled).await;
+    let _enrolled = support::activate_pake(&server, "a@example.com", [9u8; 32]).await;
     support::activate(&server, "legacy@example.com", [9u8; 32]).await;
     let mut shapes = Vec::new();
     for email in ["a@example.com", "legacy@example.com", "nobody@example.com"] {
@@ -171,8 +168,7 @@ async fn started(
 #[tokio::test]
 async fn a_login_id_works_once() {
     let server = support::TestServer::start().await;
-    let account = support::activate(&server, "user@example.com", [9u8; 32]).await;
-    support::enrol_directly(&server, &account).await;
+    let account = support::activate_pake(&server, "user@example.com", [9u8; 32]).await;
     let (body, finalization) = started(&server, &account.email, &account.auth_key).await;
     let finish = json!({
         "loginId": body["loginId"],
@@ -200,8 +196,7 @@ async fn a_login_id_works_once() {
 #[tokio::test]
 async fn a_login_id_expires() {
     let server = support::TestServer::start().await;
-    let account = support::activate(&server, "user@example.com", [9u8; 32]).await;
-    support::enrol_directly(&server, &account).await;
+    let account = support::activate_pake(&server, "user@example.com", [9u8; 32]).await;
     let (body, finalization) = started(&server, &account.email, &account.auth_key).await;
     server
         .db()
@@ -251,8 +246,7 @@ async fn malformed_and_oversized_messages_are_400_without_detail() {
 #[tokio::test]
 async fn opaque_start_is_rate_limited_like_login() {
     let server = support::TestServer::start().await;
-    let account = support::activate(&server, "user@example.com", [9u8; 32]).await;
-    support::enrol_directly(&server, &account).await;
+    let account = support::activate_pake(&server, "user@example.com", [9u8; 32]).await;
     let mut last = 0;
     for _ in 0..20 {
         last = support::pake_login(&server, &account.email, &[1u8; 32], Uuid::new_v4())
@@ -270,8 +264,7 @@ async fn opaque_start_is_rate_limited_like_login() {
 async fn a_frozen_account_refuses_a_new_device_over_opaque() {
     use havenkeys_server::billing::Status;
     let server = support::TestServer::start().await;
-    let account = support::activate(&server, "user@example.com", [9u8; 32]).await;
-    support::enrol_directly(&server, &account).await;
+    let account = support::activate_pake(&server, "user@example.com", [9u8; 32]).await;
     let known = Uuid::new_v4();
     let (status, body) =
         support::pake_login(&server, &account.email, &account.auth_key, known).await;
@@ -299,10 +292,8 @@ async fn a_frozen_account_refuses_a_new_device_over_opaque() {
 async fn a_device_of_a_deleted_account_signing_in_over_opaque_gets_410() {
     use havenkeys_server::admin::{self, AdminCommand};
     let server = support::TestServer::start().await;
-    let account = support::activate(&server, "gone@example.com", [9u8; 32]).await;
-    support::enrol_directly(&server, &account).await;
-    let other = support::activate(&server, "other@example.com", [8u8; 32]).await;
-    support::enrol_directly(&server, &other).await;
+    let account = support::activate_pake(&server, "gone@example.com", [9u8; 32]).await;
+    let other = support::activate_pake(&server, "other@example.com", [8u8; 32]).await;
     let device = Uuid::new_v4();
     let (status, _) = support::pake_login(&server, &account.email, &account.auth_key, device).await;
     assert_eq!(status, 200);
@@ -366,4 +357,104 @@ async fn decoy_start(server: &support::TestServer, email: &str) -> (serde_json::
         .await
         .unwrap();
     (body["loginId"].clone(), ())
+}
+
+#[tokio::test]
+async fn an_account_activated_with_opaque_has_no_legacy_verifier() {
+    let server = support::TestServer::start().await;
+    let account = support::activate_pake(&server, "user@example.com", [9u8; 32]).await;
+    let row = server
+        .db()
+        .await
+        .query_one(
+            "SELECT auth_verifier, opaque_record FROM accounts WHERE id = $1",
+            &[&account.account_id],
+        )
+        .await
+        .unwrap();
+    assert!(row.get::<_, Option<String>>(0).is_none());
+    assert!(row.get::<_, Option<Vec<u8>>>(1).is_some());
+    let (status, _) =
+        support::pake_login(&server, &account.email, &account.auth_key, Uuid::new_v4()).await;
+    assert_eq!(status, 200);
+    let (status, _) =
+        support::login_with_device(&server, &account, "Desktop", Uuid::new_v4()).await;
+    assert_eq!(status, 401, "no legacy path into an OPAQUE-only account");
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn activation_register_needs_a_plausible_invite() {
+    let server = support::TestServer::start().await;
+    let (_, request) = havenkeys_opaque::ClientRegistration::start(&[9u8; 32]).unwrap();
+    let res = server
+        .post("/v1/accounts/activate/register")
+        .json(
+            &json!({ "email": "user@example.com", "invite": "hk-invite-not-real",
+                       "registrationRequest": data_encoding::BASE64.encode(&request) }),
+        )
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 400);
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn activation_with_both_or_neither_key_is_refused() {
+    let server = support::TestServer::start().await;
+    let invite = support::new_invite(&server, "user@example.com").await;
+    let mut both = support::activate_body("user@example.com", &invite, Uuid::new_v4(), &[9u8; 32]);
+    both["registrationUpload"] = json!(data_encoding::BASE64.encode(&[0u8; 192]));
+    let res = server
+        .post("/v1/accounts/activate")
+        .json(&both)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 400);
+    let mut neither =
+        support::activate_body("user@example.com", &invite, Uuid::new_v4(), &[9u8; 32]);
+    neither.as_object_mut().unwrap().remove("authKey");
+    let res = server
+        .post("/v1/accounts/activate")
+        .json(&neither)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 400);
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn legacy_paths_answer_426_after_the_cutoff_and_never_410() {
+    let (server, _) = support::TestServer::start_with(support::Options {
+        legacy_auth_until: Some(chrono::Utc::now() - chrono::Duration::seconds(1)),
+        ..Default::default()
+    })
+    .await;
+    let invite = support::new_invite(&server, "old@example.com").await;
+    let res = server
+        .post("/v1/accounts/activate")
+        .json(&support::activate_body(
+            "old@example.com",
+            &invite,
+            Uuid::new_v4(),
+            &[9u8; 32],
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 426);
+    let body: serde_json::Value = res.json().await.unwrap();
+    assert_eq!(body["error"]["code"], "upgrade_required");
+
+    let account = support::activate_pake(&server, "new@example.com", [9u8; 32]).await;
+    let (status, _) =
+        support::login_with_device(&server, &account, "Desktop", Uuid::new_v4()).await;
+    assert_eq!(status, 426);
+    let (status, _) =
+        support::pake_login(&server, &account.email, &account.auth_key, Uuid::new_v4()).await;
+    assert_eq!(status, 200, "OPAQUE is unaffected by the cutoff");
+    server.cleanup().await;
 }

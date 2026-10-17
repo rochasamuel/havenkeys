@@ -82,7 +82,10 @@ pub struct ActivateRequest {
     email: String,
     invite: String,
     kdf: KdfDto,
-    auth_key: String,
+    #[serde(default)]
+    auth_key: Option<String>,
+    #[serde(default)]
+    registration_upload: Option<String>,
     vault_id: Uuid,
     header: Blob,
     key_scheme: i16,
@@ -120,6 +123,46 @@ impl KdfDto {
     }
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ActivateRegisterRequest {
+    email: String,
+    invite: String,
+    registration_request: String,
+}
+
+/// The OPAQUE registration response for an invited account (spec
+/// 2026-10-13-pake-login §4.1). Guarded like `activate`: per-address rate
+/// limit, and the invite checked before any curve work.
+pub async fn activate_register(
+    State(state): State<AppState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Json(req): Json<ActivateRegisterRequest>,
+) -> Result<axum::Json<serde_json::Value>, ApiError> {
+    const BAD_INVITE: ApiError = ApiError::InvalidRequest("invite is not valid");
+    let email = crate::email::normalize(&req.email).map_err(ApiError::InvalidRequest)?;
+    let parsed = invite::decode(&req.invite)?;
+    if parsed.email != email {
+        return Err(BAD_INVITE);
+    }
+    let request = crate::pake::decode_message(&req.registration_request)?;
+    let db = state.pool.get().await?;
+    let ip_key = rate_limit::ip_key(&client_ip(&state, &headers, peer));
+    rate_limit::check(&db, &ip_key).await?;
+    if !invite_is_plausible(&db, &parsed, &email).await? {
+        rate_limit::record_failure(&db, &ip_key).await?;
+        return Err(BAD_INVITE);
+    }
+    let response = state
+        .pake
+        .register(&request, parsed.account.as_bytes())
+        .map_err(|_| ApiError::InvalidRequest("message is not valid"))?;
+    Ok(axum::Json(
+        serde_json::json!({ "registrationResponse": crate::pake::encode(&response) }),
+    ))
+}
+
 pub async fn activate(
     State(state): State<AppState>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
@@ -141,7 +184,27 @@ pub async fn activate(
     }
     check_header(&req.header)?;
     let salt = req.kdf.check()?;
-    let auth_key = auth::decode_auth_key(&req.auth_key)?;
+    // Exactly one: a legacy auth key, until the cutoff, or an OPAQUE upload.
+    enum Credential {
+        Legacy(zeroize::Zeroizing<Vec<u8>>),
+        Pake(Vec<u8>),
+    }
+    let credential = match (&req.auth_key, &req.registration_upload) {
+        (Some(key), None) => {
+            // No grace here: an account that never activated has no data.
+            crate::pake::legacy_allowed(&state, None)?;
+            Credential::Legacy(auth::decode_auth_key(key)?)
+        }
+        (None, Some(upload)) => Credential::Pake(
+            havenkeys_opaque::record_from_upload(&crate::pake::decode_message(upload)?)
+                .map_err(|_| ApiError::InvalidRequest("message is not valid"))?,
+        ),
+        _ => {
+            return Err(ApiError::InvalidRequest(
+                "send authKey or registrationUpload",
+            ))
+        }
+    };
 
     let mut db = state.pool.get().await?;
 
@@ -162,7 +225,11 @@ pub async fn activate(
     // milliseconds and nothing is gained by holding a row lock through it.
     // The row is re-checked under the lock below, so a second activation
     // racing this one still loses.
-    let verifier = auth::hash_auth_key(auth_key).await?;
+    // Only the legacy path hashes anything; an OPAQUE record is stored as is.
+    let (verifier, record): (Option<String>, Option<Vec<u8>>) = match credential {
+        Credential::Legacy(key) => (Some(auth::hash_auth_key(key).await?), None),
+        Credential::Pake(record) => (None, Some(record)),
+    };
 
     let tx = db.transaction().await?;
     let row = tx
@@ -188,6 +255,7 @@ pub async fn activate(
                 kdf_parallelism = $4,
                 kdf_salt = $5,
                 auth_verifier = $6,
+                opaque_record = $7,
                 invite_hash = NULL,
                 invite_expires_at = NULL,
                 activated_at = now()
@@ -199,6 +267,7 @@ pub async fn activate(
             &req.kdf.parallelism,
             &salt,
             &verifier,
+            &record,
         ],
     )
     .await?;

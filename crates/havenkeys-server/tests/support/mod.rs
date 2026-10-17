@@ -258,6 +258,45 @@ pub async fn activate(server: &TestServer, email: &str, auth_key: [u8; 32]) -> A
     }
 }
 
+/// Activates an account through the OPAQUE routes: no legacy verifier.
+pub async fn activate_pake(server: &TestServer, email: &str, auth_key: [u8; 32]) -> Account {
+    let invite = new_invite(server, email).await;
+    let (reg, request) = havenkeys_opaque::ClientRegistration::start(&auth_key).unwrap();
+    let res = server
+        .post("/v1/accounts/activate/register")
+        .json(&json!({ "email": email, "invite": invite,
+                       "registrationRequest": data_encoding::BASE64.encode(&request) }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let body: Value = res.json().await.unwrap();
+    let response = data_encoding::BASE64
+        .decode(body["registrationResponse"].as_str().unwrap().as_bytes())
+        .unwrap();
+    let upload = reg.finish(&auth_key, &response).unwrap();
+    let vault_id = Uuid::new_v4();
+    let mut activation = activate_body(email, &invite, vault_id, &auth_key);
+    activation.as_object_mut().unwrap().remove("authKey");
+    activation["registrationUpload"] = json!(data_encoding::BASE64.encode(&upload));
+    let res = server
+        .post("/v1/accounts/activate")
+        .json(&activation)
+        .send()
+        .await
+        .unwrap();
+    let status = res.status();
+    let text = res.text().await.unwrap();
+    assert_eq!(status, 200, "activation failed: {text}");
+    let body: Value = serde_json::from_str(&text).unwrap();
+    Account {
+        email: email.into(),
+        account_id: body["accountId"].as_str().unwrap().parse().unwrap(),
+        vault_id,
+        auth_key,
+    }
+}
+
 /// A live session on one device.
 pub struct Sess {
     pub token: String,
@@ -488,7 +527,7 @@ pub async fn signup(server: &TestServer, mailer: &Recording, email: &str) -> Str
 }
 
 /// Writes an OPAQUE record for `account` straight into the database, as if
-/// it had enrolled. Tasks 5 and 6 replace uses of this with the real routes.
+/// it had enrolled, for tests that also need the legacy verifier.
 pub async fn enrol_directly(server: &TestServer, account: &Account) {
     let keys = havenkeys_server::pake::load_or_create(server.pool())
         .await

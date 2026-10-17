@@ -68,6 +68,13 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/health", get(health::health))
         .route("/v1/accounts/activate", post(accounts::activate))
         .route(
+            "/v1/accounts/activate/register",
+            small(
+                post(accounts::activate_register),
+                MAX_ANONYMOUS_AUTH_BODY_BYTES,
+            ),
+        )
+        .route(
             "/v1/signup/start",
             small(post(signup::start), MAX_ANONYMOUS_AUTH_BODY_BYTES),
         )
