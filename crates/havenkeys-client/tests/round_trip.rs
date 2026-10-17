@@ -1415,6 +1415,37 @@ async fn update_removes_and_adds_in_one_save() {
     server.cleanup().await;
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn update_removes_the_last_file() {
+    let server = Server::start().await;
+    let (a, b, item, _dirs) = two_devices(&server).await;
+    let first = add_files(&a, item, vec![png("front"), png("back")])
+        .await
+        .unwrap();
+    let all: Vec<Uuid> = first.attachments.iter().map(|m| m.id).collect();
+
+    let saved = a
+        .save_with_files(item, vec![], all, |vault, files| {
+            vault.stage_update_with(&item, login("Passport"), files, havenkeys_client::now_ms())
+        })
+        .await
+        .unwrap();
+    assert!(saved.attachments.is_empty());
+
+    b.sync_now().await.unwrap();
+    assert!(attachment_ids(&b, item).is_empty());
+    let db = server.pool.get().await.unwrap();
+    let rows = db
+        .query_one(
+            "SELECT count(*) FROM attachments WHERE item_id = $1",
+            &[&item],
+        )
+        .await
+        .unwrap();
+    assert_eq!(rows.get::<_, i64>(0), 0);
+    server.cleanup().await;
+}
+
 /// A device signed in to a new account on `server`.
 async fn signed_in(server: &Server, email: &str) -> (Arc<HavenClient>, tempfile::TempDir) {
     let invite = server.invite(email).await;

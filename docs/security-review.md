@@ -4302,6 +4302,14 @@ AAD binds header and index; trailing data is refused; version 1 and 2 are
 told apart by the authenticated version byte.
 **Remaining limitations:** an older HavenKeys cannot read a v2 backup.
 
+### AT12. Picked files across a lock during a save (Low, accepted)
+**Component:** desktop `pending_files.rs`, save with file edits.
+**Attack scenario:** the vault locks while a save is uploading picked files.
+**Mitigation:** the lock clears the pending store; the next seal fails with
+`Locked`.
+**Remaining limitations:** the files already taken by the in-flight save keep
+their plaintext (`Zeroizing`) in memory until that upload returns.
+
 ### Manual checks (owner)
 - [ ] Add, preview, save, remove a file on the desktop; sync to a second
       device and open it there.
