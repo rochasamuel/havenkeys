@@ -71,10 +71,23 @@ describe("Attachments", () => {
     expect(saveAttachment).not.toHaveBeenCalled();
   });
 
-  it("preview_only_for_images", async () => {
+  it("view_shows_download_and_size", async () => {
     await render();
-    expect(button(en.attachments.preview("receipt.png"))).toBeDefined();
+    const download = button(en.attachments.downloadName("receipt.pdf"));
+    expect(download?.textContent?.trim()).toBe(en.attachments.download);
+    expect(button(en.attachments.downloadName("receipt.png"))).toBeDefined();
+    expect([...host.querySelectorAll(".attachment-meta")].map((m) => m.textContent)).toEqual(["240 KB", "1.5 MB"]);
+    expect(button(en.attachments.remove("receipt.png"))).toBeUndefined();
+  });
+
+  it("view_previews_images_on_name_click", async () => {
+    await render();
+    const name = button(en.attachments.preview("receipt.png"));
+    expect(name?.textContent).toBe("receipt.png");
     expect(button(en.attachments.preview("receipt.pdf"))).toBeUndefined();
+    await act(async () => name!.click());
+    expect(previewAttachment).toHaveBeenCalledWith("i1", "a1");
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
   });
 
   it("preview_is_revoked_on_lock", async () => {
@@ -103,12 +116,12 @@ describe("Attachments", () => {
 
   it("save_warns_once_per_session", async () => {
     await render();
-    await act(async () => button(en.attachments.save("receipt.pdf"))!.click());
+    await act(async () => button(en.attachments.downloadName("receipt.pdf"))!.click());
     expect(host.textContent).toContain("A saved copy is not protected by HavenKeys.");
     expect(saveAttachment).not.toHaveBeenCalled();
-    await act(async () => button(en.attachments.saveAnyway)!.click());
+    await act(async () => button(en.attachments.downloadAnyway)!.click());
     expect(saveAttachment).toHaveBeenCalledWith("i1", "a2");
-    await act(async () => button(en.attachments.save("receipt.png"))!.click());
+    await act(async () => button(en.attachments.downloadName("receipt.png"))!.click());
     expect(saveAttachment).toHaveBeenLastCalledWith("i1", "a1");
     expect(host.textContent).not.toContain("A saved copy is not protected by HavenKeys.");
   });

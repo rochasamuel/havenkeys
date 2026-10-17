@@ -38,7 +38,8 @@ function caveats(r: ImportResult["report"], t: Messages, restored: boolean): str
   if (r.skippedDuplicates) out.push(t.import.skippedDuplicates(r.skippedDuplicates));
   if (r.skippedExisting) out.push(t.import.skippedExisting(r.skippedExisting));
   if (r.skippedArchived) out.push(t.import.skippedArchived(r.skippedArchived));
-  if (r.attachmentsSkipped) out.push(t.import.attachmentsSkipped(r.attachmentsSkipped));
+  if (r.attachmentsSkipped)
+    out.push(restored ? t.import.restoreAttachmentsSkipped(r.attachmentsSkipped) : t.import.attachmentsSkipped(r.attachmentsSkipped));
   if (r.attachmentsSkippedStorage) out.push(t.import.attachmentsSkippedStorage(r.attachmentsSkippedStorage));
   if (r.passwordHistorySkipped) out.push(t.import.passwordHistorySkipped(r.passwordHistorySkipped));
   if (r.urlsMovedToNotes) out.push(t.import.urlsMovedToNotes(r.urlsMovedToNotes));

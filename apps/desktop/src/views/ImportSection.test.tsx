@@ -110,7 +110,7 @@ describe("ImportSection", () => {
       report: {
         imported: 3, logins: 2, secureNotes: 0, cards: 0, identities: 1, convertedToNotes: 0,
         skippedDuplicates: 0, skippedExisting: 3, skippedArchived: 0, failed: 2,
-        attachmentsSkipped: 0, attachmentsSkippedStorage: 2, passwordHistorySkipped: 0, passkeysSkipped: 0,
+        attachmentsSkipped: 1, attachmentsSkippedStorage: 2, passwordHistorySkipped: 0, passkeysSkipped: 0,
         urlsMovedToNotes: 0, fieldsToNotes: 0, ssoUpgraded: 0,
       },
     });
@@ -131,9 +131,9 @@ describe("ImportSection", () => {
     expect(host.textContent).toContain(en.import.summary("havenkeys-export-2026-10-05.hkbackup", 2, 0, 0, 1));
     expect(host.textContent).toContain("1 identity");
     expect(host.textContent).toContain(en.import.restoreFailedItems(2));
-    expect(host.textContent).toContain(
-      "2 attachments were left out because storage is full. They can be restored again after 24 hours.",
-    );
+    expect(host.textContent).toContain("2 attachments were left out: they did not fit in the attachment storage.");
+    expect(host.textContent).toContain("1 attachment couldn’t be restored.");
+    expect(host.textContent).not.toContain("not supported yet");
     expect(host.textContent).not.toContain(en.import.failedItems(2));
     expect(host.textContent).not.toContain(en.import.deleteExport);
     expect(pw.value).toBe("");

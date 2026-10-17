@@ -535,21 +535,20 @@ export const en = {
 
   attachments: {
     title: "Attachments",
-    add: "Add file",
-    adding: "Adding…",
+    attach: "Attach a file",
+    notSavedYet: "Not saved yet",
     preview: (name: string) => `Preview ${name}`,
-    save: (name: string) => `Save ${name} as…`,
+    download: "Download",
+    downloadName: (name: string) => `Download ${name}`,
     remove: (name: string) => `Remove ${name}`,
-    confirmRemove: (name: string) => `Remove ${name}? It will be deleted from HavenKeys on all your devices.`,
     saveWarning: "A saved copy is not protected by HavenKeys.",
-    saveAnyway: "Save as…",
+    downloadAnyway: "Download anyway",
     saved: "Copy saved.",
     closePreview: "Close preview",
-    file: "File",
-    addFailed: "Could not add the file.",
+    attachFailed: "Could not attach the file.",
+    notSaved: "The files you attached were not saved. Attach them again.",
     saveFailed: "Could not save the file.",
     previewFailed: "Could not open the preview.",
-    removeFailed: "Could not remove the file.",
   },
 
   trash: {
@@ -939,8 +938,10 @@ export const en = {
       `${n} ${n === 1 ? "file attachment was" : "file attachments were"} left out (not supported yet).`,
     attachmentsSkippedStorage: (n: number) =>
       n === 1
-        ? "1 attachment was left out because storage is full. It can be restored again after 24 hours."
-        : `${n} attachments were left out because storage is full. They can be restored again after 24 hours.`,
+        ? "1 attachment was left out: it did not fit in the attachment storage."
+        : `${n} attachments were left out: they did not fit in the attachment storage.`,
+    restoreAttachmentsSkipped: (n: number) =>
+      `${n} ${n === 1 ? "attachment" : "attachments"} couldn’t be restored.`,
     passwordHistorySkipped: (n: number) =>
       `${n} ${n === 1 ? "old password" : "old passwords"} from password history ${n === 1 ? "was" : "were"} left out.`,
     urlsMovedToNotes: (n: number) =>

@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const createItem = vi.fn();
 const updateItem = vi.fn();
 const itemFields = vi.fn();
+const pickFiles = vi.fn();
+const discardPendingFiles = vi.fn();
 
 // Every other command answers null; event subscriptions return an unlisten.
 vi.mock("../lib/api", async (importOriginal) => {
@@ -16,6 +18,9 @@ vi.mock("../lib/api", async (importOriginal) => {
     revealIdentity: () => Promise.resolve({ fields: { firstName: "Sam", custom: [] } }),
     itemFields: (...a: unknown[]) => itemFields(...a),
     reveal: () => Promise.resolve("root box"),
+    revealCard: () => Promise.resolve({ hasNumber: false, hasVerificationNumber: false }),
+    pickFiles: (...a: unknown[]) => pickFiles(...a),
+    discardPendingFiles: (...a: unknown[]) => discardPendingFiles(...a),
   };
   return {
     ...original,
@@ -31,7 +36,7 @@ vi.mock("../lib/api", async (importOriginal) => {
 });
 
 import { en } from "../i18n/en";
-import type { ItemOverview, SectionView } from "../lib/types";
+import type { AttachmentMeta, ItemOverview, SectionView } from "../lib/types";
 import { CardEditor } from "./CardEditor";
 import { IdentityEditor } from "./IdentityEditor";
 import { ItemEditor } from "./ItemEditor";
@@ -47,6 +52,8 @@ beforeEach(() => {
   updateItem.mockReset().mockImplementation((id: string, input: unknown) => Promise.resolve({ id, ...(input as object) }));
   onSaved.mockReset();
   itemFields.mockReset().mockResolvedValue([]);
+  pickFiles.mockReset().mockResolvedValue([{ token: "t1", name: "notes.txt", size: 2048, mime: "text/plain" }]);
+  discardPendingFiles.mockReset().mockResolvedValue(undefined);
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -127,7 +134,7 @@ describe("ItemEditor secure note fields", () => {
     await act(async () => root.render(<ItemEditor itemType="secure_note" onCancel={() => undefined} onSaved={onSaved} />));
     type(titleInput(), "Server");
     await submit();
-    expect(createItem).toHaveBeenCalledWith(expect.objectContaining({ itemType: "secure_note", sections: [] }));
+    expect(createItem).toHaveBeenCalledWith(expect.objectContaining({ itemType: "secure_note", sections: [] }), undefined);
   });
 
   it("loads an existing note's fields and sends them back on save", async () => {
@@ -155,6 +162,118 @@ describe("ItemEditor secure note fields", () => {
           },
         ],
       }),
+      undefined,
     );
+  });
+});
+
+describe("Editor files", () => {
+  const photo: AttachmentMeta = { id: "a1", name: "receipt.png", mime: "image/png", size: 245_760, createdAt: 1 };
+  const login: ItemOverview = {
+    id: "l1", itemType: "login", title: "Shop", username: null, urls: [], hasPassword: false, hasTotp: false,
+    hasNotes: false, hasPasskey: false, autoSignIn: false, tags: [], attachments: [photo], createdAt: 0, updatedAt: 0,
+  };
+  const onCancel = vi.fn();
+  const button = (label: string) =>
+    [...host.querySelectorAll("button")].find((b) => b.getAttribute("aria-label") === label || b.textContent?.trim() === label);
+  const names = () => [...host.querySelectorAll(".attachment-name")].map((n) => n.textContent);
+  const click = (label: string) => act(async () => button(label)!.click());
+
+  async function renderLogin() {
+    await act(async () =>
+      root.render(<ItemEditor itemType="login" existing={login} onCancel={onCancel} onSaved={onSaved} />),
+    );
+  }
+  async function attach() {
+    await click(en.fields.addField);
+    await click(en.attachments.attach);
+  }
+
+  it("attach_adds_a_pending_row", async () => {
+    await renderLogin();
+    expect(names()).toEqual(["receipt.png"]);
+    await attach();
+    expect(pickFiles).toHaveBeenCalledWith(1);
+    expect(names()).toEqual(["receipt.png", "notes.txt"]);
+    expect(host.textContent).toContain("2 KB");
+  });
+
+  it("remove_pending_discards_it", async () => {
+    await renderLogin();
+    await attach();
+    await click(en.attachments.remove("notes.txt"));
+    expect(discardPendingFiles).toHaveBeenCalledWith(["t1"]);
+    expect(names()).toEqual(["receipt.png"]);
+  });
+
+  it("remove_existing_marks_it_until_save", async () => {
+    await renderLogin();
+    await click(en.attachments.remove("receipt.png"));
+    expect(names()).toEqual([]);
+    expect(discardPendingFiles).not.toHaveBeenCalled();
+    expect(updateItem).not.toHaveBeenCalled();
+    await submit();
+    expect(updateItem.mock.calls[0]![2]).toEqual({ added: [], removed: ["a1"] });
+  });
+
+  it("save_passes_file_edits", async () => {
+    await renderLogin();
+    await attach();
+    await click(en.attachments.remove("receipt.png"));
+    await submit();
+    expect(updateItem.mock.calls[0]![2]).toEqual({ added: ["t1"], removed: ["a1"] });
+    act(() => root.unmount());
+    root = createRoot(host);
+    expect(discardPendingFiles).not.toHaveBeenCalled();
+  });
+
+  it("save_without_file_changes_sends_none", async () => {
+    await renderLogin();
+    await submit();
+    expect(updateItem).toHaveBeenCalledTimes(1);
+    expect(updateItem.mock.calls[0]![2]).toBeUndefined();
+  });
+
+  it("cancel_discards_pending_files", async () => {
+    await renderLogin();
+    await attach();
+    await click(en.common.cancel);
+    expect(onCancel).toHaveBeenCalled();
+    expect(discardPendingFiles).toHaveBeenCalledWith(["t1"]);
+  });
+
+  it("unmount_discards_pending_files", async () => {
+    await renderLogin();
+    await attach();
+    act(() => root.unmount());
+    root = createRoot(host);
+    expect(discardPendingFiles).toHaveBeenCalledWith(["t1"]);
+  });
+
+  it("failed_save_drops_pending_rows", async () => {
+    updateItem.mockRejectedValue({ code: "offline", message: "offline" });
+    await renderLogin();
+    await attach();
+    await click(en.attachments.remove("receipt.png"));
+    await submit();
+    expect(updateItem.mock.calls[0]![2]).toEqual({ added: ["t1"], removed: ["a1"] });
+    // Rust took the picked files with the failed save: the rows go, and the user is told.
+    expect(names()).toEqual([]);
+    expect(host.querySelector(".form-error")?.textContent).toContain(en.attachments.notSaved);
+    // The removal is still marked for the next save; nothing is left to discard.
+    updateItem.mockImplementation((id: string, input: unknown) => Promise.resolve({ id, ...(input as object) }));
+    await submit();
+    expect(updateItem.mock.calls[1]![2]).toEqual({ added: [], removed: ["a1"] });
+    act(() => root.unmount());
+    root = createRoot(host);
+    expect(discardPendingFiles).not.toHaveBeenCalled();
+  });
+
+  it("attaches to a new card from its own row", async () => {
+    await act(async () => root.render(<CardEditor onCancel={onCancel} onSaved={onSaved} />));
+    await click(en.attachments.attach);
+    expect(pickFiles).toHaveBeenCalledWith(0);
+    await submit();
+    expect(createItem.mock.calls[0]![1]).toEqual({ added: ["t1"], removed: [] });
   });
 });

@@ -39,6 +39,7 @@ const paths = {
   paperclip: "M19.5 11.5 12 19a4.9 4.9 0 0 1-7-7l7.8-7.8a3.3 3.3 0 0 1 4.7 4.7l-7.8 7.8a1.6 1.6 0 0 1-2.3-2.3l7.1-7.1",
   file: "M7 3.5h7l4.5 4.5v11.5a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-15a1 1 0 0 1 1-1zM13.5 3.5V8.5h5",
   image: "M5 4.5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-13a1 1 0 0 1 1-1zM4 16l4.5-4.5 4 4 2.5-2.5L20 18M15 9h.01",
+  minusCircle: "M12 20.5a8.5 8.5 0 1 0 0-17 8.5 8.5 0 0 0 0 17zM8 12h8",
   // Drawn for the phone (tab bar, disclosure, back, menus) to the same rules;
   // kept here so both apps draw from one set (apps/android …/ui/kit/HavenIcon.kt).
   home: "M4.5 10.5 12 4.5l7.5 6V19a1 1 0 0 1-1 1H15v-5.5H9V20H5.5a1 1 0 0 1-1-1v-8.5z",

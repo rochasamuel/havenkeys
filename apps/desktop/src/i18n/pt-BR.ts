@@ -542,21 +542,20 @@ export const ptBR: Messages = {
 
   attachments: {
     title: "Anexos",
-    add: "Adicionar arquivo",
-    adding: "Adicionando…",
+    attach: "Anexar arquivo",
+    notSavedYet: "Ainda não salvo",
     preview: (name: string) => `Visualizar ${name}`,
-    save: (name: string) => `Salvar ${name} como…`,
+    download: "Baixar",
+    downloadName: (name: string) => `Baixar ${name}`,
     remove: (name: string) => `Remover ${name}`,
-    confirmRemove: (name: string) => `Remover ${name}? Ele será excluído do HavenKeys em todos os seus dispositivos.`,
     saveWarning: "Uma cópia salva não é protegida pelo HavenKeys.",
-    saveAnyway: "Salvar como…",
+    downloadAnyway: "Baixar mesmo assim",
     saved: "Cópia salva.",
     closePreview: "Fechar visualização",
-    file: "Arquivo",
-    addFailed: "Não foi possível adicionar o arquivo.",
+    attachFailed: "Não foi possível anexar o arquivo.",
+    notSaved: "Os arquivos anexados não foram salvos. Anexe-os de novo.",
     saveFailed: "Não foi possível salvar o arquivo.",
     previewFailed: "Não foi possível abrir a visualização.",
-    removeFailed: "Não foi possível remover o arquivo.",
   },
 
   trash: {
@@ -953,8 +952,10 @@ export const ptBR: Messages = {
         : `${n} anexos ficaram de fora (ainda não suportados).`,
     attachmentsSkippedStorage: (n: number) =>
       n === 1
-        ? "1 anexo ficou de fora porque o armazenamento está cheio. Ele pode ser restaurado de novo depois de 24 horas."
-        : `${n} anexos ficaram de fora porque o armazenamento está cheio. Eles podem ser restaurados de novo depois de 24 horas.`,
+        ? "1 anexo ficou de fora: não coube no armazenamento de anexos."
+        : `${n} anexos ficaram de fora: não couberam no armazenamento de anexos.`,
+    restoreAttachmentsSkipped: (n: number) =>
+      n === 1 ? "1 anexo não pôde ser restaurado." : `${n} anexos não puderam ser restaurados.`,
     passwordHistorySkipped: (n: number) =>
       n === 1
         ? "1 senha antiga do histórico de senhas ficou de fora."

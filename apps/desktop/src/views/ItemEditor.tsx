@@ -5,6 +5,7 @@ import { EMPTY, KEEP, toUpdate, type SecretEdit } from "../lib/secretEdit";
 import { fromViews, sectionsInput, type EditSection } from "../lib/customFields";
 import { isDirty, type EditorSnapshot } from "../lib/openItem";
 import { shouldCollapse } from "../lib/sso";
+import { FileRows, useFileEdits } from "../components/FileRows";
 import { Icon } from "../components/Icon";
 import { TagsEditor, type TagsEditorHandle } from "../components/TagsEditor";
 import { SsoPicker } from "../components/SsoPicker";
@@ -62,10 +63,11 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
   const [globalAutoSignIn, setGlobalAutoSignIn] = useState(true);
   const [signIn, setSignIn] = useState<SignInWith | null>(existing?.signInWith ?? null);
   const [passwordOpen, setPasswordOpen] = useState(!existing?.signInWith || existing.hasPassword);
+  const files = useFileEdits(existing?.attachments, (e) => setError(errorMessage(e, t, t.attachments.attachFailed)));
 
   const snapshot: EditorSnapshot = { title, username, urls, password, totp, notes, autoSignIn, tags, signInWith: signIn, sections };
   const [initialSnapshot, setInitialSnapshot] = useState(snapshot);
-  const dirty = isDirty(initialSnapshot, snapshot);
+  const dirty = isDirty(initialSnapshot, snapshot) || files.dirty;
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
@@ -172,11 +174,13 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
           }
         : { itemType, title, content: textUpdate, sections: sectionsInput(sections, t.fields.types), tags: finalTags };
 
+    const edit = files.take();
     try {
-      const saved = existing ? await api.updateItem(existing.id, input) : await api.createItem(input);
+      const saved = existing ? await api.updateItem(existing.id, input, edit) : await api.createItem(input, edit);
       onSaved(saved);
     } catch (err) {
-      setError(errorMessage(err, t, t.editor.saveFailed));
+      const message = errorMessage(err, t, t.editor.saveFailed);
+      setError(files.dropPending() ? `${message} ${t.attachments.notSaved}` : message);
       setSaving(false);
     }
   }
@@ -190,6 +194,8 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
         ? t.editor.newNote
         : t.editor.editNote;
 
+  const fileRows = <FileRows files={files.rows} disabled={saving || !!readOnly} onRemove={files.remove} />;
+
   const saveDisabled = saving || loadingText || !title.trim() || readOnly;
 
   return (
@@ -197,7 +203,15 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
       <header className="editor-head" data-tauri-drag-region>
         <h2>{heading}</h2>
         <div className="editor-actions">
-          <button type="button" className="btn btn-small" onClick={onCancel} disabled={saving}>
+          <button
+            type="button"
+            className="btn btn-small"
+            onClick={() => {
+              files.discard();
+              onCancel();
+            }}
+            disabled={saving}
+          >
             {t.common.cancel}
           </button>
           <button type="submit" className="btn btn-small btn-primary" disabled={saveDisabled}>
@@ -416,8 +430,10 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
               onChange={setSections}
               disabled={saving || !!readOnly}
               onError={setError}
+              onAttach={() => void files.attach()}
             />
           )}
+          {fileRows}
 
           <h3 className="group-title">{t.editor.browser}</h3>
           <div className="group">
@@ -459,8 +475,10 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
           onChange={setSections}
           disabled={saving || !!readOnly}
           onError={setError}
+          onAttach={() => void files.attach()}
         />
       )}
+      {itemType === "secure_note" && fileRows}
 
       {error && (
         <p className="form-error" role="alert">

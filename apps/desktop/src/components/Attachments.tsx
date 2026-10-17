@@ -5,17 +5,9 @@ import { formatSize } from "../lib/format";
 import type { AttachmentMeta, ItemOverview } from "../lib/types";
 import { useI18n } from "../i18n/context";
 import { errorMessage } from "../i18n/errors";
-import { IconButton } from "./Field";
+import { isImage } from "./FileRows";
 import { Icon } from "./Icon";
 import { useToast } from "./Toast";
-
-/** The types Rust sniffs as raster images, the only ones it lets us preview. */
-const IMAGE_KINDS: Record<string, string> = {
-  "image/png": "PNG",
-  "image/jpeg": "JPEG",
-  "image/webp": "WebP",
-  "image/gif": "GIF",
-};
 
 /** Set once the user has read the save warning; lasts as long as the window. */
 const SAVE_WARNED = "hk.attachments.saveWarned";
@@ -36,15 +28,13 @@ function rememberSaveWarned() {
   }
 }
 
-const isImage = (a: AttachmentMeta) => Object.hasOwn(IMAGE_KINDS, a.mime);
-
 type Confirm = { kind: "save"; id: string } | null;
 
 /**
- * An item's attached files (spec 2026-10-13-encrypted-attachments §4.9).
- * Only names, types and sizes are here; bytes reach the webview only for an
- * image the user asks to preview. Picking, saving and reading files is done
- * by Rust behind its own dialogs.
+ * An item's attached files in its view (spec 2026-10-13-encrypted-attachments
+ * §4.9): Download each, or preview an image by its name. Only names, types
+ * and sizes are here; bytes reach the webview only for an image the user asks
+ * to preview. Saving and reading files is done by Rust behind its own dialogs.
  */
 export function Attachments({ item }: { item: ItemOverview }) {
   const { t, dateLocale } = useI18n();
@@ -73,35 +63,45 @@ export function Attachments({ item }: { item: ItemOverview }) {
     }, t.attachments.saveFailed);
   };
 
-  const kind = (a: AttachmentMeta) =>
-    IMAGE_KINDS[a.mime] ?? (a.mime === "application/pdf" ? "PDF" : t.attachments.file);
-
   if (files.length === 0) return null;
   return (
     <section aria-label={t.attachments.title}>
-      {files.length > 0 && <h3 className="group-title">{t.attachments.title}</h3>}
+      <h3 className="group-title">{t.attachments.title}</h3>
       <ul className="group attachment-list">
         {files.map((a) => (
           <li className="row attachment-row" key={a.id}>
-            <Icon name={isImage(a) ? "image" : "file"} size={18} className="attachment-icon" />
+            <Icon name={isImage(a.mime) ? "image" : "file"} size={18} className="attachment-icon" />
             <div className="row-main">
-              <div className="row-value attachment-name selectable" title={a.name} data-truncate="">
-                {a.name}
-              </div>
-              <div className="attachment-meta">
-                {kind(a)} · {formatSize(a.size, dateLocale)}
-              </div>
-            </div>
-            <div className="row-actions-inline">
-              {isImage(a) && (
-                <IconButton
-                  icon="eye"
-                  label={t.attachments.preview(a.name)}
+              {isImage(a.mime) ? (
+                <button
+                  type="button"
+                  className="url-link attachment-open"
+                  title={a.name}
+                  aria-label={t.attachments.preview(a.name)}
                   onClick={() => void preview.open(a).catch((e) => toast(errorMessage(e, t, t.attachments.previewFailed), "error"))}
-                />
+                >
+                  <span className="row-value attachment-name" data-truncate="">
+                    {a.name}
+                  </span>
+                </button>
+              ) : (
+                <div className="row-value attachment-name selectable" title={a.name} data-truncate="">
+                  {a.name}
+                </div>
               )}
-              <IconButton icon="download" label={t.attachments.save(a.name)} onClick={() => void save(a)} disabled={busy} />
+              <div className="attachment-meta">{formatSize(a.size, dateLocale)}</div>
             </div>
+            <button
+              type="button"
+              className="btn btn-small"
+              aria-label={t.attachments.downloadName(a.name)}
+              title={t.attachments.downloadName(a.name)}
+              onClick={() => void save(a)}
+              disabled={busy}
+            >
+              <Icon name="download" size={15} />
+              <span className="attachment-download-label">{t.attachments.download}</span>
+            </button>
             {confirm?.id === a.id && (
               <div className="confirm attachment-confirm" role="alert">
                 <span>{t.attachments.saveWarning}</span>
@@ -116,7 +116,7 @@ export function Attachments({ item }: { item: ItemOverview }) {
                   }}
                   disabled={busy}
                 >
-                  {t.attachments.saveAnyway}
+                  {t.attachments.downloadAnyway}
                 </button>
               </div>
             )}

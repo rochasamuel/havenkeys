@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { api } from "../lib/api";
 import type { CustomField, IdentityFields, ItemOverview } from "../lib/types";
 import { IDENTITY_SECTIONS, type IdentityFieldDef } from "../lib/identity";
+import { AttachRow, FileRows, useFileEdits } from "../components/FileRows";
 import { Icon } from "../components/Icon";
 import { TagsEditor, type TagsEditorHandle } from "../components/TagsEditor";
 import { Switch } from "../components/Switch";
@@ -34,6 +35,7 @@ export function IdentityEditor({ existing, readOnly, onCancel, onSaved, onDirtyC
   const [initial, setInitial] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const files = useFileEdits(existing.attachments, (e) => setError(errorMessage(e, t, t.attachments.attachFailed)));
 
   useEffect(() => {
     let cancelled = false;
@@ -52,7 +54,7 @@ export function IdentityEditor({ existing, readOnly, onCancel, onSaved, onDirtyC
     // `t` is left out: a language change must not decrypt the identity again.
   }, [existing.id]);
 
-  const dirty = fields !== null && JSON.stringify({ fields, tags }) !== initial;
+  const dirty = (fields !== null && JSON.stringify({ fields, tags }) !== initial) || files.dirty;
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
@@ -72,11 +74,13 @@ export function IdentityEditor({ existing, readOnly, onCancel, onSaved, onDirtyC
     if (finalTags === null) return;
     setSaving(true);
     setError(null);
+    const edit = files.take();
     try {
-      const saved = await api.updateItem(existing.id, { itemType: "identity", title: "", identity: fields, tags: finalTags });
+      const saved = await api.updateItem(existing.id, { itemType: "identity", title: "", identity: fields, tags: finalTags }, edit);
       onSaved(saved);
     } catch (err) {
-      setError(errorMessage(err, t, t.editor.saveFailed));
+      const message = errorMessage(err, t, t.editor.saveFailed);
+      setError(files.dropPending() ? `${message} ${t.attachments.notSaved}` : message);
     } finally {
       setSaving(false);
     }
@@ -87,7 +91,15 @@ export function IdentityEditor({ existing, readOnly, onCancel, onSaved, onDirtyC
       <header className="editor-head" data-tauri-drag-region>
         <h2>{t.identity.edit}</h2>
         <div className="editor-actions">
-          <button type="button" className="btn btn-small" onClick={onCancel} disabled={saving}>
+          <button
+            type="button"
+            className="btn btn-small"
+            onClick={() => {
+              files.discard();
+              onCancel();
+            }}
+            disabled={saving}
+          >
             {t.common.cancel}
           </button>
           <button type="submit" className="btn btn-small btn-primary" disabled={!fields || saving || readOnly}>
@@ -200,6 +212,9 @@ export function IdentityEditor({ existing, readOnly, onCancel, onSaved, onDirtyC
               rows={4}
             />
           </div>
+          <FileRows files={files.rows} disabled={saving || !!readOnly} onRemove={files.remove}>
+            <AttachRow onClick={() => void files.attach()} disabled={saving || !!readOnly || files.picking} />
+          </FileRows>
         </>
       )}
 

@@ -53,6 +53,7 @@ export function CustomFieldsEditor({
   onChange,
   disabled,
   onError,
+  onAttach,
 }: {
   /** The saved item, for revealing a kept Password; absent for a new item. */
   itemId?: string;
@@ -60,6 +61,8 @@ export function CustomFieldsEditor({
   onChange: (next: EditSection[]) => void;
   disabled: boolean;
   onError: (message: string) => void;
+  /** "Attach a file", at the end of the add menu. */
+  onAttach: () => void;
 }) {
   const { t } = useI18n();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -256,19 +259,34 @@ export function CustomFieldsEditor({
             type="button"
             className="row row-button add-row"
             onClick={() => setMenuOpen((o) => !o)}
-            disabled={disabled || full}
+            disabled={disabled}
             aria-haspopup="menu"
             aria-expanded={menuOpen}
           >
             <Icon name="plus" size={15} /> {t.fields.addField}
           </button>
-          {menuOpen && !disabled && !full && (
+          {menuOpen && !disabled && (
             <div className="menu cf-menu" role="menu">
-              {FIELD_TYPES.map((type) => (
-                <button key={type} type="button" role="menuitem" onClick={() => add(type)}>
-                  {t.fields.types[type]}
-                </button>
-              ))}
+              {!full && (
+                <>
+                  {FIELD_TYPES.map((type) => (
+                    <button key={type} type="button" role="menuitem" onClick={() => add(type)}>
+                      {t.fields.types[type]}
+                    </button>
+                  ))}
+                  <div className="menu-sep" role="separator" />
+                </>
+              )}
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onAttach();
+                }}
+              >
+                <Icon name="paperclip" size={16} /> {t.attachments.attach}
+              </button>
             </div>
           )}
         </div>

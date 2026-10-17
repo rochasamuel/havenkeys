@@ -17,6 +17,12 @@ const attachments = [
   },
 ];
 
+/** What "Attach a file" picks: a photo and a long-named PDF. */
+const pickedFiles = [
+  { token: "p1", name: "Passport scan.jpg", mime: "image/jpeg", size: 3_984_000 },
+  { token: "p2", name: "Signed lease agreement — apartment 402, renewal for 2027 (scanned copy).pdf", mime: "application/pdf", size: 734_003 },
+];
+
 /** A small receipt-like PNG for the preview (the stub answers raw bytes for it). */
 const PREVIEW_PNG = "iVBORw0KGgoAAAANSUhEUgAAAeAAAAEsCAIAAACUnPcNAAAFnUlEQVR42u3dMQqAMBREwdz/ZCk9SUprryBBFpcMTOsr5LNtxroXAD80/AIAAw2AgQYw0AAYaAADDYCBBsBAAxhoAAw0gIEGwEADYKABDDQABhrAQANgoAEMNAAGGgADDWCgATDQAAYaAAMNgIEGMNAAGGgAAw2AgQYw0AAYaAAMNICBBsBAAxhoAE4d6HnNN7Y/VFZWVv6kbKAdh7KysoE20MrKysoG2kArKysbaAPt7JSVlQ20gVZWVjbQBtpxKCsrG2gDraysrGygDbSysrKBNtDKysrKBtpAKysrG2gD7eyUlZUNtIFWVlZWNtCOQ1lZ2UAbaGVlZWUDbaCVlZUNtIF2dsrKygbaQCsrKxtoT14BYKABDDQABhrAQANgoAEMNAAGGgADDWCgATDQAAYaAAMNgIEGMNAAGGgAAw2AgQYw0GGe21FWVq4oG2jHoaysbKANtLKysrKBNtDKysoG2kA7O2VlZQNtoJWVlQ20gXYcysrKBtpAKysrKxtoA62srGygDbSysrKygTbQysrKBtpAOztlZWUDbaCVlZWVDbTjUFZWNtAGWllZWdlAG2hlZWUDbaCdnbKysoE20MrKygbak1cAGGgAAw2AgQYw0AAYaAADDYCBBsBAAxhoAAw0gIEGwEADYKABDDQABhrAQANgoAEMdJjndpSVlSvKBtpxKCsrG2gDraysrGygDbSysrKBNtDOTllZ2UAbaGVlZQNtoB2HsrKygTbQysrKygbaQCsrKxtoA62srKxsoA20srKygTbQzk5ZWdlAG2hlZWVlA+04lJWVDbSBVlZWVjbQBlpZWdlAG2hnp6ysbKANtLKysoH25BUABhrAQANgoAEMNAAGGsBAA2CgATDQAAYaAAMNYKABMNAAGGgAAw2AgQYw0AAYaAADHea5HWVl5YqygXYcysrKBtpAKysrKxtoA62srGygDbSzU1ZWNtAGWllZ2UAbaMehrKxsoA20srKysoE20MrKygbaQCsrKysbaAOtrKxsoA20s1NWVjbQBlpZWVnZQDsOZWVlA22glZWVlQ20gVZWVjbQBtrZKSsrG2gDraysbKA9eQWAgQYw0AAYaAADDYCBBjDQABhoAAw0gIEGwEADGGgADDQABhrAQANgoAEMNAAGGsBAh3luR1lZuaJsoB2HsrKygTbQysrKygbaQCsrKxtoA+3slJWVDbSBVlZWNtAG2nEoKysbaAOtrKysbKANtLKysoE20MrKysoG2kArKysbaAPt7JSVlQ20gVZWVlY20I5DWVnZQBtoZWVlZQNtoJWVlQ20gXZ2ysrKBtpAKysrG2hPXgFgoAEMNAAGGsBAA2CgAQw0AAYaAAMNYKABMNAABhoAAw2AgQYw0AAYaAADDYCBBjDQYZ7bUVZWrigbaMehrKxsoA20srKysoE20MrKygbaQDs7ZWVlA22glZWVDbSBdhzKysoG2kArKysrG2gDraysbKANtLKysrKBNtDKysoG2kA7O2VlZQNtoJWVlZUNtONQVlY20AZaWVlZ2UAbaGVlZQNtoJ2dsrKygTbQysrKBtqTVwAYaAADDYCBBjDQABhoAAMNgIEGwEADGGgADDSAgQbAQANgoAEMNAAGGsBAA2CgAQx0mOd2lJWVK8oG2nEoKysbaAOtrKysbKANtLKysoE20M5OWVnZQBtoZWVlA22gHYeysrKBNtDKysrKBtpAKysrG2gDraysrGygDbSysrKBNtDOTllZ2UAbaGVlZWUD7TiUlZUNtIFWVlZWNtAGWllZ2UAbaGenrKxsoA20srKygfbkFQAGGsBAA2CgAQw0AAYawEADYKABMNAABhoAAw1goAEw0AAYaAADDYCBBjDQABhoAAMNgIEGwEADGGgADDSAgQbAQANgoAEMNAAGGsBAA2CgAQ72APnCarmBWNa8AAAAAElFTkSuQmCC";
 
@@ -343,6 +349,8 @@ function baseResponses() {
     },
     preview_attachment: { bytesBase64: PREVIEW_PNG },
     save_attachment: true,
+    pick_files: pickedFiles,
+    discard_pending_files: null,
     lock_vault: null,
     health_report: healthReport,
     set_health_ignored: null,
@@ -621,25 +629,25 @@ export const desktopScenarios = [
     shots: [".attachment-list"],
   },
   {
-    // Remove asks first; Save as… warns once.
+    // The first Download warns once.
     name: "detail-attachments-confirms",
     respond: {},
     async act(page) {
       await page.click(firstItem);
       await page.waitForTimeout(200);
-      await page.click(".attachment-row >> nth=0 >> .icon-btn >> nth=-1");
-      await page.click(".attachment-row >> nth=1 >> .icon-btn >> nth=0");
+      await page.click(".attachment-row >> nth=1 >> .btn");
       await page.waitForTimeout(200);
     },
     shots: [".attachment-list"],
   },
   {
+    // An image's name opens its preview.
     name: "detail-attachment-preview",
     respond: {},
     async act(page) {
       await page.click(firstItem);
       await page.waitForTimeout(200);
-      await page.click(".attachment-row >> nth=0 >> .icon-btn >> nth=0");
+      await page.click(".attachment-open >> nth=0");
       await page.waitForTimeout(400);
     },
   },
@@ -1052,6 +1060,64 @@ export const desktopScenarios = [
       await page.click(".cf-add .add-row");
       await page.click(".cf-menu button >> nth=6");
     },
+  },
+  {
+    // The add menu ends with "Attach a file".
+    name: "editor-attach-menu",
+    respond: {},
+    async act(page) {
+      await page.click(firstItem);
+      await page.waitForTimeout(200);
+      await page.click(".item-head-actions .btn");
+      await page.waitForTimeout(200);
+      await page.click(".cf-add .add-row");
+    },
+    shots: [".cf-add-group"],
+  },
+  {
+    // Saved files, one marked for removal, two picked and waiting for Save.
+    name: "editor-attachments",
+    respond: {},
+    async act(page) {
+      await page.click(firstItem);
+      await page.waitForTimeout(200);
+      await page.click(".item-head-actions .btn");
+      await page.waitForTimeout(200);
+      await page.click(".attachment-remove >> nth=1");
+      await page.click(".cf-add .add-row");
+      await page.click(".cf-menu button >> nth=-1");
+      await page.waitForTimeout(200);
+    },
+    shots: [".attachment-list"],
+  },
+  {
+    // The save failed: the picked files went with it.
+    name: "editor-attachments-save-failed",
+    respond: { update_item: reject("offline") },
+    async act(page) {
+      await page.click(firstItem);
+      await page.waitForTimeout(200);
+      await page.click(".item-head-actions .btn");
+      await page.waitForTimeout(200);
+      await page.click(".cf-add .add-row");
+      await page.click(".cf-menu button >> nth=-1");
+      await page.waitForTimeout(200);
+      await page.click(".editor-actions .btn-primary");
+      await page.waitForTimeout(300);
+    },
+    shots: [".attachment-list", ".form-error"],
+  },
+  {
+    name: "card-editor-attachments",
+    respond: {},
+    act: async (page) => {
+      await page.click(".list-item:has(.avatar-card)");
+      await page.click(".item-head-actions .btn");
+      await page.waitForTimeout(200);
+      await page.click(".attachment-list .add-row");
+      await page.waitForTimeout(200);
+    },
+    shots: [".attachment-list"],
   },
   {
     name: "editor-save-error",

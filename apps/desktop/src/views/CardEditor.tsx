@@ -4,6 +4,7 @@ import type { CardBrand, CardInput, CardNumberCheck, ItemOverview } from "../lib
 import { BRAND_NAMES, CARD_BRAND_CHOICES, capDigits, cardSecretUpdate, digitsOnly, formatExpiry, isDerivedTitle, groupNumber, parseExpiryInput } from "../lib/card";
 import { TagsEditor, type TagsEditorHandle } from "../components/TagsEditor";
 import { CardBrandLogo } from "../components/CardBrandLogo";
+import { AttachRow, FileRows, useFileEdits } from "../components/FileRows";
 import { useI18n } from "../i18n/context";
 import { errorMessage } from "../i18n/errors";
 
@@ -45,6 +46,7 @@ export function CardEditor({ existing, readOnly, onCancel, onSaved, onDirtyChang
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [has, setHas] = useState({ number: false, verificationNumber: false });
+  const files = useFileEdits(existing?.attachments, (e) => setError(errorMessage(e, t, t.attachments.attachFailed)));
 
   useEffect(() => {
     if (!existing) return;
@@ -94,7 +96,7 @@ export function CardEditor({ existing, readOnly, onCancel, onSaved, onDirtyChang
     };
   }, [digits]);
 
-  const dirty = draft !== null && JSON.stringify(draft) !== initial;
+  const dirty = (draft !== null && JSON.stringify(draft) !== initial) || files.dirty;
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
@@ -145,11 +147,13 @@ export function CardEditor({ existing, readOnly, onCancel, onSaved, onDirtyChang
     };
     setSaving(true);
     setError(null);
+    const edit = files.take();
     try {
       const input = { itemType: "card" as const, title: draft.title, card, tags };
-      onSaved(existing ? await api.updateItem(existing.id, input) : await api.createItem(input));
+      onSaved(existing ? await api.updateItem(existing.id, input, edit) : await api.createItem(input, edit));
     } catch (err) {
-      setError(errorMessage(err, t, t.editor.saveFailed));
+      const message = errorMessage(err, t, t.editor.saveFailed);
+      setError(files.dropPending() ? `${message} ${t.attachments.notSaved}` : message);
     } finally {
       setSaving(false);
     }
@@ -160,7 +164,15 @@ export function CardEditor({ existing, readOnly, onCancel, onSaved, onDirtyChang
       <header className="editor-head" data-tauri-drag-region>
         <h2>{existing ? t.card.edit : t.card.newTitle}</h2>
         <div className="editor-actions">
-          <button type="button" className="btn btn-small" onClick={onCancel} disabled={saving}>
+          <button
+            type="button"
+            className="btn btn-small"
+            onClick={() => {
+              files.discard();
+              onCancel();
+            }}
+            disabled={saving}
+          >
             {t.common.cancel}
           </button>
           <button type="submit" className="btn btn-small btn-primary" disabled={!draft || saving || readOnly}>
@@ -247,6 +259,9 @@ export function CardEditor({ existing, readOnly, onCancel, onSaved, onDirtyChang
             <textarea className="edit-area" value={draft.notes} aria-label={f.notes} placeholder={f.notes}
               onChange={(e) => set("notes", e.target.value)} spellCheck={false} rows={4} />
           </div>
+          <FileRows files={files.rows} disabled={saving || !!readOnly} onRemove={files.remove}>
+            <AttachRow onClick={() => void files.attach()} disabled={saving || !!readOnly || files.picking} />
+          </FileRows>
         </>
       )}
 
