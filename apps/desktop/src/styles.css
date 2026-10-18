@@ -787,12 +787,11 @@ input::-ms-clear {
   color: var(--side-muted);
 }
 
+/* The chevron's left edge lines up with the other headings' text. */
 .nav-toggle {
   display: flex;
   align-items: center;
   gap: 4px;
-  margin-left: -4px;
-  padding-left: 6px;
   border: 0;
   border-radius: 6px;
   background: transparent;
@@ -805,11 +804,39 @@ input::-ms-clear {
 }
 
 .nav-toggle svg {
+  /* The glyph sits inset in its box: pull it back onto the text edge. */
+  margin-left: -3px;
   transition: transform var(--t-med) var(--ease);
 }
 
 .nav-toggle[aria-expanded="false"] svg {
   transform: rotate(-90deg);
+}
+
+/* A tag row that folds its height away (grid 1fr → 0fr) and fades. The
+   clip margin keeps the focus ring, which draws outside the row. */
+.nav-fold {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition:
+    grid-template-rows var(--t-med) var(--ease),
+    margin-top var(--t-med) var(--ease),
+    opacity var(--t-med) var(--ease);
+}
+
+.nav-fold > div {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: clip;
+  overflow-clip-margin: 4px;
+}
+
+.nav-fold[data-open="false"] {
+  grid-template-rows: 0fr;
+  /* Cancel the nav's 1px gap so folded rows take no room. */
+  margin-top: -1px;
+  opacity: 0;
 }
 
 .nav-item {

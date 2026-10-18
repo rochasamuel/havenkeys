@@ -145,6 +145,8 @@ const navButton = (label: string) =>
   [...host.querySelectorAll<HTMLButtonElement>(".nav button")].find(
     (b) => b.querySelector("span:not(.nav-count)")?.textContent === label,
   );
+/** A folded tag row stays in the DOM (for the animation) but is inert. */
+const folded = (label: string) => navButton(label)!.closest(".nav-fold")!.hasAttribute("inert");
 const listHead = () => host.querySelector(".list-head h2")?.textContent;
 const click = (el: Element | undefined | null) => act(() => el!.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 
@@ -194,11 +196,11 @@ describe("VaultScreen tags", () => {
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
     click(toggle);
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
-    expect(navButton("staging")).toBeTruthy();
-    expect(navButton("work")).toBeFalsy();
+    expect(folded("staging")).toBe(false);
+    expect(folded("work")).toBe(true);
     expect(window.localStorage.getItem("hk-tags-collapsed")).toBe("1");
     click(toggle);
-    expect(navButton("work")).toBeTruthy();
+    expect(folded("work")).toBe(false);
     expect(window.localStorage.getItem("hk-tags-collapsed")).toBeNull();
   });
 

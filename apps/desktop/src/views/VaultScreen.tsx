@@ -470,19 +470,26 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
                   <Icon name="chevronDown" size={13} />
                   {t.vault.tagsHeading}
                 </button>
-                {/* Collapsed, the picked tag stays visible so the filter is never hidden. */}
-                {vaultTags.filter((v) => !tagsCollapsed || (tag !== null && sameTag(tag, v.name))).map((v) => (
-                  <button
-                    key={v.name}
-                    className="nav-item nav-tag"
-                    aria-current={tag !== null && sameTag(tag, v.name) ? "page" : undefined}
-                    onClick={() => openTag(v.name)}
-                  >
-                    <Icon name="tag" size={17} />
-                    <span>{v.name}</span>
-                    <span className="nav-count">{v.count}</span>
-                  </button>
-                ))}
+                {vaultTags.map((v) => {
+                  const picked = tag !== null && sameTag(tag, v.name);
+                  // Collapsed, the picked tag stays visible so the filter is never hidden.
+                  const open = !tagsCollapsed || picked;
+                  return (
+                    <div key={v.name} className="nav-fold" data-open={open} inert={!open}>
+                      <div>
+                        <button
+                          className="nav-item nav-tag"
+                          aria-current={picked ? "page" : undefined}
+                          onClick={() => openTag(v.name)}
+                        >
+                          <Icon name="tag" size={17} />
+                          <span>{v.name}</span>
+                          <span className="nav-count">{v.count}</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </>
             )}
             <p className="nav-heading">{t.vault.toolsHeading}</p>
