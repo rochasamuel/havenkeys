@@ -99,6 +99,8 @@ export const api = {
   lock: () => call<void>("lock_vault"),
   /** The Quick Access window hides itself (Esc, or after an action). Rust only hides that window. */
   hideQuickWindow: () => call<void>("hide_quick_window"),
+  /** Quick Access: hide itself and show `id` in the main window. */
+  openInApp: (id: string) => call<void>("open_in_app", { id }),
   changeMasterPassword: (current: string, next: string) =>
     call<void>("change_master_password", { current, new: next }),
   recordActivity: () => call<void>("record_activity"),

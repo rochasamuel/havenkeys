@@ -34,7 +34,7 @@ function useCopy(itemId: string) {
   const toast = useToast();
   const { t } = useI18n();
   return useCallback(
-    async (field: CopyField) => {
+    async (field: Exclude<CopyField, "content">) => {
       try {
         const r = await api.copy(itemId, field);
         toast(t.detail.copied[field](r.clearAfterSeconds));

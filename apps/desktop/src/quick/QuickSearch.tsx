@@ -10,10 +10,16 @@ import { quickKeyAction, type QuickKeyAction } from "./keys";
 
 type Action = Exclude<QuickKeyAction, "hide" | "up" | "down">;
 
+const isNote = (item: ItemOverview) => item.itemType === "secure_note";
+
 /**
  * Search and act. Holds overviews only (title, username, websites): every
- * action asks Rust, which copies the value itself (copy_secret) or opens a
- * saved website (open_website); the answer carries no secret.
+ * action asks Rust, which copies the value itself (copy_secret), opens a
+ * saved website (open_website) or opens the item in the main window
+ * (open_in_app); the answer carries no secret.
+ *
+ * A secure note answers to two keys only: Enter opens it in HavenKeys and
+ * Cmd/Ctrl+C copies its text.
  */
 export function QuickSearch({ onHide }: { onHide: () => void }) {
   const { t } = useI18n();
@@ -33,7 +39,7 @@ export function QuickSearch({ onHide }: { onHide: () => void }) {
     api.listItems(query).then(
       (all) => {
         if (id !== request.current) return;
-        setItems(all.filter((i) => i.itemType === "login"));
+        setItems(all.filter((i) => i.itemType === "login" || i.itemType === "secure_note"));
         setIndex(0);
         setError(null);
       },
@@ -55,6 +61,7 @@ export function QuickSearch({ onHide }: { onHide: () => void }) {
   }, [current]);
 
   function available(item: ItemOverview, action: Action): boolean {
+    if (isNote(item)) return action === "password" || action === "username";
     switch (action) {
       case "password":
         return item.hasPassword;
@@ -74,7 +81,15 @@ export function QuickSearch({ onHide }: { onHide: () => void }) {
       return;
     }
     try {
-      if (action === "open") {
+      if (isNote(item) && action === "password") {
+        // Rust hides this window and raises the main one; hiding again here
+        // would hide the whole app on macOS.
+        await api.openInApp(item.id);
+        return;
+      }
+      if (isNote(item)) {
+        await api.copy(item.id, "content");
+      } else if (action === "open") {
         const url = item.urls[0]?.url;
         if (!url) return;
         await api.openWebsite(item.id, url);
@@ -116,13 +131,15 @@ export function QuickSearch({ onHide }: { onHide: () => void }) {
     void run(current, action);
   }
 
+  const note = !!current && isNote(current);
   const mod = mac ? "⌘" : "Ctrl+";
   const modKey = mac ? "Meta" : "Control";
+  const has = (action: Action) => !!current && available(current, action);
   const shortcuts = [
-    current?.hasPassword && "Enter",
-    current?.username && `${modKey}+C`,
-    current?.hasTotp && `${modKey}+T`,
-    current && current.urls.length > 0 && `${modKey}+O`,
+    has("password") && "Enter",
+    has("username") && `${modKey}+C`,
+    has("totp") && `${modKey}+T`,
+    has("open") && `${modKey}+O`,
   ]
     .filter(Boolean)
     .join(" ");
@@ -175,7 +192,7 @@ export function QuickSearch({ onHide }: { onHide: () => void }) {
                   {item.title}
                 </span>
                 <span className="list-item-sub" data-truncate="">
-                  {item.username ?? primaryHost(item) ?? t.common.login}
+                  {isNote(item) ? t.common.secureNote : (item.username ?? primaryHost(item) ?? t.common.login)}
                 </span>
               </span>
             </li>
@@ -187,24 +204,24 @@ export function QuickSearch({ onHide }: { onHide: () => void }) {
         {error}
       </p>
 
-      {/* Only the keys the selected login answers to. */}
+      {/* Only the keys the selected item answers to. */}
       <footer className="quick-hints" aria-hidden="true">
-        {current?.hasPassword && (
+        {has("password") && (
           <span>
-            <kbd>↵</kbd> {t.quick.hints.password}
+            <kbd>↵</kbd> {note ? t.quick.hints.openNote : t.quick.hints.password}
           </span>
         )}
-        {current?.username && (
+        {has("username") && (
           <span>
-            <kbd>{mod}C</kbd> {t.quick.hints.username}
+            <kbd>{mod}C</kbd> {note ? t.quick.hints.note : t.quick.hints.username}
           </span>
         )}
-        {current?.hasTotp && (
+        {has("totp") && (
           <span>
             <kbd>{mod}T</kbd> {t.quick.hints.totp}
           </span>
         )}
-        {current && current.urls.length > 0 && (
+        {has("open") && (
           <span>
             <kbd>{mod}O</kbd> {t.quick.hints.open}
           </span>

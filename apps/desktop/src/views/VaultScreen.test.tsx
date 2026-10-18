@@ -185,6 +185,23 @@ describe("VaultScreen tags", () => {
     expect(navButton("Work")!.getAttribute("aria-current")).toBe("page");
   });
 
+  it("collapses the Tags group but keeps the picked tag visible", async () => {
+    window.localStorage.removeItem("hk-tags-collapsed");
+    await mountWith(three());
+    click(navButton("staging"));
+    await settle();
+    const toggle = host.querySelector<HTMLButtonElement>(".nav-toggle")!;
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(navButton("staging")).toBeTruthy();
+    expect(navButton("work")).toBeFalsy();
+    expect(window.localStorage.getItem("hk-tags-collapsed")).toBe("1");
+    click(toggle);
+    expect(navButton("work")).toBeTruthy();
+    expect(window.localStorage.getItem("hk-tags-collapsed")).toBeNull();
+  });
+
   it("has no Tags section when no item has a tag", async () => {
     await mountWith([overview("c", "Charlie", [])]);
     expect([...host.querySelectorAll(".nav .nav-heading")].map((h) => h.textContent)).not.toContain("Tags");

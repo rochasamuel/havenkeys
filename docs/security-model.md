@@ -212,10 +212,10 @@ a keystroke through `record_activity`, not through the search command.
   `core:window:allow-start-dragging`, which lets the window be dragged by
   its own title-bar areas now that macOS uses an overlay title bar. It moves
   the window and nothing else. `quick.json` (the Quick Access window)
-  grants nine permissions: `core:event:allow-listen`,
+  grants ten permissions: `core:event:allow-listen`,
   `core:event:allow-unlisten`, `allow-vault-status`, `allow-unlock-vault`,
   `allow-record-activity`, `allow-list-items`, `allow-copy-secret`,
-  `allow-open-website` and `allow-hide-quick-window`.
+  `allow-open-website`, `allow-hide-quick-window` and `allow-open-in-app`.
   No `fs`, `shell`, `http`, `dialog`, `opener`, or `clipboard` plugins are
   installed (clipboard is handled in Rust). The `tauri-plugin-opener` crate is
   a dependency only for its free `open_url` function, called from
@@ -323,6 +323,7 @@ means a live server session, which a locked vault does not have.
 | `set_quick_access` | yes (unlocked) | no. Writes `quick-access.json` and registers or unregisters the shortcut |
 | `set_quick_access_shortcut` | yes (unlocked) | no. Takes a chord string or null (default); Rust checks the rules, registers it only if the OS accepts it, saves `quick-access.json`, then releases the old chord. Refused: `quick_access_shortcut_invalid` with one of three fixed reasons; taken: status with `candidateInUse`. In `main.json` only |
 | `hide_quick_window` | no | no. Takes no argument; callable from the quick window only; hides that window and nothing else |
+| `open_in_app` | no | no. Callable from the quick window only; takes an item id, checks it is in the unlocked vault, hides the quick window and shows that item in the main window. Returns nothing |
 | `answer_update_confirmation` | no (a lock denies the pending question) | no. Takes the pending confirmation's ID and Allow/Deny; any other ID is refused. In `main.json` only (not the Quick Access window). Allow lets one browser `save_login` password change proceed, which Rust then authorizes again from scratch; the dialog shows the login's name, username and site, and Deny is the default |
 | `copy_account_field` | yes | no. Copies the account's email, server, account ID or Secret Key from Rust, cleared after the clipboard delay; the field is a closed enum |
 

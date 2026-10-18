@@ -408,6 +408,7 @@ pub fn run() {
             quick_shortcut::set_quick_access,
             quick_shortcut::set_quick_access_shortcut,
             quick_window::hide_quick_window,
+            quick_window::open_in_app,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build the HavenKeys application");

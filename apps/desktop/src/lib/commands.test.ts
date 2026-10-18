@@ -54,7 +54,7 @@ function registeredInLibRs(): string[] {
 }
 
 /** Commands only the Quick Access window may call (capabilities/quick.json). */
-const QUICK_ONLY = ["hide_quick_window"];
+const QUICK_ONLY = ["hide_quick_window", "open_in_app"];
 /** Spec 2026-10-13-quick-access-design §4, in command names. */
 const QUICK_GRANTS = [
   "vault_status",
@@ -64,6 +64,7 @@ const QUICK_GRANTS = [
   "copy_secret",
   "open_website",
   "hide_quick_window",
+  "open_in_app",
 ];
 
 /** `allow-create-item` → `create_item`, ignoring Tauri's own `core:` grants. */

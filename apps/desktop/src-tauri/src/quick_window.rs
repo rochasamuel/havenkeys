@@ -6,10 +6,13 @@ use crate::quick_access::{
     self, BrowserUnlockTarget, HideReason, QuickAccess, QuickSurface, ShortcutTarget, Shown,
     Toggled, QUICK_WINDOW, SHOWN_EVENT,
 };
-use crate::state::AppState;
+use crate::state::{AppState, CmdResult, OPEN_ITEM_EVENT};
 use crate::tray::{self, MAIN_WINDOW};
 use havenkeys_core::vault::VaultState;
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewWindow, Window, WindowEvent};
+use tauri::{
+    AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewWindow, Window, WindowEvent,
+};
+use uuid::Uuid;
 
 struct Surface<'a> {
     app: &'a AppHandle,
@@ -177,6 +180,18 @@ pub fn hide_quick_window(app: AppHandle) {
     hide(&app, HideReason::Dismissed);
 }
 
+/// Enter on a secure note: open it in the main window. Only an item in the
+/// unlocked vault opens; nothing of it is read or returned.
+#[tauri::command]
+pub fn open_in_app(app: AppHandle, state: State<'_, AppState>, id: Uuid) -> CmdResult<()> {
+    state.touch();
+    state.vault()?.get_item(&id)?;
+    hide(&app, HideReason::Opened);
+    tray::show_main_window(&app);
+    let _ = app.emit_to(MAIN_WINDOW, OPEN_ITEM_EVENT, id.to_string());
+    Ok(())
+}
+
 /// The quick window's own events. Its close button (Alt+F4) hides it like
 /// Esc; it never locks the vault or quits the app.
 pub fn on_window_event(window: &Window, event: &WindowEvent) {
@@ -203,6 +218,7 @@ mod tests {
         "allow-copy-secret",
         "allow-open-website",
         "allow-hide-quick-window",
+        "allow-open-in-app",
     ];
 
     fn json(text: &str) -> serde_json::Value {

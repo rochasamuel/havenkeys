@@ -565,6 +565,8 @@ pub enum HideReason {
     Blurred,
     /// The vault locked.
     Locked,
+    /// An action opened the main window, which takes the focus.
+    Opened,
 }
 
 /// macOS keeps HavenKeys the active app after its last window hides, so

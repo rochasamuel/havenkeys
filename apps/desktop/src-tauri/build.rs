@@ -89,6 +89,7 @@ const COMMANDS: &[&str] = &[
     "set_quick_access",
     "set_quick_access_shortcut",
     "hide_quick_window",
+    "open_in_app",
 ];
 
 fn main() {

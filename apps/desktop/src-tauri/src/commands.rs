@@ -213,6 +213,8 @@ pub enum CopyField {
     Username,
     Password,
     Totp,
+    /// A secure note's text.
+    Content,
 }
 
 #[derive(Serialize)]
@@ -237,6 +239,7 @@ pub fn copy_secret(
             ),
             CopyField::Password => v.reveal(&id, SecretField::Password)?,
             CopyField::Totp => v.totp_code(&id, AppState::unix_seconds())?.code,
+            CopyField::Content => v.reveal(&id, SecretField::Content)?,
         })
     })
 }

@@ -10,6 +10,7 @@ import type { ItemOverview } from "../lib/types";
 const listItems = vi.fn<(q?: string) => Promise<ItemOverview[]>>();
 const copy = vi.fn();
 const openWebsite = vi.fn();
+const openInApp = vi.fn();
 const calls: string[] = [];
 
 vi.mock("../lib/api", async (importOriginal) => {
@@ -18,6 +19,7 @@ vi.mock("../lib/api", async (importOriginal) => {
     listItems: (q?: string) => listItems(q),
     copy: (id: string, field: string) => copy(id, field),
     openWebsite: (id: string, url: string) => openWebsite(id, url),
+    openInApp: (id: string) => openInApp(id),
   };
   return {
     ...original,
@@ -63,7 +65,8 @@ function login(id: string, title: string, extra: Partial<ItemOverview> = {}): It
 }
 const GITHUB = login("a", "GitHub", { hasTotp: true });
 const BANK = login("b", "Bank", { username: null, urls: [] });
-const NOTE = { ...login("n", "Wi-Fi"), itemType: "secure_note" } as ItemOverview;
+const NOTE = { ...login("n", "Wi-Fi", { hasPassword: false, username: null }), itemType: "secure_note" } as ItemOverview;
+const CARD = { ...login("c", "Visa"), itemType: "card" } as ItemOverview;
 
 let host: HTMLElement;
 let root: Root;
@@ -71,9 +74,10 @@ const onHide = vi.fn();
 
 beforeEach(() => {
   document.documentElement.dataset.platform = "";
-  listItems.mockReset().mockResolvedValue([GITHUB, NOTE, BANK]);
+  listItems.mockReset().mockResolvedValue([GITHUB, CARD, BANK]);
   copy.mockReset().mockResolvedValue({ clearAfterSeconds: 30 });
   openWebsite.mockReset().mockResolvedValue(undefined);
+  openInApp.mockReset().mockResolvedValue(undefined);
   onHide.mockReset();
   calls.length = 0;
   host = document.createElement("div");
@@ -108,7 +112,34 @@ async function key(k: string, init: KeyboardEventInit = {}) {
 }
 
 describe("QuickSearch", () => {
-  it("lists logins only, with title and username, and focuses the field", async () => {
+  it("lists logins and secure notes, with title and username, and focuses the field", async () => {
+    listItems.mockResolvedValue([GITHUB, NOTE, CARD]);
+    await render();
+    expect(rows().map((r) => r.textContent)).toEqual([expect.stringContaining("GitHub"), expect.stringContaining("Wi-Fi")]);
+    expect(rows()[1]!.textContent).toContain(en.common.secureNote);
+  });
+
+  it("opens a note in HavenKeys on Enter and copies its text on Ctrl+C, nothing else", async () => {
+    listItems.mockResolvedValue([NOTE]);
+    await render();
+    const hints = () => host.querySelector(".quick-hints")!.textContent ?? "";
+    expect(hints()).toContain(en.quick.hints.openNote);
+    expect(hints()).toContain(en.quick.hints.note);
+    expect(hints()).not.toContain(en.quick.hints.totp);
+    expect(hints()).not.toContain("Ctrl+O");
+    for (const k of ["t", "o"]) await key(k, { ctrlKey: true });
+    expect(copy).not.toHaveBeenCalled();
+    expect(openWebsite).not.toHaveBeenCalled();
+    await key("c", { ctrlKey: true });
+    expect(copy).toHaveBeenCalledWith("n", "content");
+    expect(onHide).toHaveBeenCalledTimes(1);
+    await key("Enter");
+    expect(openInApp).toHaveBeenCalledWith("n");
+    // Rust hides the window itself; a second hide would hide the app on macOS.
+    expect(onHide).toHaveBeenCalledTimes(1);
+  });
+
+  it("lists logins only among other types, with title and username, and focuses the field", async () => {
     await render();
     expect(rows().map((r) => r.textContent)).toEqual([
       expect.stringContaining("GitHub"),

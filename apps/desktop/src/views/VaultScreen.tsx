@@ -3,6 +3,7 @@ import { api, ApiError } from "../lib/api";
 import type { AccountStatus, HealthReport, ItemOverview, ItemType } from "../lib/types";
 import { hasTag, sameTag, tagCounts } from "../lib/tags";
 import { VaultTagsProvider } from "../lib/vaultTags";
+import { readTagsCollapsed, writeTagsCollapsed } from "../lib/sidebarPrefs";
 import { totalIssues } from "../lib/health";
 import { showAccountItem } from "../lib/accountItem";
 import { decideOpen } from "../lib/openItem";
@@ -62,6 +63,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
   const [section, setSection] = useState<Section>("all");
   // A tag filter narrows All items; picking any other place clears it.
   const [tag, setTag] = useState<string | null>(null);
+  const [tagsCollapsed, setTagsCollapsed] = useState(readTagsCollapsed);
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<ItemOverview[]>([]);
   /** Bumped each time the items are reloaded; lets a detail row follow other items. */
@@ -69,6 +71,8 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
   // Every item, whatever the search: an open item and the login a "Sign in
   // with" row links to must not vanish because they don't match the query.
   const [allItems, setAllItems] = useState<ItemOverview[]>([]);
+  const allItemsRef = useRef(allItems);
+  allItemsRef.current = allItems;
   const [pane, setPane] = useState<Pane>({ kind: "empty" });
   const [unreadable, setUnreadable] = useState(unreadableItems);
   const [busyResync, setBusyResync] = useState(false);
@@ -185,9 +189,13 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
     return () => void unlisten.then((f) => f());
   }, [itemsChanged]);
 
+  // The list that shows `id`: a login from the extension, a secure note from Quick Access.
+  const sectionOf = (id: string): Section =>
+    allItemsRef.current.find((i) => i.id === id)?.itemType === "secure_note" ? "secure_note" : "login";
+
   const openFromExtension = useCallback((id: string) => {
     setPendingOpen(null);
-    pickSection("login");
+    pickSection(sectionOf(id));
     setQuery("");
     setPane({ kind: "view", id });
   }, []);
@@ -200,7 +208,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
   const editorDirtyRef = useRef(editorDirty);
   editorDirtyRef.current = editorDirty;
 
-  // "Open in HavenKeys" from the browser extension's popup. Subscribes once
+  // "Open in HavenKeys" from the browser extension's popup or Quick Access. Subscribes once
   // (stable deps): re-subscribing on every pane/editorDirty change would
   // leave a window, between the async unlisten and the new listen, with a
   // stale-closure listener or briefly no listener at all.
@@ -223,7 +231,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
         case "reveal":
           // This item is already shown, just hidden behind
           // Settings/Generator: bring it back without touching its state.
-          pickSection("login");
+          pickSection(sectionOf(id));
           return;
         case "confirm":
           setPendingOpen(id);
@@ -451,8 +459,19 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
             </button>
             {vaultTags.length > 0 && (
               <>
-                <p className="nav-heading">{t.vault.tagsHeading}</p>
-                {vaultTags.map((v) => (
+                <button
+                  className="nav-heading nav-toggle"
+                  aria-expanded={!tagsCollapsed}
+                  onClick={() => {
+                    setTagsCollapsed(!tagsCollapsed);
+                    writeTagsCollapsed(!tagsCollapsed);
+                  }}
+                >
+                  <Icon name="chevronDown" size={13} />
+                  {t.vault.tagsHeading}
+                </button>
+                {/* Collapsed, the picked tag stays visible so the filter is never hidden. */}
+                {vaultTags.filter((v) => !tagsCollapsed || (tag !== null && sameTag(tag, v.name))).map((v) => (
                   <button
                     key={v.name}
                     className="nav-item nav-tag"

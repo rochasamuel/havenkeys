@@ -766,7 +766,18 @@ input::-ms-clear {
   display: flex;
   flex-direction: column;
   gap: 1px;
+  min-height: 0;
   overflow-y: auto;
+}
+
+/* Rows keep their height; a short window scrolls the nav instead. */
+.nav > * {
+  flex: none;
+}
+
+.nav::-webkit-scrollbar-thumb {
+  background: rgba(226, 234, 230, 0.14);
+  background-clip: padding-box;
 }
 
 .nav-heading {
@@ -774,6 +785,31 @@ input::-ms-clear {
   font-size: 11.5px;
   font-weight: 600;
   color: var(--side-muted);
+}
+
+.nav-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: -4px;
+  padding-left: 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+  transition: color var(--t-fast);
+}
+
+.nav-toggle:hover {
+  color: var(--side-text);
+}
+
+.nav-toggle svg {
+  transition: transform var(--t-med) var(--ease);
+}
+
+.nav-toggle[aria-expanded="false"] svg {
+  transform: rotate(-90deg);
 }
 
 .nav-item {
