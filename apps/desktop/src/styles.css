@@ -662,7 +662,6 @@ input::-ms-clear {
 }
 
 .vault {
-  position: relative;
   flex: 1;
   min-height: 0;
   display: grid;
@@ -793,8 +792,7 @@ input::-ms-clear {
   opacity: 0;
   transition: opacity var(--t-med) var(--ease);
 }
-.overlay-track[data-visible="true"],
-.overlay-track:hover {
+.overlay-track[data-visible="true"] {
   opacity: 1;
   transition-duration: var(--t-fast);
 }
@@ -804,7 +802,7 @@ input::-ms-clear {
   margin-left: auto;
   margin-right: 2px;
   border-radius: 3px;
-  background: var(--overlay-thumb, var(--line-strong));
+  background: rgba(226, 234, 230, 0.22);
   transition:
     width var(--t-fast) var(--ease),
     background-color var(--t-fast) var(--ease);
@@ -813,13 +811,7 @@ input::-ms-clear {
 .overlay-track[data-dragging="true"] .overlay-thumb {
   width: 7px;
   margin-right: 1px;
-  background: var(--overlay-thumb-hover, var(--muted));
-}
-
-/* On the sidebar's dark ground in both themes. */
-.sidebar {
-  --overlay-thumb: rgba(226, 234, 230, 0.22);
-  --overlay-thumb-hover: rgba(226, 234, 230, 0.36);
+  background: rgba(226, 234, 230, 0.36);
 }
 
 .nav-heading {
@@ -2989,23 +2981,14 @@ button.tag-chip:hover {
 
 /* ------------------------------------------------------------- generator */
 
-/* Tools take the list and detail columns together, centred at reading width.
-   Their scroll area's bar floats (OverlayScrollbar), so a page that scrolls
-   is as wide as one that does not. */
-.tool-scroll {
+/* Tools take the list and detail columns together, centred at reading width. */
+.vault > .tool {
   grid-column: 2 / -1;
   min-height: 0;
-  overflow-y: auto;
-  background: var(--pane);
-  scrollbar-width: none;
-}
-.tool-scroll::-webkit-scrollbar {
-  display: none;
-}
-
-.tool-scroll > .tool {
   max-width: none;
+  overflow-y: auto;
   padding: 26px max(36px, calc((100% - 660px) / 2)) 48px;
+  background: var(--pane);
 }
 
 .gen-output {

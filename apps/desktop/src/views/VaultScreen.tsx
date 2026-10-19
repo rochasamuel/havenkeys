@@ -67,7 +67,6 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
   const [tagsCollapsed, setTagsCollapsed] = useState(readTagsCollapsed);
   const [query, setQuery] = useState("");
   const navRef = useRef<HTMLElement>(null);
-  const toolRef = useRef<HTMLDivElement>(null);
   const [items, setItems] = useState<ItemOverview[]>([]);
   /** Bumped each time the items are reloaded; lets a detail row follow other items. */
   const [revision, setRevision] = useState(0);
@@ -322,11 +321,6 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
   const selectedId = pane.kind === "view" || pane.kind === "edit" ? pane.id : null;
   const selected = allItems.find((i) => i.id === selectedId) ?? null;
   const isToolSection = section === "generator" || section === "settings" || section === "health" || section === "trash";
-  /** Tools that are one page: they share a scroll area whose bar floats (Trash has its own list). */
-  const scrollingTool = section === "generator" || section === "settings" || section === "health";
-
-  // The tools share one scroll area: each opens at its top.
-  useEffect(() => toolRef.current?.scrollTo?.({ top: 0 }), [section]);
 
   async function lock() {
     try {
@@ -556,32 +550,27 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
           </footer>
         </aside>
 
-        {scrollingTool && (
-          <div className="tool-scroll" ref={toolRef}>
-            {section === "health" && (
-              <HealthView
-                items={allItems}
-                report={health}
-                loading={healthLoading}
-                readOnly={readOnly}
-                onOpen={(id) => {
-                  pickSection("login");
-                  setQuery("");
-                  setPane({ kind: "view", id });
-                }}
-                onEdit={(id) => {
-                  pickSection("login");
-                  setQuery("");
-                  setPane({ kind: "edit", id });
-                }}
-                onChanged={loadHealth}
-              />
-            )}
-            {section === "generator" && <GeneratorView />}
-            {section === "settings" && <SettingsView onImported={itemsChanged} online={!offline} frozen={frozen} />}
-          </div>
+        {section === "health" && (
+          <HealthView
+            items={allItems}
+            report={health}
+            loading={healthLoading}
+            readOnly={readOnly}
+            onOpen={(id) => {
+              pickSection("login");
+              setQuery("");
+              setPane({ kind: "view", id });
+            }}
+            onEdit={(id) => {
+              pickSection("login");
+              setQuery("");
+              setPane({ kind: "edit", id });
+            }}
+            onChanged={loadHealth}
+          />
         )}
-        {scrollingTool && <OverlayScrollbar target={toolRef} />}
+        {section === "generator" && <GeneratorView />}
+        {section === "settings" && <SettingsView onImported={itemsChanged} online={!offline} frozen={frozen} />}
         {section === "trash" && <TrashView readOnly={readOnly} revision={revision} onChanged={itemsChanged} />}
 
         {!isToolSection && (

@@ -377,7 +377,7 @@ const firstItem = ".list-items li:nth-child(1) .list-item";
 
 async function scrollTool(page, where) {
   await page.evaluate((w) => {
-    const el = document.querySelector(".tool-scroll") ?? document.querySelector(".detail");
+    const el = document.querySelector(".tool") ?? document.querySelector(".detail");
     const target = typeof w === "string" ? document.querySelector(w) : null;
     if (target) target.scrollIntoView({ block: "start" });
     else if (el) el.scrollTop = w;
@@ -1256,15 +1256,28 @@ export const desktopScenarios = [
     shots: ["settings-block:2", "settings-block:3", "settings-block:4", "settings-block:5", "settings-block:6", "settings-block:7", "settings-block:8", "settings-block:9"],
   },
   {
-    // A tool page's bar floats over its right edge, shown on hover; the page keeps its width.
-    name: "settings-scrollbar",
+    // Switching between the tools, scrolling each: no crash, no blank pane.
+    name: "tools-switching",
     respond: { launch_at_login: true },
     async act(page) {
-      await page.click(SETTINGS);
-      await page.waitForTimeout(300);
-      await scrollTool(page, 400);
-      await page.mouse.move(600, 300);
-      await page.waitForTimeout(250);
+      for (const tool of [GENERATOR, SETTINGS, HEALTH, GENERATOR, TRASH, SETTINGS, HEALTH]) {
+        await page.click(tool);
+        await page.waitForTimeout(150);
+        // As a person would: the pointer over the page, a wheel scroll, then on to the next tool.
+        await page.mouse.move(700, 300);
+        await page.mouse.wheel(0, 600);
+        await page.waitForTimeout(100);
+        const thumb = page.locator(".overlay-track:not(.sidebar .overlay-track) .overlay-thumb");
+        if (await thumb.count()) {
+          const box = await thumb.boundingBox();
+          if (box) {
+            await page.mouse.move(box.x + box.width / 2, box.y + 5);
+            await page.mouse.down();
+            await page.mouse.move(box.x + box.width / 2, box.y + 80, { steps: 4 });
+            await page.mouse.up();
+          }
+        }
+      }
     },
   },
   {
