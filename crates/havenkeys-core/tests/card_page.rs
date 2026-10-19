@@ -80,7 +80,7 @@ fn values(
 #[test]
 fn https_pages_get_the_cards_overview_and_no_secrets() {
     let (v, card, _) = with_card();
-    let list = v.cards_for_page(SHOP, None).unwrap();
+    let list = v.cards_for_page(SHOP, None, NOW).unwrap();
     assert!(!list.insecure);
     assert_eq!(list.cards.len(), 1, "only cards, never logins");
     let c = &list.cards[0];
@@ -104,7 +104,9 @@ fn https_pages_get_the_cards_overview_and_no_secrets() {
 #[test]
 fn http_pages_are_told_they_are_insecure_and_get_nothing() {
     let (v, card, _) = with_card();
-    let list = v.cards_for_page("http://shop.example.com/", None).unwrap();
+    let list = v
+        .cards_for_page("http://shop.example.com/", None, NOW)
+        .unwrap();
     assert!(list.insecure);
     assert!(list.cards.is_empty());
     let r = values(
@@ -128,7 +130,7 @@ fn processor_and_same_site_frames_are_served() {
         "https://pay.example.com/card",
     ] {
         assert!(
-            !v.cards_for_page(frame, Some(SHOP)).unwrap().insecure,
+            !v.cards_for_page(frame, Some(SHOP), NOW).unwrap().insecure,
             "{frame}"
         );
     }
@@ -145,7 +147,7 @@ fn look_alike_and_cross_site_frames_are_denied() {
         "https://js.stripe.com:8443/",
     ] {
         assert!(
-            matches!(v.cards_for_page(frame, Some(SHOP)), Err(Error::Denied)),
+            matches!(v.cards_for_page(frame, Some(SHOP), NOW), Err(Error::Denied)),
             "{frame}"
         );
     }
@@ -261,7 +263,10 @@ fn a_login_and_a_missing_item_answer_the_same() {
 fn locked_vaults_answer_locked() {
     let (mut v, card, _) = with_card();
     v.lock();
-    assert!(matches!(v.cards_for_page(SHOP, None), Err(Error::Locked)));
+    assert!(matches!(
+        v.cards_for_page(SHOP, None, NOW),
+        Err(Error::Locked)
+    ));
     assert!(matches!(
         values(&v, &card, SHOP, &[(SHOP, &[CardRole::Number])]),
         Err(Error::Locked)
@@ -286,7 +291,7 @@ fn a_typed_card_is_saved_from_the_checkout() {
         .unwrap();
     let id = staged.item_id;
     v.commit_write(staged.write, 4).unwrap();
-    let list = v.cards_for_page(SHOP, None).unwrap();
+    let list = v.cards_for_page(SHOP, None, NOW).unwrap();
     let saved = list.cards.iter().find(|c| c.id == id).unwrap();
     assert_eq!(
         saved.title, "Visa",
@@ -347,7 +352,7 @@ fn frame_may_get_cards_follows_the_fill_rule() {
 #[test]
 fn an_app_gets_every_card_and_only_the_roles_it_asks_for() {
     let (v, card, _) = with_card();
-    let cards = v.cards_for_app().unwrap();
+    let cards = v.cards_for_app(NOW).unwrap();
     assert_eq!(cards.len(), 1);
     assert_eq!(cards[0].id, card);
     let got: Vec<(CardRole, String)> = v
@@ -407,7 +412,7 @@ fn a_saved_number_is_found_however_it_is_typed() {
 fn a_locked_vault_serves_no_app() {
     let (mut v, card, _) = with_card();
     v.lock();
-    assert!(matches!(v.cards_for_app(), Err(Error::Locked)));
+    assert!(matches!(v.cards_for_app(NOW), Err(Error::Locked)));
     assert!(matches!(
         v.card_values_for_app(&card, &[CardRole::Number]),
         Err(Error::Locked)
@@ -420,4 +425,24 @@ fn a_locked_vault_serves_no_app() {
         v.stage_save_card_for_app(new_card(VISA), NOW),
         Err(Error::Locked)
     ));
+}
+
+#[test]
+fn cards_are_offered_most_used_first() {
+    let (mut v, visa, _) = with_card();
+    let staged = v
+        .stage_create(card_input("Amex", "378282246310005", None), NOW)
+        .unwrap();
+    let amex = v.commit_write(staged, 3).unwrap().unwrap().id;
+    let page = |v: &VaultService| -> Vec<Uuid> {
+        let list = v.cards_for_page(SHOP, None, NOW).unwrap();
+        list.cards.iter().map(|c| c.id).collect()
+    };
+    let app = |v: &VaultService| -> Vec<Uuid> {
+        v.cards_for_app(NOW).unwrap().iter().map(|c| c.id).collect()
+    };
+    assert_eq!(page(&v), [amex, visa], "no use: by title");
+    v.record_use(&visa, NOW).unwrap();
+    assert_eq!(page(&v), [visa, amex]);
+    assert_eq!(app(&v), [visa, amex]);
 }

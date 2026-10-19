@@ -576,7 +576,9 @@ pub(crate) fn dispatch_with(
             })
         }
         Request::FindCards { url, top_url } => {
-            let list = v.cards_for_page(url, top_url.as_deref()).map_err(code)?;
+            let list = v
+                .cards_for_page(url, top_url.as_deref(), now_ms(unix_seconds))
+                .map_err(code)?;
             let cards = list
                 .cards
                 .into_iter()

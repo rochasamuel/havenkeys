@@ -57,7 +57,7 @@ fn decayed(score: f64, from_ms: i64, to_ms: i64) -> f64 {
 
 /// `f64` ordered by `total_cmp`, for sort keys.
 #[derive(PartialEq)]
-struct OrderedScore(f64);
+pub(crate) struct OrderedScore(pub(crate) f64);
 impl Eq for OrderedScore {}
 impl PartialOrd for OrderedScore {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
@@ -110,18 +110,23 @@ impl VaultService {
         self.save_activity(activity, now_ms)
     }
 
-    /// Sort user-facing matches: strength first, then decayed use at
-    /// `now_ms` (higher first), then title and id. An unreadable activity
-    /// record ranks as if empty.
-    pub(crate) fn rank_by_use(&self, matches: &mut [Suggestion], now_ms: i64) -> Result<()> {
+    /// Each item's decayed use at `now_ms`, 0 for none. An unreadable
+    /// activity record scores as if empty.
+    pub(crate) fn use_score(&self, now_ms: i64) -> Result<impl Fn(&Uuid) -> f64> {
         let activity = self.activity()?;
-        let score = |id: &Uuid| {
+        Ok(move |id: &Uuid| {
             activity
                 .uses
                 .get(id)
                 .filter(|u| now_ms.saturating_sub(u.last_ms) <= FORGET_AFTER_MS)
                 .map_or(0.0, |u| decayed(u.score, u.last_ms, now_ms))
-        };
+        })
+    }
+
+    /// Sort user-facing matches: strength first, then decayed use at
+    /// `now_ms` (higher first), then title and id.
+    pub(crate) fn rank_by_use(&self, matches: &mut [Suggestion], now_ms: i64) -> Result<()> {
+        let score = self.use_score(now_ms)?;
         matches.sort_by_cached_key(|s| {
             (
                 s.strength,

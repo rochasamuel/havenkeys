@@ -195,7 +195,7 @@ impl MobileVault {
         let vault = self.client.vault()?;
         Ok(match self.target(&target)? {
             FillTarget::Browser { page_url } => {
-                let list = vault.cards_for_page(&page_url, None)?;
+                let list = vault.cards_for_page(&page_url, None, havenkeys_client::now_ms())?;
                 let allowed = frames
                     .iter()
                     .map(|f| {
@@ -212,7 +212,11 @@ impl MobileVault {
             }
             FillTarget::App(_) => CardChoices {
                 insecure: false,
-                cards: vault.cards_for_app()?.into_iter().map(choice).collect(),
+                cards: vault
+                    .cards_for_app(havenkeys_client::now_ms())?
+                    .into_iter()
+                    .map(choice)
+                    .collect(),
                 frames: vec![true; frames.len()],
             },
         })

@@ -6,6 +6,7 @@
 //! processors' card-field origins below; only the roles asked for; and the
 //! user's pick in the extension's own menu.
 
+use crate::activity::OrderedScore;
 use crate::card::{
     check_digit_ok, clean_number, detect_brand, CardBrand, CardExpiry, CardFields, CardInput,
 };
@@ -15,6 +16,7 @@ use crate::model::{clean_title, ItemInput, ItemOverview, ItemType, SecretUpdate}
 use crate::origin::{host_key, same_site, PageUrl};
 use crate::secret::SecretString;
 use crate::vault::{StagedSave, VaultService};
+use std::cmp::Reverse;
 use std::fmt;
 use uuid::Uuid;
 
@@ -183,14 +185,17 @@ fn role_value(f: &CardFields, role: CardRole) -> Option<SecretString> {
 }
 
 impl VaultService {
-    fn card_offers(&self) -> Result<Vec<CardOffer>> {
-        Ok(self
+    /// Most used on this device first (decayed at `now_ms`), then by title.
+    fn card_offers(&self, now_ms: i64) -> Result<Vec<CardOffer>> {
+        let score = self.use_score(now_ms)?;
+        let mut cards: Vec<ItemOverview> = self
             .list_items()?
-            .iter()
+            .into_iter()
             .filter(|o| o.item_type == ItemType::Card)
-            .take(MAX_PAGE_CARDS)
-            .map(offer_of)
-            .collect())
+            .collect();
+        // Stable: equal use keeps `list_items`' title order.
+        cards.sort_by_cached_key(|o| Reverse(OrderedScore(score(&o.id))));
+        Ok(cards.iter().take(MAX_PAGE_CARDS).map(offer_of).collect())
     }
 
     /// A card's fields for a fill. A login, a note or a missing item: one
@@ -202,8 +207,14 @@ impl VaultService {
         })
     }
 
-    /// The cards a page may be offered. `insecure` for a non-https tab.
-    pub fn cards_for_page(&self, page_url: &str, top_url: Option<&str>) -> Result<CardList> {
+    /// The cards a page may be offered, most used first. `insecure` for a
+    /// non-https tab.
+    pub fn cards_for_page(
+        &self,
+        page_url: &str,
+        top_url: Option<&str>,
+        now_ms: i64,
+    ) -> Result<CardList> {
         self.session()?;
         let page = PageUrl::parse(page_url).ok_or(Error::Denied)?;
         let top = PageUrl::parse(top_url.unwrap_or(page_url)).ok_or(Error::Denied)?;
@@ -216,10 +227,9 @@ impl VaultService {
         if top_url.is_some() && !frame_allowed(&page, &top) {
             return Err(Error::Denied);
         }
-        let cards = self.card_offers()?;
         Ok(CardList {
             insecure: false,
-            cards,
+            cards: self.card_offers(now_ms)?,
         })
     }
 
@@ -319,9 +329,10 @@ impl VaultService {
     /// Every card, for an Android app (spec 2026-10-01-android-app §7.6). An
     /// app owns what it shows, its WebViews included, so no page rule
     /// applies; what protects a card is the user's tap in Android's list.
-    pub fn cards_for_app(&self) -> Result<Vec<CardOffer>> {
+    /// Most used first.
+    pub fn cards_for_app(&self, now_ms: i64) -> Result<Vec<CardOffer>> {
         self.session()?;
-        self.card_offers()
+        self.card_offers(now_ms)
     }
 
     pub fn card_values_for_app(
