@@ -50,8 +50,9 @@ function row(p: PasskeyRow, t: string): HTMLButtonElement {
       "span",
       { className: "who" },
       userData(h("span", { className: "title", text: p.title })),
-      p.userName ? userData(h("span", { className: "user", text: p.userName })) : h("span", { className: "user copy", text: msg.common.passkey }),
-      ...(p.replaced ? [h("span", { className: "user copy", text: msg.passkey.older })] : []),
+      p.userName
+        ? userData(h("span", { className: "user", text: p.replaced ? `${p.userName} · ${msg.passkey.older}` : p.userName }))
+        : h("span", { className: "user copy", text: p.replaced ? msg.passkey.older : msg.common.passkey }),
     ),
   );
   b.type = "button";

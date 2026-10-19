@@ -404,6 +404,7 @@ export const en = {
     passkeySaved: (date: string) => `Saved ${date}`,
     olderPasskey: "Older passkey",
     loseAccess: (site: string) => `You may lose access to ${site}.`,
+    deleteOlderPasskey: "The newer passkey stays.",
     deletePasskey: "Delete passkey",
     noteFailed: "Could not open the note.",
     copyUsername: "Copy username",

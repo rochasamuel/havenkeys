@@ -102,9 +102,11 @@ describe("passkey card", () => {
       },
     ];
     await load();
-    const rows = [...document.querySelectorAll<HTMLButtonElement>("button.row")].map((r) => r.textContent ?? "");
-    expect(rows[0]).not.toContain("Older passkey");
-    expect(rows[1]).toContain("Older passkey");
+    const rows = [...document.querySelectorAll<HTMLButtonElement>("button.row")];
+    expect(rows[0]!.textContent).not.toContain("Older passkey");
+    // On the account line, so both rows keep the same height.
+    expect(rows[1]!.querySelector(".who")!.children).toHaveLength(2);
+    expect(rows[1]!.querySelector(".user")!.textContent).toBe("octo · Older passkey");
   });
 
   it("shows the already-saved card with a Close button and no Cancel", async () => {

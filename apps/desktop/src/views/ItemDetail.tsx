@@ -161,7 +161,7 @@ function Passkeys({ itemId, username, readOnly }: { itemId: string; username: st
             </span>
             {confirming === p.credentialId ? (
               <span className="confirm">
-                <span>{t.detail.loseAccess(p.rpId)}</span>
+                <span>{p.replaced ? t.detail.deleteOlderPasskey : t.detail.loseAccess(p.rpId)}</span>
                 <button className="btn btn-small" onClick={() => setConfirming(null)}>
                   {t.common.keep}
                 </button>

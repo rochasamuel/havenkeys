@@ -408,6 +408,7 @@ export const ptBR: Messages = {
     passkeySaved: (date: string) => `Salva em ${date}`,
     olderPasskey: "Chave de acesso anterior",
     loseAccess: (site: string) => `Você pode perder o acesso a ${site}.`,
+    deleteOlderPasskey: "A chave de acesso mais nova continua.",
     deletePasskey: "Excluir chave de acesso",
     noteFailed: "Não foi possível abrir a nota.",
     copyUsername: "Copiar usuário",

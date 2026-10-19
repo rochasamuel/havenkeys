@@ -113,4 +113,23 @@ describe("ItemDetail passkeys", () => {
     expect(rows[0]).not.toContain("Older passkey");
     expect(rows[1]).toContain("Older passkey");
   });
+
+  it("does not warn about losing access when deleting the older passkey", async () => {
+    const login: ItemOverview = { ...note, id: "l1", itemType: "login", title: "GitHub", username: "octo", hasPasskey: true };
+    listPasskeys.mockResolvedValue([
+      { credentialId: "new", rpId: "github.com", userName: "octo", displayName: null, createdAt: 2, replaced: false },
+      { credentialId: "old", rpId: "github.com", userName: "octo", displayName: null, createdAt: 1, replaced: true },
+    ]);
+    await act(async () =>
+      root.render(
+        <ToastProvider>
+          <ItemDetail item={login} revision={0} readOnly={false} onEdit={() => undefined} onDelete={() => undefined} onOpen={() => undefined} />
+        </ToastProvider>,
+      ),
+    );
+    const old = host.querySelectorAll(".history-row")[1]!;
+    await act(async () => (old.querySelector("button") as HTMLButtonElement).click());
+    expect(old.textContent).toContain("The newer passkey stays.");
+    expect(old.textContent).not.toContain("lose access");
+  });
 });
