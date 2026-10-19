@@ -94,6 +94,7 @@ import uniffi.havenkeys_mobile.ItemView
 import uniffi.havenkeys_mobile.MatchKind
 import uniffi.havenkeys_mobile.TotpNow
 import uniffi.havenkeys_mobile.ViewField
+import uniffi.havenkeys_mobile.ViewSection
 import uniffi.havenkeys_mobile.Website
 
 private const val SETTLE_MS = 2_000L
@@ -182,6 +183,26 @@ class ScreenScreenshots {
                 ),
             ),
         )
+    }
+
+    /** The same login with custom sections: one titled, one untitled, then its notes. */
+    private val sectioned = FakeVaultRepository().apply {
+        val bank = ViewSection(0u, "Recovery")
+        val untitled = ViewSection(1u, null)
+        view = vault.view.let { ok ->
+            val login = (ok as Outcome.Ok).value
+            Outcome.Ok(
+                login.copy(
+                    fields = login.fields + listOf(
+                        ViewField("custom.a", "Recovery email", FieldKind.TEXT, "backup@example.com", bank),
+                        ViewField("custom.b", "Recovery codes", FieldKind.SECRET, null, bank),
+                        ViewField("custom.c", "Account ID", FieldKind.TEXT, "8812-334", untitled),
+                        ViewField("notes", "notes", FieldKind.SECRET, null),
+                    ),
+                ),
+            )
+        }
+        totpNow = vault.totpNow
     }
 
     /** The same login with tags, in a vault whose other tags the editor suggests. */
@@ -326,6 +347,9 @@ class ScreenScreenshots {
         Shot("editor-tags", before = typeATag) { Editor(tagged) },
         Shot("editor-tags-focus", before = focusTagField) { Editor(tagged) },
         Shot("item-tags") { Item(tagged) },
+        Shot("item-sections", before = { rule.onNode(hasScrollAction()).performScrollToNode(hasText("Account ID")) }) {
+            Item(sectioned)
+        },
         Shot("editor-note") { Editor(note) },
         Shot("editor-card") { Editor(card) },
         Shot("editor-identity") { Editor(identity) },

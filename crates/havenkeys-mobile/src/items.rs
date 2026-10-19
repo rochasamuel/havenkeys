@@ -50,6 +50,17 @@ pub struct ViewField {
     pub label: String,
     pub kind: FieldKind,
     pub value: Option<String>,
+    /// The custom section the field is in; `None` for the item's own fields.
+    #[uniffi(default = None)]
+    pub section: Option<ViewSection>,
+}
+
+/// A custom section, shown as its own group under its title, as on the
+/// desktop. `index` tells apart sections with the same (or no) title.
+#[derive(Clone, PartialEq, uniffi::Record)]
+pub struct ViewSection {
+    pub index: u32,
+    pub title: Option<String>,
 }
 
 #[derive(uniffi::Record)]
@@ -146,6 +157,7 @@ fn field(
         label: label.into(),
         kind,
         value,
+        section: None,
     }
 }
 
@@ -184,22 +196,24 @@ fn identity_field(name: &str) -> Option<IdentityField> {
     })
 }
 
-/// A login's or note's custom fields as rows: the field's own label, after
-/// its section's title when it has one. Values come on `reveal`.
+/// A login's or note's custom fields as rows, each tagged with its section.
+/// Values come on `reveal`.
 fn custom_rows(sections: Vec<FieldSection>, fields: &mut Vec<ViewField>) {
-    for section in sections {
-        let prefix = section.title.as_ref().map(|t| t.expose().to_owned());
+    for (index, section) in (0..).zip(sections) {
+        let section_view = ViewSection {
+            index,
+            title: section.title.as_ref().map(|t| t.expose().to_owned()),
+        };
         for f in section.fields {
             let kind = if f.value.is_concealed() {
                 FieldKind::Secret
             } else {
                 FieldKind::Text
             };
-            let label = match &prefix {
-                Some(p) => format!("{p} · {}", f.label.expose()),
-                None => f.label.expose().to_owned(),
-            };
-            fields.push(field(format!("custom.{}", f.id), label, kind, None));
+            fields.push(ViewField {
+                section: Some(section_view.clone()),
+                ..field(format!("custom.{}", f.id), f.label.expose(), kind, None)
+            });
         }
     }
 }
@@ -614,7 +628,12 @@ mod tests {
             .collect();
         assert_eq!(custom.len(), 2);
         let labels: Vec<&str> = custom.iter().map(|f| f.label.as_str()).collect();
-        assert_eq!(labels, ["Bank · PIN", "Bank · 2FA"]);
+        assert_eq!(labels, ["PIN", "2FA"]);
+        assert!(custom.iter().all(|f| f.section
+            == Some(ViewSection {
+                index: 0,
+                title: Some("Bank".into()),
+            })));
         assert!(custom
             .iter()
             .all(|f| matches!(f.kind, FieldKind::Secret) && f.value.is_none()));
@@ -656,6 +675,12 @@ mod tests {
         let id = create(&v, note);
         let view = v.item_view(id.clone()).unwrap();
         assert_eq!(view.fields[0].key, "content");
+        assert!(view.fields[0].section.is_none());
+        assert!(view.fields[1..].iter().all(|f| f.section
+            == Some(ViewSection {
+                index: 0,
+                title: None,
+            })));
         assert_eq!(view.fields[1].label, "Host");
         assert!(matches!(view.fields[1].kind, FieldKind::Text));
         assert_eq!(view.fields[2].label, "Root");

@@ -50,6 +50,7 @@ import uniffi.havenkeys_mobile.ItemKind
 import uniffi.havenkeys_mobile.ItemSummary
 import uniffi.havenkeys_mobile.ItemView
 import uniffi.havenkeys_mobile.ViewField
+import uniffi.havenkeys_mobile.ViewSection
 
 /** Views here have no one-time code: CodeRow is tested alone (DetailRowsTest). */
 @RunWith(RobolectricTestRunner::class)
@@ -108,6 +109,26 @@ class ItemScreenTest {
     fun anUntaggedItemShowsNoTags() {
         show()
         rule.onNodeWithContentDescription(text(R.string.item_tags)).assertDoesNotExist()
+    }
+
+    @Test
+    fun eachCustomSectionIsItsOwnGroupUnderItsTitle() {
+        val bank = ViewSection(0u, "Bank")
+        val untitled = ViewSection(1u, null)
+        val fields = login().fields + listOf(
+            ViewField("custom.a", "PIN", FieldKind.SECRET, null, bank),
+            ViewField("custom.b", "Agency", FieldKind.SECRET, null, bank),
+            ViewField("custom.c", "Host", FieldKind.SECRET, null, untitled),
+            ViewField("notes", "notes", FieldKind.SECRET, null),
+        )
+        assertEquals(
+            listOf(listOf("username", "password"), listOf("custom.a", "custom.b"), listOf("custom.c"), listOf("notes")),
+            fieldGroups(fields).map { group -> group.map { it.key } },
+        )
+        vault.view = Outcome.Ok(login().copy(fields = fields))
+        show()
+        rule.onNode(hasText("Bank") and isHeading()).assertExists()
+        rule.onNode(hasText("PIN")).assertExists()
     }
 
     @Test

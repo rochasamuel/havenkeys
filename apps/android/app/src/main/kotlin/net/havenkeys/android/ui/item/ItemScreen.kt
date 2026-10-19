@@ -54,6 +54,7 @@ import net.havenkeys.android.ui.kit.ItemTile
 import net.havenkeys.android.ui.kit.MenuItem
 import net.havenkeys.android.ui.kit.Pill
 import net.havenkeys.android.ui.kit.PillTone
+import net.havenkeys.android.ui.kit.SectionHeader
 import net.havenkeys.android.ui.kit.ToastState
 import net.havenkeys.android.ui.kit.ToastTone
 import net.havenkeys.android.ui.kit.rememberToastState
@@ -154,17 +155,31 @@ private fun ItemTags(tags: List<String>) {
 }
 
 /**
- * The fields as one group. Each reveal is keyed by its field inside its row,
- * so a reload that moves a field starts that row masked rather than showing
- * a value on the wrong row.
+ * The fields in groups, as on the desktop: the item's own fields, then each
+ * custom section on its own under its title, then what follows (a login's
+ * notes). Each reveal is keyed by its field inside its row, so a reload that
+ * moves a field starts that row masked rather than showing a value on the
+ * wrong row.
  */
 @Composable
 private fun ItemFields(view: ItemView, actions: FieldActions) {
-    if (view.fields.isEmpty()) return
-    InsetGroup {
-        view.fields.forEach { field -> row { key(field.key) { FieldRow(field, actions) } } }
+    fieldGroups(view.fields).forEachIndexed { i, group ->
+        val title = group.first().section?.title?.takeUnless { it.isBlank() }
+        val gap = Modifier.padding(top = if (i == 0) 0.dp else 16.dp)
+        if (title != null) SectionHeader(title, gap) else Spacer(gap)
+        InsetGroup {
+            group.forEach { field -> row { key(field.key) { FieldRow(field, actions) } } }
+        }
     }
 }
+
+/** Runs of fields from the same section, in order. */
+internal fun fieldGroups(fields: List<ViewField>): List<List<ViewField>> =
+    fields.fold(mutableListOf<MutableList<ViewField>>()) { groups, field ->
+        val last = groups.lastOrNull()
+        if (last != null && last.last().section == field.section) last.add(field) else groups.add(mutableListOf(field))
+        groups
+    }
 
 /** Edit, and Delete (to the Trash) behind More; both write to the server, so both need it online. */
 @Composable

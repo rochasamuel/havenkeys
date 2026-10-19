@@ -6434,6 +6434,11 @@ data class ViewField (
     var `kind`: FieldKind
     , 
     var `value`: kotlin.String?
+    , 
+    /**
+     * The custom section the field is in; `None` for the item's own fields.
+     */
+    var `section`: ViewSection? = null 
     
 ){
     
@@ -6454,6 +6459,7 @@ public object FfiConverterTypeViewField: FfiConverterRustBuffer<ViewField> {
             FfiConverterString.read(buf),
             FfiConverterTypeFieldKind.read(buf),
             FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalTypeViewSection.read(buf),
         )
     }
 
@@ -6461,7 +6467,8 @@ public object FfiConverterTypeViewField: FfiConverterRustBuffer<ViewField> {
             FfiConverterString.allocationSize(value.`key`) +
             FfiConverterString.allocationSize(value.`label`) +
             FfiConverterTypeFieldKind.allocationSize(value.`kind`) +
-            FfiConverterOptionalString.allocationSize(value.`value`)
+            FfiConverterOptionalString.allocationSize(value.`value`) +
+            FfiConverterOptionalTypeViewSection.allocationSize(value.`section`)
     )
 
     override fun write(value: ViewField, buf: ByteBuffer) {
@@ -6469,6 +6476,49 @@ public object FfiConverterTypeViewField: FfiConverterRustBuffer<ViewField> {
             FfiConverterString.write(value.`label`, buf)
             FfiConverterTypeFieldKind.write(value.`kind`, buf)
             FfiConverterOptionalString.write(value.`value`, buf)
+            FfiConverterOptionalTypeViewSection.write(value.`section`, buf)
+    }
+}
+
+
+
+/**
+ * A custom section, shown as its own group under its title, as on the
+ * desktop. `index` tells apart sections with the same (or no) title.
+ */
+data class ViewSection (
+    var `index`: kotlin.UInt
+    , 
+    var `title`: kotlin.String?
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeViewSection: FfiConverterRustBuffer<ViewSection> {
+    override fun read(buf: ByteBuffer): ViewSection {
+        return ViewSection(
+            FfiConverterUInt.read(buf),
+            FfiConverterOptionalString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: ViewSection) = (
+            FfiConverterUInt.allocationSize(value.`index`) +
+            FfiConverterOptionalString.allocationSize(value.`title`)
+    )
+
+    override fun write(value: ViewSection, buf: ByteBuffer) {
+            FfiConverterUInt.write(value.`index`, buf)
+            FfiConverterOptionalString.write(value.`title`, buf)
     }
 }
 
@@ -7261,6 +7311,38 @@ public object FfiConverterOptionalTypeKitPreview: FfiConverterRustBuffer<KitPrev
         } else {
             buf.put(1)
             FfiConverterTypeKitPreview.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeViewSection: FfiConverterRustBuffer<ViewSection?> {
+    override fun read(buf: ByteBuffer): ViewSection? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeViewSection.read(buf)
+    }
+
+    override fun allocationSize(value: ViewSection?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeViewSection.allocationSize(value)
+        }
+    }
+
+    override fun write(value: ViewSection?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeViewSection.write(value, buf)
         }
     }
 }
