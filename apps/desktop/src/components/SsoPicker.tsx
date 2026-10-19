@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { applyRow, pickerRows, PROVIDER_NAMES, PROVIDER_ORDER, type PickerRow } from "../lib/sso";
 import type { SignInWith, SsoAccount, SsoProvider } from "../lib/types";
+import { useMenuSide } from "../lib/hooks";
 import { useI18n } from "../i18n/context";
 import { Icon } from "./Icon";
 import { ProviderIcon } from "./ProviderIcon";
@@ -21,6 +22,7 @@ export function SsoPicker({ value, onChange }: { value: SignInWith | null; onCha
   const [accounts, setAccounts] = useState<Accounts | null>(null);
   const wrap = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const menu = useMenuSide(open);
   const loading = useRef(false);
   const loaded = useRef(new Set<SsoProvider>());
   const rows = useMemo(() => pickerRows(accounts ?? {}, query), [accounts, query]);
@@ -123,7 +125,7 @@ export function SsoPicker({ value, onChange }: { value: SignInWith | null; onCha
         <Icon name="chevronDown" size={14} className="select-chevron" />
       </button>
       {open && (
-        <div className="menu sso-menu">
+        <div className="menu sso-menu" ref={menu.ref} data-side={menu.side}>
           {/* The search is a row, not a boxed field (Row Is the Field): a glyph, the input, a hairline under. */}
           <div className="sso-search-row">
             <Icon name="search" size={15} />

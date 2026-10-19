@@ -22,7 +22,7 @@ import {
   type EditField,
   type EditSection,
 } from "../lib/customFields";
-import { useRevealedSecret } from "../lib/hooks";
+import { useMenuSide, useRevealedSecret } from "../lib/hooks";
 import { EMPTY, KEEP } from "../lib/secretEdit";
 import type { AddressPart, FieldType } from "../lib/types";
 import { useI18n } from "../i18n/context";
@@ -71,6 +71,7 @@ export function CustomFieldsEditor({
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirming, setConfirming] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const menu = useMenuSide(menuOpen && !disabled);
   const dragKey = useRef<string | null>(null);
   // What the drag shows: the field being moved (and its height, for the
   // placeholder) and where it would land.
@@ -269,7 +270,7 @@ export function CustomFieldsEditor({
             <Icon name="plus" size={15} /> {t.fields.addField}
           </button>
           {menuOpen && !disabled && (
-            <div className="menu cf-menu" role="menu">
+            <div className="menu cf-menu" role="menu" ref={menu.ref} data-side={menu.side}>
               {!full && (
                 <>
                   {FIELD_TYPES.map((type) => (

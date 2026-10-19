@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api } from "./api";
 import type { TotpCode, UpdateStatus } from "./types";
 
@@ -114,3 +114,43 @@ export function useUpdateStatus(): UpdateStatus | null {
   }, []);
   return status;
 }
+
+/** The part of the window `el` can be seen in: the viewport, cut by every scrolling ancestor. */
+function visibleBounds(el: HTMLElement): { top: number; bottom: number } {
+  let top = 0;
+  let bottom = window.innerHeight;
+  for (let a = el.parentElement; a; a = a.parentElement) {
+    if (getComputedStyle(a).overflowY === "visible") continue;
+    const r = a.getBoundingClientRect();
+    top = Math.max(top, r.top);
+    bottom = Math.min(bottom, r.bottom);
+  }
+  return { top, bottom };
+}
+
+/**
+ * Which side of its anchor (the menu's positioned parent) a menu opens on:
+ * below where it fits, else above where it fits, else below with its pane
+ * scrolled to show it. Measured once as it opens, before it paints; put `ref`
+ * on the menu and its side in `data-side`.
+ */
+export function useMenuSide(open: boolean) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [side, setSide] = useState<"bottom" | "top">("bottom");
+  useLayoutEffect(() => {
+    const menu = ref.current;
+    const anchor = menu?.parentElement;
+    if (!open || !menu || !anchor) return setSide("bottom");
+    const { top, bottom } = visibleBounds(anchor);
+    const a = anchor.getBoundingClientRect();
+    const needed = menu.offsetHeight + MENU_GAP;
+    const up = needed > bottom - a.bottom && needed <= a.top - top;
+    setSide(up ? "top" : "bottom");
+    if (!up && needed > bottom - a.bottom) menu.scrollIntoView?.({ block: "nearest" });
+  }, [open]);
+  return { ref, side };
+}
+
+/** `.menu`'s distance from its anchor (styles.css). */
+const MENU_GAP = 6;
+

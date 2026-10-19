@@ -1093,6 +1093,21 @@ input::-ms-clear {
   }
 }
 
+/* No room below (useMenuSide): the menu opens above its anchor. */
+.menu[data-side="top"] {
+  top: auto;
+  bottom: calc(100% + 6px);
+  transform-origin: bottom left;
+  animation-name: pop-up;
+}
+
+@keyframes pop-up {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translateY(4px);
+  }
+}
+
 .menu-sep {
   height: 1px;
   margin: 5px 4px;
