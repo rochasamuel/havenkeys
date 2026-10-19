@@ -207,6 +207,7 @@ const settings = {
   browserIntegration: true,
   autoPasskeyUpgrade: false,
   autoSignIn: false,
+  generator: { length: 24, uppercase: true, lowercase: true, digits: true, symbols: true, avoidAmbiguous: false },
 };
 
 const kit = {
