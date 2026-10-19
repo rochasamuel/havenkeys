@@ -64,13 +64,10 @@ private class Nav(
     val controller: NavHostController,
     val shared: SharedTransitionScope,
     val motion: HavenMotion,
-    val travel: TitleTravel,
     val trashUndo: TrashUndo,
 ) {
-    /** Opens an item over the shell; its title travels from the tapped row. */
-    val open: OpenItem = { id, origin ->
-        if (controller.pushOnce(Routes.item(id))) travel.tap(id, origin)
-    }
+    /** Opens an item over the shell: it comes in from the right, as every pushed screen. */
+    val open: OpenItem = { id -> controller.pushOnce(Routes.item(id)) }
 
     val back: () -> Unit = { controller.popBackStack() }
     val lock: () -> Unit = services.vault::lock
@@ -105,14 +102,13 @@ internal fun HavenNavHost(
 
     val scope = rememberCoroutineScope()
     val motion = HavenTheme.motion
-    val travel = remember { TitleTravel() }
     // One per graph: the item screen hands its Delete to the screen it pops back to.
     val trashUndo = remember(services) {
         TrashUndo(services.vault::restore, sync = { services.accounts.syncNow(fresh = true) })
     }
     // The window's ground shows through a screen that fades under a push, which reads as dimmed.
     SharedTransitionLayout(modifier.background(HavenTheme.colors.pane)) {
-        val nav = Nav(services, navController, this, motion, travel, trashUndo)
+        val nav = Nav(services, navController, this, motion, trashUndo)
         NavHost(
             navController = navController,
             startDestination = routeOf(first),
@@ -145,7 +141,6 @@ internal fun HavenNavHost(
     // The lock wipe: no screen that showed vault data stays in the back stack.
     LaunchedEffect(navController) {
         root.lockedSignal.collect { target ->
-            travel.clear()
             val route = routeOf(target)
             if (navController.currentDestination?.route != route) navController.replaceAll(route)
         }
@@ -210,7 +205,6 @@ private fun NavGraphBuilder.shellAndSearch(nav: Nav) {
                 nav.services,
                 nav.controller,
                 nav.open,
-                nav.travel.from(nav.shared, this, nav.motion),
             ),
             navigation = ShellNavigation(
                 onSearch = { nav.controller.pushOnce(Routes.SEARCH) },
@@ -233,7 +227,6 @@ private fun NavGraphBuilder.shellAndSearch(nav: Nav) {
                 nav.motion,
                 SharedTransitionScope.ResizeMode.RemeasureToBounds,
             ),
-            sharedTitle = nav.travel.from(nav.shared, this, nav.motion),
             trashUndo = nav.trashUndo,
         )
     }
@@ -265,8 +258,6 @@ private fun NavGraphBuilder.itemScreens(nav: Nav) {
                     nav.back()
                 },
             ),
-            titleModifier = Modifier.sharedIfMoving(nav.shared, titleKey(id), this, nav.motion),
-            tileModifier = Modifier.sharedIfMoving(nav.shared, tileKey(id), this, nav.motion),
         )
     }
     composable(Routes.EDIT, arguments = listOf(navArgument(Routes.ITEM_ID) { type = NavType.StringType })) {

@@ -15,7 +15,6 @@ import net.havenkeys.android.data.VaultEventsHub
 import net.havenkeys.android.fakes.FakeAccountRepository
 import net.havenkeys.android.fakes.FakeVaultRepository
 import net.havenkeys.android.ui.kit.setKit
-import net.havenkeys.android.ui.shell.Origins
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -55,7 +54,7 @@ class HomeScreenTest {
         frequent = Outcome.Ok(listOf(github))
         view = Outcome.Ok(ItemView(identity, listOf(field("identity.first_name"), field("identity.email"))))
     }
-    private val opened = mutableListOf<Pair<String, String>>()
+    private val opened = mutableListOf<String>()
     private var healthOpened = 0
 
     private fun show() {
@@ -63,7 +62,7 @@ class HomeScreenTest {
         rule.setKit {
             HomeScreen(
                 vm,
-                onOpen = { id, origin -> opened += id to origin },
+                onOpen = { opened += it },
                 onHealth = { healthOpened++ },
                 contentPadding = PaddingValues(),
             )
@@ -74,7 +73,7 @@ class HomeScreenTest {
     fun theIdentitySitsOnTopAndSaysWhatItHolds() {
         show()
         rule.onNode(hasText("Sam") and hasClickAction()).assert(hasText("Name · Email")).performClick()
-        assertEquals(listOf("9" to Origins.IDENTITY), opened)
+        assertEquals(listOf("9"), opened)
     }
 
     @Test
@@ -93,14 +92,14 @@ class HomeScreenTest {
     }
 
     @Test
-    fun anItemInBothListsOpensFromTheRowTapped() {
+    fun anItemInBothListsOpensFromEitherRow() {
         show()
         val rows = rule.onAllNodes(hasText("GitHub") and hasClickAction())
         rows.assertCountEquals(2)
         rows[1].performClick()
-        assertEquals(listOf("1" to Origins.FREQUENT), opened)
+        assertEquals(listOf("1"), opened)
         rows[0].performClick()
-        assertEquals("1" to Origins.RECENT, opened.last())
+        assertEquals("1", opened.last())
     }
 
     @Test

@@ -68,14 +68,13 @@ import uniffi.havenkeys_mobile.ItemSummary
 import uniffi.havenkeys_mobile.ItemView
 import uniffi.havenkeys_mobile.ViewField
 
-/** The header's tile: larger than a row's, so the row's tile grows into it. */
+/** The header's tile: larger than a row's. */
 private val HeaderTile = 56.dp
 
 /**
  * One item: its overview from the ViewModel, and each hidden field read from
  * Rust only when the user taps reveal or copy. A revealed value or a code
- * lives in this composition only (spec §9.4). [titleModifier] and
- * [tileModifier] carry the tapped row's title and tile into the header.
+ * lives in this composition only (spec §9.4).
  */
 @Composable
 fun ItemScreen(
@@ -84,8 +83,6 @@ fun ItemScreen(
     online: Boolean,
     navigation: ItemNavigation,
     modifier: Modifier = Modifier,
-    titleModifier: Modifier = Modifier,
-    tileModifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val toasts = rememberToastState()
@@ -112,7 +109,7 @@ fun ItemScreen(
                 .padding(bottom = padding.calculateBottomPadding() + HavenSpacing.gutter),
         ) {
             state.view?.let { view ->
-                ItemHeader(view.summary, titleModifier, tileModifier)
+                ItemHeader(view.summary)
                 ItemTags(view.summary.tags)
                 if (state.health.isNotEmpty()) {
                     // Vault health's checks for this login, under its title, before its fields.
@@ -126,13 +123,13 @@ fun ItemScreen(
 }
 
 @Composable
-private fun ItemHeader(summary: ItemSummary, titleModifier: Modifier, tileModifier: Modifier) {
+private fun ItemHeader(summary: ItemSummary) {
     Row(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-        ItemTile(summary.leading(), tileModifier, size = HeaderTile)
+        ItemTile(summary.leading(), size = HeaderTile)
         Spacer(Modifier.width(14.dp))
         HavenText(
             summary.title,
-            Modifier.weight(1f).then(titleModifier).semantics { heading() },
+            Modifier.weight(1f).semantics { heading() },
             style = HavenTheme.type.headline,
             color = HavenTheme.colors.textStrong,
         )

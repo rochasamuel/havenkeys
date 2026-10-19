@@ -17,7 +17,6 @@ import net.havenkeys.android.data.VaultEventsHub
 import net.havenkeys.android.fakes.FakeVaultRepository
 import net.havenkeys.android.ui.kit.hasRole
 import net.havenkeys.android.ui.kit.setKit
-import net.havenkeys.android.ui.shell.Origins
 import net.havenkeys.android.ui.theme.HavenTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -38,12 +37,12 @@ class SearchScreenTest {
         items = Outcome.Ok(listOf(github))
         searches += listOf("bank", "mail")
     }
-    private val opened = mutableListOf<Pair<String, String>>()
+    private val opened = mutableListOf<String>()
     private var cancelled = 0
 
     private fun show(vm: SearchViewModel = SearchViewModel(vault, events)) {
         rule.setKit {
-            SearchScreen(vm, onOpen = { id, origin -> opened += id to origin }, onCancel = { cancelled++ })
+            SearchScreen(vm, onOpen = { opened += it }, onCancel = { cancelled++ })
         }
     }
 
@@ -79,7 +78,7 @@ class SearchScreenTest {
         awaitText("GitHub")
         assertEquals(listOf("bank", "mail"), vault.searches)
         rule.onNode(hasText("GitHub") and hasClickAction()).performClick()
-        assertEquals(listOf("1" to Origins.SEARCH), opened)
+        assertEquals(listOf("1"), opened)
         assertEquals(listOf("git", "bank", "mail"), vault.searches)
     }
 
@@ -133,7 +132,7 @@ class SearchScreenTest {
         val restoration = StateRestorationTester(rule)
         var vm = SearchViewModel(vault, events)
         restoration.setContent {
-            HavenTheme { SearchScreen(vm, onOpen = { _, _ -> }, onCancel = {}) }
+            HavenTheme { SearchScreen(vm, onOpen = {}, onCancel = {}) }
         }
         rule.onNode(hasSetTextAction()).performTextInput("private query")
         // The process came back: a new ViewModel, and only what was saved.

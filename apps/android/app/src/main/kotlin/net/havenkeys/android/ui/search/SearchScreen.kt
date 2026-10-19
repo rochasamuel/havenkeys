@@ -41,10 +41,7 @@ import net.havenkeys.android.ui.kit.SectionHeader
 import net.havenkeys.android.ui.kit.ToastHost
 import net.havenkeys.android.ui.kit.rememberToastState
 import net.havenkeys.android.ui.shell.ErrorLine
-import net.havenkeys.android.ui.shell.NoSharedTitle
 import net.havenkeys.android.ui.shell.OpenItem
-import net.havenkeys.android.ui.shell.Origins
-import net.havenkeys.android.ui.shell.SharedTitle
 import net.havenkeys.android.ui.shell.SummaryRow
 import net.havenkeys.android.ui.shell.TrashUndo
 import net.havenkeys.android.ui.shell.TrashUndoToast
@@ -71,7 +68,6 @@ fun SearchScreen(
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
     fieldModifier: Modifier = Modifier,
-    sharedTitle: SharedTitle = NoSharedTitle,
     trashUndo: TrashUndo? = null,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -92,9 +88,9 @@ fun SearchScreen(
     }
     LaunchedEffect(focus) { if (viewModel.takeFirstFocus()) focus.requestFocus() }
     val open: OpenItem = remember(viewModel, onOpen) {
-        { id, origin ->
+        { id ->
             viewModel.opened()
-            onOpen(id, origin)
+            onOpen(id)
         }
     }
     Column(
@@ -117,7 +113,7 @@ fun SearchScreen(
                 if (state.query.isBlank()) {
                     recents(state.recents, viewModel::useRecent, viewModel::clearRecents)
                 } else {
-                    results(state, open, sharedTitle)
+                    results(state, open)
                 }
             }
             // Where HavenScaffold puts its toasts: 22dp above the bottom edge.
@@ -142,7 +138,7 @@ private fun LazyListScope.recents(recents: List<String>, onUse: (String) -> Unit
     }
 }
 
-private fun LazyListScope.results(state: SearchUiState, open: OpenItem, sharedTitle: SharedTitle) {
+private fun LazyListScope.results(state: SearchUiState, open: OpenItem) {
     state.errorCode?.let { code -> item(key = "error") { ErrorLine(code, Gutter) } }
     if (state.searched && state.results.isEmpty() && state.errorCode == null) {
         item(key = "none") {
@@ -157,7 +153,7 @@ private fun LazyListScope.results(state: SearchUiState, open: OpenItem, sharedTi
         }
     }
     insetGroup(state.results, key = { it.id }) { summary ->
-        SummaryRow(summary, Origins.SEARCH, open, sharedTitle = sharedTitle)
+        SummaryRow(summary, open)
     }
 }
 

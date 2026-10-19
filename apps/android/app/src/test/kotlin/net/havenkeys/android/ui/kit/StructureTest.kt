@@ -192,19 +192,4 @@ class StructureTest {
         rule.onNodeWithContentDescription("Copy Username").assert(hasRole(Role.Button)).assertHasClickAction()
         rule.onNode(hasText("Username") and hasText("sam@example.com")).assertHasNoClickAction()
     }
-
-    @Test
-    fun anItemRowsTileTakesItsOwnModifier() {
-        var tile = IntSize.Zero
-        rule.setKit {
-            ItemRow(
-                "GitHub",
-                null,
-                RowLeading.Monogram("GitHub"),
-                onClick = {},
-                tileModifier = Modifier.onSizeChanged { tile = it },
-            )
-        }
-        rule.runOnIdle { assertEquals(with(rule.density) { HavenSpacing.tile.roundToPx() }, tile.width) }
-    }
 }

@@ -16,7 +16,6 @@ import net.havenkeys.android.data.VaultEventsHub
 import net.havenkeys.android.fakes.FakeAccountRepository
 import net.havenkeys.android.fakes.FakeVaultRepository
 import net.havenkeys.android.ui.kit.setKit
-import net.havenkeys.android.ui.shell.Origins
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -84,7 +83,7 @@ class ItemsScreensTest {
     fun aTagListsOnlyItsItems() {
         val vm = vm()
         rule.setKit {
-            TagScreen(vm, "work", onOpen = { _, _ -> }, onGone = {}, contentPadding = PaddingValues())
+            TagScreen(vm, "work", onOpen = {}, onGone = {}, contentPadding = PaddingValues())
         }
         rule.onNodeWithText("work").assert(isHeading())
         rule.onNode(hasText("bank") and hasClickAction()).assertIsDisplayed()
@@ -96,7 +95,7 @@ class ItemsScreensTest {
         val vm = vm()
         var gone = 0
         rule.setKit {
-            TagScreen(vm, "Work", onOpen = { _, _ -> }, onGone = { gone++ }, contentPadding = PaddingValues())
+            TagScreen(vm, "Work", onOpen = {}, onGone = { gone++ }, contentPadding = PaddingValues())
         }
         rule.onNodeWithText("Work").assert(isHeading())
         rule.onNode(hasText("bank") and hasClickAction()).assertIsDisplayed()
@@ -110,7 +109,7 @@ class ItemsScreensTest {
         val vm = vm()
         var gone = 0
         rule.setKit {
-            TagScreen(vm, "work", onOpen = { _, _ -> }, onGone = { gone++ }, contentPadding = PaddingValues())
+            TagScreen(vm, "work", onOpen = {}, onGone = { gone++ }, contentPadding = PaddingValues())
         }
         rule.runOnIdle { assertEquals(0, gone) }
         // Its last item untagged here, or by a sync: the vault's list no longer has it.
@@ -124,7 +123,7 @@ class ItemsScreensTest {
         val vm = vm()
         var gone = 0
         rule.setKit {
-            TagScreen(vm, "work", onOpen = { _, _ -> }, onGone = { gone++ }, contentPadding = PaddingValues())
+            TagScreen(vm, "work", onOpen = {}, onGone = { gone++ }, contentPadding = PaddingValues())
         }
         events.locked("user")
         rule.runOnIdle { assertEquals(0, gone) }
@@ -133,12 +132,12 @@ class ItemsScreensTest {
     @Test
     fun aCategoryListsItsItemsAToZAndOpensThem() {
         val vm = vm()
-        val opened = mutableListOf<Pair<String, String>>()
+        val opened = mutableListOf<String>()
         rule.setKit {
             CategoryScreen(
                 vm,
                 Category.LOGINS,
-                onOpen = { id, origin -> opened += id to origin },
+                onOpen = { opened += it },
                 contentPadding = PaddingValues(),
             )
         }
@@ -148,7 +147,7 @@ class ItemsScreensTest {
         assertTrue(amazon < bank)
         rule.onNodeWithText("Wi-Fi").assertDoesNotExist()
         rule.onNode(hasText("bank") and hasClickAction()).performClick()
-        assertEquals(listOf("1" to Origins.CATEGORY), opened)
+        assertEquals(listOf("1"), opened)
         // The system Back returns to the categories: the list draws no chevron of its own.
         rule.onNodeWithContentDescription("Back").assertDoesNotExist()
     }
@@ -157,7 +156,7 @@ class ItemsScreensTest {
     fun anEmptyCategorySaysSo() {
         val vm = vm()
         rule.setKit {
-            CategoryScreen(vm, Category.CARDS, onOpen = { _, _ -> }, contentPadding = PaddingValues())
+            CategoryScreen(vm, Category.CARDS, onOpen = {}, contentPadding = PaddingValues())
         }
         rule.onNodeWithText("Nothing here yet").assertIsDisplayed()
     }

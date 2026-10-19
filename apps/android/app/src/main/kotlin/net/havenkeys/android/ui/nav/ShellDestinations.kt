@@ -16,7 +16,6 @@ import net.havenkeys.android.ui.settings.SettingsNavigation
 import net.havenkeys.android.ui.settings.SettingsScreen
 import net.havenkeys.android.ui.settings.SettingsViewModel
 import net.havenkeys.android.ui.shell.OpenItem
-import net.havenkeys.android.ui.shell.SharedTitle
 import net.havenkeys.android.ui.shell.ShellScreens
 
 /**
@@ -28,7 +27,6 @@ internal fun shellScreens(
     services: NavServices,
     navController: NavHostController,
     open: OpenItem,
-    sharedTitle: SharedTitle,
 ): ShellScreens = ShellScreens(
     home = { padding ->
         HomeScreen(
@@ -38,7 +36,6 @@ internal fun shellScreens(
             onOpen = open,
             onHealth = { navController.pushOnce(Routes.HEALTH) },
             contentPadding = padding,
-            sharedTitle = sharedTitle,
         )
     },
     items = { padding, onCategory, onTag ->
@@ -55,7 +52,6 @@ internal fun shellScreens(
             category = category,
             onOpen = open,
             contentPadding = padding,
-            sharedTitle = sharedTitle,
         )
     },
     tag = { padding, name, onBack ->
@@ -65,7 +61,6 @@ internal fun shellScreens(
             onOpen = open,
             onGone = onBack,
             contentPadding = padding,
-            sharedTitle = sharedTitle,
         )
     },
     settings = { padding -> SettingsTab(services, navController, padding) },

@@ -58,17 +58,16 @@ class ShellPartsTest {
     }
 
     @Test
-    fun aSummaryRowOpensWithItsOrigin() {
-        var opened: Pair<String, String>? = null
+    fun aSummaryRowOpensItsItem() {
+        var opened: String? = null
         rule.setKit {
             SummaryRow(
                 summary(ItemKind.LOGIN, subtitle = "sam@example.com", totp = true, passkey = true),
-                Origins.RECENT,
-                onOpen = { id, origin -> opened = id to origin },
+                onOpen = { opened = it },
             )
         }
         rule.onNode(hasClickAction()).assert(hasText("GitHub")).assert(hasText("sam@example.com")).performClick()
-        assertEquals("id-1" to Origins.RECENT, opened)
+        assertEquals("id-1", opened)
     }
 
     @Test
@@ -105,22 +104,5 @@ class ShellPartsTest {
         assertNotEquals(LightHavenColors.pane, LightHavenColors.searchPill)
         assertEquals(LightHavenColors.hover, LightHavenColors.searchPill)
         assertEquals(DarkHavenColors.field, DarkHavenColors.searchPill)
-    }
-
-    @Test
-    fun aSummaryRowAsksForItsTitleAndItsTileToTravel() {
-        val asked = mutableListOf<SharedPart>()
-        rule.setKit {
-            SummaryRow(
-                summary(ItemKind.LOGIN),
-                Origins.RECENT,
-                onOpen = { _, _ -> },
-                sharedTitle = { _, _, part ->
-                    asked += part
-                    Modifier
-                },
-            )
-        }
-        rule.runOnIdle { assertEquals(setOf(SharedPart.Title, SharedPart.Tile), asked.toSet()) }
     }
 }

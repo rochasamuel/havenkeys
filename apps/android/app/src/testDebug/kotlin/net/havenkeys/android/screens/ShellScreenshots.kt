@@ -141,7 +141,7 @@ class ShellScreenshots {
                 home = { p ->
                     HomeScreen(
                         remember { HomeViewModel(home, accounts, events) },
-                        onOpen = { _, _ -> },
+                        onOpen = {},
                         onHealth = {},
                         contentPadding = p,
                     )
@@ -150,10 +150,10 @@ class ShellScreenshots {
                     ItemsScreen(remember { ItemListViewModel(home, accounts, events) }, open, openTag, p)
                 },
                 category = { p, c, _ ->
-                    CategoryScreen(remember { ItemListViewModel(home, accounts, events) }, c, { _, _ -> }, p)
+                    CategoryScreen(remember { ItemListViewModel(home, accounts, events) }, c, {}, p)
                 },
                 tag = { p, name, back ->
-                    TagScreen(remember { ItemListViewModel(home, accounts, events) }, name, { _, _ -> }, back, p)
+                    TagScreen(remember { ItemListViewModel(home, accounts, events) }, name, {}, back, p)
                 },
                 settings = { p ->
                     SettingsScreen(
@@ -205,10 +205,10 @@ class ShellScreenshots {
         Shot("settings", before = { tap("Settings") }) { Shell() },
         Shot("home-error") { Shell(failingVault) },
         Shot("search") {
-            SearchScreen(remember { SearchViewModel(vault, events) }, onOpen = { _, _ -> }, onCancel = {})
+            SearchScreen(remember { SearchViewModel(vault, events) }, onOpen = {}, onCancel = {})
         },
         Shot("search-results", before = ::typeQuery) {
-            SearchScreen(remember { SearchViewModel(vault, events) }, onOpen = { _, _ -> }, onCancel = {})
+            SearchScreen(remember { SearchViewModel(vault, events) }, onOpen = {}, onCancel = {})
         },
         Shot("add-offline") {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {

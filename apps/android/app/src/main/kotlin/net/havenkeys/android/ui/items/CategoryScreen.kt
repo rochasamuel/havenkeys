@@ -19,10 +19,7 @@ import net.havenkeys.android.ui.kit.PullToRefresh
 import net.havenkeys.android.ui.shell.EmptyLine
 import net.havenkeys.android.ui.shell.ErrorLine
 import net.havenkeys.android.ui.shell.LargeTitle
-import net.havenkeys.android.ui.shell.NoSharedTitle
 import net.havenkeys.android.ui.shell.OpenItem
-import net.havenkeys.android.ui.shell.Origins
-import net.havenkeys.android.ui.shell.SharedTitle
 import net.havenkeys.android.ui.shell.SummaryRow
 import net.havenkeys.android.ui.shell.insetGroup
 import net.havenkeys.android.ui.theme.HavenSpacing
@@ -44,7 +41,6 @@ fun CategoryScreen(
     onOpen: OpenItem,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
-    sharedTitle: SharedTitle = NoSharedTitle,
 ) = FilteredList(
     viewModel,
     stringResource(category.label),
@@ -53,7 +49,6 @@ fun CategoryScreen(
     onOpen,
     contentPadding,
     modifier,
-    sharedTitle,
 )
 
 /**
@@ -70,7 +65,6 @@ fun TagScreen(
     onGone: () -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
-    sharedTitle: SharedTitle = NoSharedTitle,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val gone = tagGone(state, tag)
@@ -83,7 +77,6 @@ fun TagScreen(
         onOpen,
         contentPadding,
         modifier,
-        sharedTitle,
     )
 }
 
@@ -98,7 +91,6 @@ private fun FilteredList(
     onOpen: OpenItem,
     contentPadding: PaddingValues,
     modifier: Modifier,
-    sharedTitle: SharedTitle,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val shown = remember(state.items, filter) { state.items.filter(keeps) }
@@ -117,7 +109,7 @@ private fun FilteredList(
                 item(key = "empty") { EmptyLine(stringResource(R.string.items_empty), Gutter) }
             }
             insetGroup(shown, key = { it.id }) { summary ->
-                SummaryRow(summary, Origins.CATEGORY, onOpen, sharedTitle = sharedTitle)
+                SummaryRow(summary, onOpen)
             }
         }
     }

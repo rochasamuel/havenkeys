@@ -254,7 +254,7 @@ transition is an instant cut and haptics remain.
 | Moment | Motion |
 |---|---|
 | Push (category list, detail) | New screen slides in from the right, the old one shifts about 30% left and dims; back reverses; predictive back scrubs it |
-| Row to detail | Shared title (existing) plus the monogram tile into the detail header |
+| Row to detail | The push: the item screen comes in from the right (no shared title or tile since 2026-10-19) |
 | Tab change | Short crossfade with a few dp of vertical shift; top bar still |
 | Search | Pill grows into the search screen (shared bounds); recents fade in after; Cancel reverses |
 | Add sheet | Springs up, backdrop dims, tiles stagger about 30ms; tile press scales; drag down or tap outside closes |

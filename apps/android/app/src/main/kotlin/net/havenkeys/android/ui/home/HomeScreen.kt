@@ -31,11 +31,8 @@ import net.havenkeys.android.ui.kit.PullToRefresh
 import net.havenkeys.android.ui.kit.SectionHeader
 import net.havenkeys.android.ui.shell.EmptyLine
 import net.havenkeys.android.ui.shell.ErrorLine
-import net.havenkeys.android.ui.shell.NoSharedTitle
 import net.havenkeys.android.ui.shell.OpenItem
-import net.havenkeys.android.ui.shell.Origins
 import net.havenkeys.android.ui.shell.Settle
-import net.havenkeys.android.ui.shell.SharedTitle
 import net.havenkeys.android.ui.shell.SummaryRow
 import net.havenkeys.android.ui.shell.insetGroup
 import net.havenkeys.android.ui.theme.HavenSpacing
@@ -57,7 +54,6 @@ fun HomeScreen(
     onHealth: () -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
-    sharedTitle: SharedTitle = NoSharedTitle,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     LifecycleResumeEffect(viewModel) {
@@ -72,7 +68,7 @@ fun HomeScreen(
             settle = false
         }
     }
-    val rows = HomeRows(onOpen, sharedTitle, settle, failed = state.errorCode != null)
+    val rows = HomeRows(onOpen, settle, failed = state.errorCode != null)
     PullToRefresh(refreshing = state.refreshing, onRefresh = viewModel::refresh, modifier = modifier.fillMaxSize()) {
         LazyColumn(
             Modifier.fillMaxSize(),
@@ -104,35 +100,35 @@ fun HomeScreen(
  * What every Home row needs besides its item. [failed]: a load or sync failed,
  * so an empty list may only be unknown and its empty line would mislead.
  */
-private class HomeRows(val onOpen: OpenItem, val sharedTitle: SharedTitle, val settle: Boolean, val failed: Boolean)
+private class HomeRows(val onOpen: OpenItem, val settle: Boolean, val failed: Boolean)
 
-/** One of Home's two lists: its title, what it says when empty, its rows' origin, its place in the settle. */
-private class GroupSpec(@StringRes val title: Int, @StringRes val emptyText: Int, val origin: String, val index: Int)
+/** One of Home's two lists: its title, what it says when empty, its key, its place in the settle. */
+private class GroupSpec(@StringRes val title: Int, @StringRes val emptyText: Int, val key: String, val index: Int)
 
-private val Recent = GroupSpec(R.string.home_recent, R.string.vault_empty_hint, Origins.RECENT, index = 1)
-private val Frequent = GroupSpec(R.string.home_frequent, R.string.home_frequent_empty, Origins.FREQUENT, index = 2)
+private val Recent = GroupSpec(R.string.home_recent, R.string.vault_empty_hint, "recent", index = 1)
+private val Frequent = GroupSpec(R.string.home_frequent, R.string.home_frequent_empty, "frequent", index = 2)
 
 /** The health card settles after both lists. */
 private const val HEALTH_SETTLE = 3
 
-/** A titled group of item rows; keys carry the origin, since one item can be in both groups. */
+/** A titled group of item rows; keys carry the group's, since one item can be in both groups. */
 private fun LazyListScope.activityGroup(rows: HomeRows, spec: GroupSpec, items: List<ItemSummary>) {
-    item(key = "${spec.origin}-title") {
+    item(key = "${spec.key}-title") {
         Settle(spec.index, active = rows.settle) {
             SectionHeader(stringResource(spec.title), Gutter.padding(top = 12.dp))
         }
     }
     if (items.isEmpty() && !rows.failed) {
-        item(key = "${spec.origin}-empty") {
+        item(key = "${spec.key}-empty") {
             Settle(spec.index, active = rows.settle) { EmptyLine(stringResource(spec.emptyText), Gutter) }
         }
     }
     insetGroup(
         items,
-        key = { "${spec.origin}-${it.id}" },
+        key = { "${spec.key}-${it.id}" },
         around = { Settle(spec.index, active = rows.settle, content = it) },
     ) { summary ->
-        SummaryRow(summary, spec.origin, rows.onOpen, sharedTitle = rows.sharedTitle)
+        SummaryRow(summary, rows.onOpen)
     }
 }
 
@@ -146,7 +142,7 @@ private fun IdentityCardRow(card: IdentityCard, onOpen: OpenItem) {
     }
     InsetGroup(Gutter) {
         row {
-            GroupRow(onClick = { onOpen(card.id, Origins.IDENTITY) }, icon = HavenIcon.IdCard) {
+            GroupRow(onClick = { onOpen(card.id) }, icon = HavenIcon.IdCard) {
                 GroupRowText(card.title, summary)
             }
         }
