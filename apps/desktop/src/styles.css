@@ -684,6 +684,7 @@ input::-ms-clear {
 /* -------------------------------------------------------------- sidebar */
 
 .sidebar {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -775,9 +776,42 @@ input::-ms-clear {
   flex: none;
 }
 
-.nav::-webkit-scrollbar-thumb {
-  background: rgba(226, 234, 230, 0.14);
-  background-clip: padding-box;
+/* The nav's bar floats in the sidebar's right padding (OverlayScrollbar), so
+   rows never narrow when it shows. */
+.nav {
+  scrollbar-width: none;
+}
+.nav::-webkit-scrollbar {
+  display: none;
+}
+
+.overlay-track {
+  position: absolute;
+  right: 1px;
+  width: 9px;
+  opacity: 0;
+  transition: opacity var(--t-med) var(--ease);
+}
+.overlay-track[data-visible="true"] {
+  opacity: 1;
+  transition-duration: var(--t-fast);
+}
+
+.overlay-thumb {
+  width: 5px;
+  margin-left: auto;
+  margin-right: 2px;
+  border-radius: 3px;
+  background: rgba(226, 234, 230, 0.22);
+  transition:
+    width var(--t-fast) var(--ease),
+    background-color var(--t-fast) var(--ease);
+}
+.overlay-track:hover .overlay-thumb,
+.overlay-track[data-dragging="true"] .overlay-thumb {
+  width: 7px;
+  margin-right: 1px;
+  background: rgba(226, 234, 230, 0.36);
 }
 
 .nav-heading {

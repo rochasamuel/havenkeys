@@ -579,6 +579,17 @@ export const desktopScenarios = [
     },
   },
 
+  {
+    name: "vault-nav-scrolled",
+    respond: {},
+    async act(page) {
+      // A short window scrolls the nav: its bar floats in the padding, shown on hover.
+      await page.locator(".nav").evaluate((el) => el.scrollTo({ top: el.scrollHeight }));
+      await page.hover(".search");
+      await page.waitForTimeout(250);
+    },
+  },
+
   // ---------------------------------------------------------------- item detail
   {
     name: "detail-login",

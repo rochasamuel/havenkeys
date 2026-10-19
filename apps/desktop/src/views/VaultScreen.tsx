@@ -9,6 +9,7 @@ import { showAccountItem } from "../lib/accountItem";
 import { decideOpen } from "../lib/openItem";
 import { syncAfterConflict } from "../lib/conflict";
 import { Icon, type IconName } from "../components/Icon";
+import { OverlayScrollbar } from "../components/OverlayScrollbar";
 import { Seal } from "../components/Seal";
 import { useToast } from "../components/Toast";
 import { ItemList } from "./ItemList";
@@ -65,6 +66,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
   const [tag, setTag] = useState<string | null>(null);
   const [tagsCollapsed, setTagsCollapsed] = useState(readTagsCollapsed);
   const [query, setQuery] = useState("");
+  const navRef = useRef<HTMLElement>(null);
   const [items, setItems] = useState<ItemOverview[]>([]);
   /** Bumped each time the items are reloaded; lets a detail row follow other items. */
   const [revision, setRevision] = useState(0);
@@ -433,7 +435,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
             />
           </label>
 
-          <nav className="nav" aria-label={t.vault.sectionsLabel}>
+          <nav className="nav" ref={navRef} aria-label={t.vault.sectionsLabel}>
             <p className="nav-heading">{t.vault.vaultHeading}</p>
             {sections.map((s) => (
               <button
@@ -528,6 +530,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
               {trashCount > 0 && <span className="nav-count">{trashCount}</span>}
             </button>
           </nav>
+          <OverlayScrollbar target={navRef} />
 
           <footer className="sidebar-foot">
             <div className={`conn${connClass}`} role="status">
