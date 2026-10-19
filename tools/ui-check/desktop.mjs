@@ -377,7 +377,7 @@ const firstItem = ".list-items li:nth-child(1) .list-item";
 
 async function scrollTool(page, where) {
   await page.evaluate((w) => {
-    const el = document.querySelector(".tool") ?? document.querySelector(".detail");
+    const el = document.querySelector(".tool-scroll") ?? document.querySelector(".detail");
     const target = typeof w === "string" ? document.querySelector(w) : null;
     if (target) target.scrollIntoView({ block: "start" });
     else if (el) el.scrollTop = w;
@@ -1254,6 +1254,18 @@ export const desktopScenarios = [
     },
     // Walk down the page, a section at a time.
     shots: ["settings-block:2", "settings-block:3", "settings-block:4", "settings-block:5", "settings-block:6", "settings-block:7", "settings-block:8", "settings-block:9"],
+  },
+  {
+    // A tool page's bar floats over its right edge, shown on hover; the page keeps its width.
+    name: "settings-scrollbar",
+    respond: { launch_at_login: true },
+    async act(page) {
+      await page.click(SETTINGS);
+      await page.waitForTimeout(300);
+      await scrollTool(page, 400);
+      await page.mouse.move(600, 300);
+      await page.waitForTimeout(250);
+    },
   },
   {
     // Another app owns Ctrl+Shift+Space: the switch stays on, with a note.
