@@ -164,6 +164,8 @@ export interface PasskeyRow {
   credentialId: string;
   title: string;
   userName: string;
+  /** A newer passkey for the same account exists; this one is kept in case the site rejected it. */
+  replaced: boolean;
 }
 
 export type PkView =

@@ -157,6 +157,7 @@ function Passkeys({ itemId, username, readOnly }: { itemId: string; username: st
               {username && p.userName === username
                 ? t.detail.passkeySaved(formatDate(p.createdAt, dateLocale))
                 : `${p.userName || p.displayName || t.detail.noAccountName} · ${t.detail.passkeySaved(formatDate(p.createdAt, dateLocale))}`}
+              {p.replaced && ` · ${t.detail.olderPasskey}`}
             </span>
             {confirming === p.credentialId ? (
               <span className="confirm">

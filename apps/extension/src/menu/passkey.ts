@@ -51,6 +51,7 @@ function row(p: PasskeyRow, t: string): HTMLButtonElement {
       { className: "who" },
       userData(h("span", { className: "title", text: p.title })),
       p.userName ? userData(h("span", { className: "user", text: p.userName })) : h("span", { className: "user copy", text: msg.common.passkey }),
+      ...(p.replaced ? [h("span", { className: "user copy", text: msg.passkey.older })] : []),
     ),
   );
   b.type = "button";

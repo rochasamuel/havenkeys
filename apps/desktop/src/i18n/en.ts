@@ -402,6 +402,7 @@ export const en = {
     passkeyDeleteFailed: "Could not delete the passkey.",
     noAccountName: "No account name",
     passkeySaved: (date: string) => `Saved ${date}`,
+    olderPasskey: "Older passkey",
     loseAccess: (site: string) => `You may lose access to ${site}.`,
     deletePasskey: "Delete passkey",
     noteFailed: "Could not open the note.",

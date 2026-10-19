@@ -1121,6 +1121,10 @@ pub struct PasskeyMatch {
     pub credential_id: String,
     pub title: String,
     pub user_name: String,
+    /// A newer passkey for the same account exists. Sent only when true,
+    /// so an extension that predates it still reads the answer otherwise.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub replaced: bool,
 }
 
 impl fmt::Debug for PasskeyMatch {

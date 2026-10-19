@@ -112,6 +112,7 @@ describe("passkey results", () => {
   it("accepts valid shapes", () => {
     const ok = [
       { v: 1, id: 1, result: { type: "find_passkeys", passkeys: [{ itemId: ID, credentialId: CRED, title: "GitHub", userName: "octo" }] } },
+      { v: 1, id: 1, result: { type: "find_passkeys", passkeys: [{ itemId: ID, credentialId: CRED, title: "GitHub", userName: "octo", replaced: true }] } },
       { v: 1, id: 2, result: { type: "passkey_get", credentialId: CRED, authenticatorData: "AA", clientDataJson: "e30", signature: "MEU", userHandle: "AQ" } },
       { v: 1, id: 3, result: { type: "check_passkey_create", excluded: false, candidates: [{ itemId: ID, title: "t", username: null }], upgrade: { kind: "none" } } },
       { v: 1, id: 4, result: { type: "check_passkey_create", excluded: true, candidates: [], upgrade: { kind: "none" } } },
@@ -139,10 +140,21 @@ describe("passkey results", () => {
     for (const m of bad) expect(parseIncoming(m)).toBeNull();
   });
 
+  it("reads the replaced flag, false when an older desktop leaves it out", () => {
+    const read = (p: object) => {
+      const m = parseIncoming({ v: 1, id: 1, result: { type: "find_passkeys", passkeys: [p] } });
+      return m && "result" in m && m.result.type === "find_passkeys" ? m.result.passkeys[0]?.replaced : undefined;
+    };
+    const base = { itemId: ID, credentialId: CRED, title: "t", userName: "u" };
+    expect(read({ ...base, replaced: true })).toBe(true);
+    expect(read(base)).toBe(false);
+  });
+
   it("rejects loose or dangerous shapes", () => {
     const bad = [
       { v: 1, id: 1, result: { type: "find_passkeys", passkeys: [{ itemId: ID, credentialId: "AQ", title: "t", userName: "u" }] } },
       { v: 1, id: 1, result: { type: "find_passkeys", passkeys: [{ itemId: ID, credentialId: CRED, title: "t", userName: "u", privateKey: "x" }] } },
+      { v: 1, id: 1, result: { type: "find_passkeys", passkeys: [{ itemId: ID, credentialId: CRED, title: "t", userName: "u", replaced: "yes" }] } },
       { v: 1, id: 1, result: { type: "passkey_get", credentialId: CRED, authenticatorData: "a+b", clientDataJson: "e30", signature: "MEU", userHandle: "AQ" } },
       { v: 1, id: 1, result: { type: "check_passkey_create", excluded: true, candidates: [{ itemId: ID, title: "t", username: null }] } },
       { v: 1, id: 1, result: { type: "passkey_create", credentialId: CRED, attestationObject: "oA", clientDataJson: "e30", authenticatorData: "AA", publicKey: "MA", publicKeyAlgorithm: -257 } },

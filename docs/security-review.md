@@ -856,7 +856,7 @@ versions. All of them are listed below.
 | PK2 | Low | Design | The signature counter is always 0, so relying parties cannot detect cloned credentials by counter | Accepted, documented |
 | PK3 | Medium | Core / operations | An app version without passkey support drops a login's passkeys when it edits that login | Accepted; update every device first |
 | PK4 | Low | Extension | "Use another device" calls the browser after an async hop, and may lose user activation on sites that require it | Accepted |
-| PK5 | Medium | Core / bridge | Replace-before-confirm: re-registering an account replaces its working passkey before the site has accepted the new one | Accepted, documented |
+| PK5 | Medium | Core / bridge | Replace-before-confirm: re-registering an account replaces its working passkey before the site has accepted the new one | Fixed (2026-10-19): the old passkey is kept, marked replaced, until the site lists the new one |
 | PK6 | Low | Extension | One passkey session per tab: a granted-host iframe can abort the top frame's request | Accepted (denial of service only) |
 | PK7 | Low | Extension | Firefox has only the time-based click guard, so a page can clickjack its own `passkey.html#token` | Accepted (page's own rpId only) |
 | PK8 | Low | Core | IP-address rpIds are accepted when they equal the page host, although browsers refuse WebAuthn there | Accepted |
@@ -917,7 +917,7 @@ bridge. A site or browser that requires transient user activation for
 WebAuthn may refuse the call if that hop takes too long. The user can cancel
 and use the site's own "sign in with a security key" path.
 
-### PK5. Replace-before-confirm (Medium, accepted)
+### PK5. Replace-before-confirm (Medium, fixed 2026-10-19)
 When the vault already holds a passkey for the same rpId and user handle, a
 new `create()` replaces it. The replacement happens in the same server write
 that stores the new passkey (`stage_passkey_create`), which is how WebAuthn
@@ -933,10 +933,23 @@ In both cases the old, working passkey is gone, and the site knows only the
 old one. A compromised extension that has learned a user handle (assertions
 return it) can do the same on purpose, within the secret rate limit. There
 is no per-item cooldown for passkey writes. **Mitigation:** none in code.
-The design keeps one passkey per account. **Remaining:** the user may lose
-passkey access to that account and have to recover through the site. Later
-work (`roadmap.md`) could add a confirmation step that keeps the old key
-until the site has used the new one.
+The design keeps one passkey per account.
+
+**Fixed (2026-10-19, roadmap D4).** A re-registration keeps the old passkey,
+marked `replaced_at`, next to the new one; only the newest replaced one per
+account is kept. Both are offered, the new one first and the old one labelled
+"Older passkey" in the extension and the desktop. The old one is dropped
+(`stage_drop_replaced_passkeys`) when a later sign-in request's
+`allowCredentials` lists the account's new passkey: the site knows it. The
+clean-up write is best effort; offline or on a frozen account the answer is
+unchanged and the old passkey stays. **Remaining:** (1) a login already at
+`MAX_PASSKEYS_PER_LOGIN` replaces outright, as before. (2) On sites that
+never send `allowCredentials`, the old passkey stays until the user deletes
+it in the desktop. (3) A compromised extension can still remove a working
+passkey, but now needs two steps (a create for the user handle, then a
+request listing the new credential) instead of one, within the same rate
+limit. (4) Android offers the old passkey after the new one but does not
+label it, and does not drop it; a desktop sign-in on the site does.
 
 ### PK6. One passkey session per tab (Low, accepted)
 The background keeps one session per tab. A new request from any granted

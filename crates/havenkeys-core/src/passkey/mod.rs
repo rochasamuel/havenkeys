@@ -102,6 +102,11 @@ pub struct Passkey {
     pub private_key: SecretBytes,
     /// Unix milliseconds.
     pub created_at: i64,
+    /// When a newer passkey for the same account replaced this one (Unix
+    /// milliseconds). Kept until the site shows it knows the new one
+    /// (security-review PK5).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replaced_at: Option<i64>,
 }
 
 impl fmt::Debug for Passkey {
@@ -137,6 +142,7 @@ mod tests {
             display_name: None,
             private_key: SecretBytes::new(vec![7; 32]),
             created_at: 1,
+            replaced_at: None,
         }
     }
 

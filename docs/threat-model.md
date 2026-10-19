@@ -309,8 +309,9 @@ public data and the user's click. New or changed threats:
   the browser reports, and only with a passkey whose stored rpId the core
   allows for that URL — the same bound as password fill (T4). It can create
   passkeys (a server write) for sites it names, within the rate limit, and a
-  re-registration for an account that already has a passkey replaces the old
-  one, with no history to recover it from (`security-review.md` PK5).
+  re-registration for an account that already has a passkey demotes the old
+  one; a following request listing the new one removes it
+  (`security-review.md` PK5).
   *Residual:* as T4; the browser-reported URL is only as trustworthy as
   the extension that reports it.
 * **Old app versions.** A HavenKeys build from before passkeys does not know

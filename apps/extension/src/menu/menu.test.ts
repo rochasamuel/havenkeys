@@ -628,3 +628,31 @@ describe("look-alike warning", () => {
     expect(document.querySelector(".lookalike")!.textContent).toContain("<img src=x>.com");
   });
 });
+
+describe("field menu passkey rows", () => {
+  it("labels a replaced passkey as the older one", async () => {
+    const CRED = "AQEBAQEBAQEBAQEBAQEBAQ";
+    const OLD = "AgICAgICAgICAgICAgICAg";
+    replies = [
+      {
+        ok: true,
+        value: {
+          state: "ready",
+          kind: "login",
+          site: "github.com",
+          items: [],
+          passkeys: [
+            { itemId: ITEM, credentialId: CRED, title: "GitHub", userName: "octo", replaced: false },
+            { itemId: ITEM, credentialId: OLD, title: "GitHub", userName: "octo", replaced: true },
+          ],
+          hint: null,
+        },
+      },
+    ];
+    await load();
+    const rows = [...document.querySelectorAll<HTMLButtonElement>("button.row")].map((r) => r.textContent ?? "");
+    expect(rows[0]).toContain("Passkey · octo");
+    expect(rows[0]).not.toContain("Older passkey");
+    expect(rows[1]).toContain("Older passkey · octo");
+  });
+});

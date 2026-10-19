@@ -120,6 +120,8 @@ export interface PasskeyInfo {
   userName: string;
   displayName: string | null;
   createdAt: number;
+  /** A newer passkey for the same account exists; kept until the site shows it knows that one. */
+  replaced: boolean;
 }
 
 /** How an edit treats a secret field. `keep` never requires reading it. */

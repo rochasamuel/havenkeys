@@ -356,6 +356,12 @@ impl Bridge {
         let result = match dispatched {
             Dispatched::Done(body) => Ok(body),
             Dispatched::Write { write, result } => (self.inner.save)(write).map(|()| result),
+            Dispatched::Tidy { write, result } => {
+                if (self.inner.save)(write).is_ok() {
+                    (self.inner.on_items_changed)();
+                }
+                Ok(result)
+            }
             Dispatched::Open { item, result } => self.open_in_desktop(item).map(|()| result),
             // `confirm_then_stage` never asks twice.
             Dispatched::Confirm { .. } => Err(ErrorCode::Internal),

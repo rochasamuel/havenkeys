@@ -406,6 +406,7 @@ export const ptBR: Messages = {
     passkeyDeleteFailed: "Não foi possível excluir a chave de acesso.",
     noAccountName: "Sem nome de conta",
     passkeySaved: (date: string) => `Salva em ${date}`,
+    olderPasskey: "Chave de acesso anterior",
     loseAccess: (site: string) => `Você pode perder o acesso a ${site}.`,
     deletePasskey: "Excluir chave de acesso",
     noteFailed: "Não foi possível abrir a nota.",

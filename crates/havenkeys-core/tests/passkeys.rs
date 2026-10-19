@@ -295,7 +295,8 @@ fn two_accounts_and_re_registration() {
     assert_eq!(only.len(), 1);
     assert_eq!(only[0].credential_id, second);
 
-    // Same user handle again replaces, it does not pile up.
+    // Same user handle again replaces, it does not pile up: the account
+    // keeps its current passkey and the newest replaced one.
     for _ in 0..(MAX_PASSKEYS_PER_LOGIN + 2) {
         let s = v
             .stage_passkey_create(create_req("octo", &[1], Some(gh)), NOW)
@@ -303,7 +304,8 @@ fn two_accounts_and_re_registration() {
         commit(&mut v, &mut rev, s);
     }
     let infos = v.list_passkeys(&gh).unwrap();
-    assert_eq!(infos.len(), 2);
+    assert_eq!(infos.len(), 3);
+    assert_eq!(infos.iter().filter(|p| p.replaced).count(), 1);
     assert!(infos
         .iter()
         .all(|p| p.credential_id != havenkeys_core::passkey::encode_b64url(&first)));
@@ -329,9 +331,11 @@ fn re_registering_with_no_item_id_finds_the_existing_holder() {
     assert_eq!(s.item_id, first_login);
     commit(&mut v, &mut rev, s);
 
+    // The old passkey stays, marked replaced, in the same login.
     let found = v.find_passkeys("github.com", GH, None, &[]).unwrap();
-    assert_eq!(found.len(), 1);
-    assert_eq!(found[0].item_id, first_login);
+    assert_eq!(found.len(), 2);
+    assert!(found.iter().all(|m| m.item_id == first_login));
+    assert_eq!(found.iter().filter(|m| m.replaced).count(), 1);
 }
 
 #[test]
@@ -361,8 +365,8 @@ fn re_registering_into_a_different_login_still_finds_the_existing_holder() {
     commit(&mut v, &mut rev, s);
 
     let found = v.find_passkeys("github.com", GH, None, &[]).unwrap();
-    assert_eq!(found.len(), 1);
-    assert_eq!(found[0].item_id, login_a);
+    assert_eq!(found.len(), 2);
+    assert!(found.iter().all(|m| m.item_id == login_a));
     assert!(!v.get_item(&login_b).unwrap().has_passkey);
 }
 
