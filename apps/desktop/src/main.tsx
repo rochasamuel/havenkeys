@@ -10,6 +10,7 @@ import "@fontsource/jetbrains-mono/500.css";
 import "@havenkeys/ui/tokens.css";
 import "./styles.css";
 import { App } from "./App";
+import { CrashBoundary } from "./components/CrashBoundary";
 import { ToastProvider } from "./components/Toast";
 import { I18nProvider } from "./i18n/context";
 import { applyTheme } from "./lib/theme";
@@ -24,9 +25,11 @@ if (root) {
   createRoot(root).render(
     <StrictMode>
       <I18nProvider>
-        <ToastProvider>
-          <App />
-        </ToastProvider>
+        <CrashBoundary>
+          <ToastProvider>
+            <App />
+          </ToastProvider>
+        </CrashBoundary>
       </I18nProvider>
     </StrictMode>,
   );

@@ -207,6 +207,9 @@ export const ptBR: Messages = {
   app: {
     fatalTitle: "O HavenKeys não consegue abrir este cofre",
     fatalFallback: "O HavenKeys não conseguiu acessar o armazenamento do cofre. Reinicie o app.",
+    crashTitle: "Algo deu errado",
+    crashBody: "Esta tela parou de funcionar. Recarregue para voltar ao HavenKeys; se acontecer de novo, envie o texto abaixo e o que você estava fazendo.",
+    crashReload: "Recarregar",
     kitTitle: "Salve sua Folha de Recuperação",
     kitBody:
       "Esta é a única cópia da sua Secret Key. Sem ela — e sem a sua senha mestra — ninguém consegue abrir este cofre, nem mesmo nós.",

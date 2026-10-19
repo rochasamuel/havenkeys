@@ -202,6 +202,9 @@ export const en = {
   app: {
     fatalTitle: "HavenKeys cannot open this vault",
     fatalFallback: "HavenKeys could not reach its vault storage. Restart the app.",
+    crashTitle: "Something went wrong",
+    crashBody: "This screen stopped working. Reload to go back to HavenKeys; if it happens again, send the text below with what you were doing.",
+    crashReload: "Reload",
     kitTitle: "Save your Recovery Sheet",
     kitBody:
       "This is the only copy of your Secret Key. Without it — and your master password — nobody can open this vault, including us.",

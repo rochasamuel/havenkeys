@@ -3699,6 +3699,19 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   text-align: center;
 }
 
+.crash-details {
+  margin: 16px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: var(--field);
+  font-family: var(--mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text);
+}
+
 /* ----------------------------------------------------------- kit screen */
 
 .kit-screen {
