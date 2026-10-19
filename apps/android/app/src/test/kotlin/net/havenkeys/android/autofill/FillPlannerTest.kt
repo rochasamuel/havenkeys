@@ -97,9 +97,9 @@ class FillPlannerTest {
             confirm = false
             values = Outcome.Failed("denied")
         }
-        assertEquals(FillPlan.Nothing, FillPlanner.plan(login, target, unlocked = true, repo))
+        assertOnlyThePinnedIcon(FillPlanner.plan(login, target, unlocked = true, repo))
         repo.apply { code = Outcome.Failed("denied") }
-        assertEquals(FillPlan.Nothing, FillPlanner.plan(otp, target, unlocked = true, repo))
+        assertOnlyThePinnedIcon(FillPlanner.plan(otp, target, unlocked = true, repo))
     }
 
     @Test
@@ -135,7 +135,7 @@ class FillPlannerTest {
         }
         assertTrue((FillPlanner.plan(login, app, true, repo) as FillPlan.Offer).search)
         repo.kind = Outcome.Ok(TargetKind.BROWSER)
-        assertEquals(FillPlan.Nothing, FillPlanner.plan(login, target, true, repo))
+        assertOnlyThePinnedIcon(FillPlanner.plan(login, target, true, repo))
     }
 
     @Test
@@ -145,7 +145,7 @@ class FillPlannerTest {
             matchList = Outcome.Ok(emptyList())
             kind = Outcome.Ok(TargetKind.APP)
         }
-        assertEquals(FillPlan.Nothing, FillPlanner.plan(otp, app, true, repo))
+        assertOnlyThePinnedIcon(FillPlanner.plan(otp, app, true, repo))
     }
 
     @Test
@@ -192,7 +192,7 @@ class FillPlannerTest {
     @Test
     fun withoutAnythingToSaveNothingChanges() = runTest {
         val repo = FakeAutofillRepository()
-        assertEquals(FillPlan.Nothing, FillPlanner.plan(login, target, unlocked = true, repo))
+        assertOnlyThePinnedIcon(FillPlanner.plan(login, target, unlocked = true, repo))
         assertEquals(FillPlan.Nothing, FillPlanner.plan(null, target, unlocked = true, repo))
     }
 
@@ -239,7 +239,7 @@ class FillPlannerTest {
         assertNull(plan.lookalikeOf)
         assertFalse("lookalike" in app.calls)
         val failed = FakeAutofillRepository().apply { lookalikeSite = Outcome.Failed("locked") }
-        assertEquals(FillPlan.Nothing, FillPlanner.plan(login, target, unlocked = true, failed))
+        assertOnlyThePinnedIcon(FillPlanner.plan(login, target, unlocked = true, failed))
     }
 
     @Test
@@ -248,5 +248,12 @@ class FillPlannerTest {
         val plan = FillPlanner.plan(null, target, unlocked = true, repo, saveable = true) as FillPlan.Offer
         assertEquals("github.com", plan.lookalikeOf)
         assertTrue(plan.save)
+    }
+
+    /** A form with nothing to offer still gets an answer: HavenKeys' pinned icon, which reads nothing. */
+    private fun assertOnlyThePinnedIcon(plan: FillPlan) {
+        val offer = plan as FillPlan.Offer
+        assertTrue(offer.datasets.isEmpty() && offer.copies.isEmpty())
+        assertTrue(!offer.search && !offer.save && offer.lookalikeOf == null)
     }
 }

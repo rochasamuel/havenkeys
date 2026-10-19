@@ -213,6 +213,7 @@
     <string name="autofill_setup_chrome">O Chrome preenche com o próprio gerenciador de senhas, a menos que você mude isso. No Chrome, abra Configurações → Serviços de preenchimento automático e escolha “Preenchimento automático com outro serviço”; depois reinicie o Chrome.</string>
     <string name="autofill_unlock">Desbloquear o HavenKeys</string>
     <string name="autofill_search">Pesquisar no HavenKeys…</string>
+    <string name="autofill_open">Abrir o HavenKeys</string>
     <string name="autofill_code">Código de uso único</string>
     <string name="autofill_copy_code">Copiar código de verificação</string>
     <string name="autofill_lookalike_title">Este site não é %1$s</string>

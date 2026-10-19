@@ -62,11 +62,15 @@ class DatasetFactory(
             autofillSender(context, MODE_COPY_TOTP, match.id),
             R.drawable.ic_autofill_copy,
         )
+        // Made first so the keyboard's count of chips never leaves it out; the keyboard draws it at the end.
+        val pinned = pinnedDataset(offer.search)
         val datasets = offer.datasets.mapNotNull(::datasetOf).toMutableList()
         // A look-alike page's warning leads; it fills nothing (spec 2026-10-13-lookalike-warning §6).
         offer.lookalikeOf?.let(::lookalikeDataset)?.let { datasets.add(0, it) }
         offer.copies.mapNotNullTo(datasets, ::copyDataset)
-        if (offer.search) searchDataset()?.let(datasets::add)
+        // The pinned icon searches in the keyboard; the dropdown keeps its row.
+        if (offer.search) searchDataset(chip = pinned == null)?.let(datasets::add)
+        pinned?.let { datasets.add(0, it) }
         val warning = offer.lookalikeOf?.let(context::lookalikeSaveDescription)
         val saveInfo = if (offer.save) save?.saveInfoIn(screen, warning) else null
         if (datasets.isEmpty() && saveInfo == null) return null
@@ -88,7 +92,8 @@ class DatasetFactory(
         val mode = if (otpOnly) MODE_TOTP else MODE_FILL
         val auth = if (gated) autofillSender(context, mode, plan.match.id) else null
         val datasetId = if (auth == null) DatasetIds.of(plan.match.id) else null
-        return rows.dataset(fields, plan.match.title, subtitle, auth, datasetId = datasetId)
+        val title = plan.match.title
+        return rows.dataset(fields, title, subtitle, auth, datasetId = datasetId, chipIcon = { monogram(title) })
     }
 
     private fun filled(values: FillValues) = listOfNotNull(
@@ -109,11 +114,23 @@ class DatasetFactory(
         R.drawable.ic_autofill_warning,
     )
 
-    private fun searchDataset(): Dataset? = rows.dataset(
+    private fun searchDataset(chip: Boolean): Dataset? = rows.dataset(
         listOfNotNull(usernameId, passwordId).map { it to null },
         context.getString(R.string.autofill_search),
         null,
         autofillSender(context, MODE_SEARCH, null),
+        chip = chip,
+    )
+
+    /**
+     * HavenKeys' icon at the keyboard strip's end: in an app it searches the
+     * vault (as "Search HavenKeys…"); on a page, where a login fills only on
+     * its own site, it opens HavenKeys.
+     */
+    private fun pinnedDataset(search: Boolean): Dataset? = rows.pinnedDataset(
+        listOfNotNull(usernameId, passwordId, otpId),
+        context.getString(if (search) R.string.autofill_search else R.string.autofill_open),
+        autofillSender(context, if (search) MODE_SEARCH else MODE_OPEN, null),
     )
 
     companion object {
@@ -124,6 +141,7 @@ class DatasetFactory(
         const val MODE_COPY_TOTP = "copy-totp"
         const val MODE_UNLOCK = "unlock"
         const val MODE_SEARCH = "search"
+        const val MODE_OPEN = "open"
         const val MODE_LOOKALIKE = "lookalike"
         const val MODE_CARD = "card"
         const val MODE_IDENTITY = "identity"

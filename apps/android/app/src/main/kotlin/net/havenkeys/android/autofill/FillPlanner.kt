@@ -95,12 +95,8 @@ object FillPlanner {
         val copies = if (form.otpOnly) datasets.map { it.match } else emptyList()
         // Only a page with no logins can be a look-alike (spec 2026-10-13-lookalike-warning §6).
         val lookalikeOf = if (matches.isEmpty()) lookalike(kind, target, repo) else null
-        val offered = datasets.isNotEmpty() || search || saveable || lookalikeOf != null
-        return if (offered) {
-            FillPlan.Offer(datasets, search, copies, save = saveable, lookalikeOf = lookalikeOf)
-        } else {
-            FillPlan.Nothing
-        }
+        // Always an offer: with nothing else, HavenKeys' pinned icon still opens it from the keyboard.
+        return FillPlan.Offer(datasets, search, copies, save = saveable, lookalikeOf = lookalikeOf)
     }
 
     /**

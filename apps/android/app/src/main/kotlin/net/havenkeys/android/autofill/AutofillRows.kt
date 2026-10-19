@@ -54,9 +54,13 @@ internal fun autofillSender(context: Context, mode: String, itemId: String?): In
     ).intentSender
 }
 
+/** A chip's picture, drawn only if the chip is shown. */
+internal typealias ChipIcon = ChipIcons.() -> Icon
+
 /** How a row looks: a dropdown row, and a keyboard chip while the keyboard has room for one. */
 internal class Rows(private val context: Context, private val inlineRequest: InlineSuggestionsRequest?) {
     private var position = 0
+    private val icons by lazy { ChipIcons(context) }
 
     fun menu(title: String, subtitle: String?, @DrawableRes icon: Int? = null) =
         RemoteViews(context.packageName, R.layout.autofill_item).apply {
@@ -72,16 +76,21 @@ internal class Rows(private val context: Context, private val inlineRequest: Inl
         }
     }
 
-    fun inline(title: String, subtitle: String?, @DrawableRes icon: Int? = null): InlinePresentation? {
+    /** [icon] is drawn only when the keyboard has room for the chip. */
+    fun inline(title: String, subtitle: String?, icon: ChipIcon? = null): InlinePresentation? {
         val index = position++
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) inlineAt(index, title, subtitle, icon) else null
     }
 
     @RequiresApi(Build.VERSION_CODES.R)
-    private fun inlineAt(index: Int, title: String, subtitle: String?, icon: Int?): InlinePresentation? =
-        specFor(index)?.let { InlinePresentation(chip(title, subtitle, icon), it, false) }
+    private fun inlineAt(index: Int, title: String, subtitle: String?, icon: ChipIcon?): InlinePresentation? =
+        specFor(index)?.let { InlinePresentation(chip(title, subtitle, icon?.invoke(icons)), it, false) }
 
-    /** Null when there is no field to fill: Android refuses a dataset without one. */
+    /**
+     * Null when there is no field to fill: Android refuses a dataset without
+     * one. [chipIcon] defaults to [icon]; [chip] false keeps the row out of
+     * the keyboard.
+     */
     fun dataset(
         fields: List<Pair<AutofillId, AutofillValue?>>,
         title: String,
@@ -89,10 +98,12 @@ internal class Rows(private val context: Context, private val inlineRequest: Inl
         auth: IntentSender?,
         @DrawableRes icon: Int? = null,
         datasetId: String? = null,
+        chipIcon: ChipIcon? = icon?.let { res -> { Icon.createWithResource(context, res) } },
+        chip: Boolean = true,
     ): Dataset? {
         if (fields.isEmpty()) return null
         val menu = menu(title, subtitle, icon)
-        val inline = inline(title, subtitle, icon)
+        val inline = if (chip) inline(title, subtitle, chipIcon) else null
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val builder = Dataset.Builder(presentations(menu, inline))
             fields.forEach { (id, value) -> builder.setField(id, value?.let { Field.Builder().setValue(it).build() }) }
@@ -104,21 +115,17 @@ internal class Rows(private val context: Context, private val inlineRequest: Inl
         }
     }
 
-    // The builders Android 13 replaced with Presentations and Field.
-    @Suppress("DEPRECATION")
-    private fun legacyDataset(
-        fields: List<Pair<AutofillId, AutofillValue?>>,
-        menu: RemoteViews,
-        inline: InlinePresentation?,
-        auth: IntentSender?,
-        datasetId: String?,
-    ): Dataset {
-        val builder = Dataset.Builder(menu)
-        fields.forEach { (id, value) -> builder.setValue(id, value) }
-        if (inline != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) builder.setInlinePresentation(inline)
-        auth?.let(builder::setAuthentication)
-        datasetId?.let(builder::setId)
-        return builder.build()
+    /**
+     * HavenKeys' icon pinned at the keyboard strip's end; tapping it starts
+     * [auth]. Keyboard only: null when the keyboard has no room for it (the
+     * dropdown has its own rows), and it fills nothing.
+     */
+    fun pinnedDataset(ids: List<AutofillId>, description: String, auth: IntentSender): Dataset? {
+        val index = position++
+        if (ids.isEmpty() || Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null
+        return specFor(index)?.let { spec ->
+            inlineOnlyDataset(ids, InlinePresentation(chip(null, null, icons.app(), description), spec, true), auth)
+        }
     }
 
     /** Locked: one row that names nothing from the vault; the fields' ids are all Android gets. */
@@ -126,7 +133,7 @@ internal class Rows(private val context: Context, private val inlineRequest: Inl
         if (ids.isEmpty()) return null
         val title = context.getString(R.string.autofill_unlock)
         val menu = menu(title, null)
-        val inline = inline(title, null)
+        val inline = inline(title, null) { app() }
         val sender = autofillSender(context, DatasetFactory.MODE_UNLOCK, null)
         val builder = FillResponse.Builder()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -161,12 +168,16 @@ internal class Rows(private val context: Context, private val inlineRequest: Inl
     @SuppressLint("RestrictedApi")
     @Suppress("DEPRECATION")
     @RequiresApi(Build.VERSION_CODES.R)
-    private fun chip(title: String, subtitle: String?, icon: Int?): Slice =
-        InlineSuggestionUi.newContentBuilder(attribution())
-        .apply { icon?.let { setStartIcon(Icon.createWithResource(context, it)) } }
-        .setTitle(title)
+    private fun chip(
+        title: String?,
+        subtitle: String?,
+        icon: Icon?,
+        description: String = listOfNotNull(title, subtitle).joinToString(" "),
+    ): Slice = InlineSuggestionUi.newContentBuilder(attribution())
+        .apply { icon?.let(::setStartIcon) }
+        .apply { title?.let(::setTitle) }
         .apply { if (!subtitle.isNullOrEmpty()) setSubtitle(subtitle) }
-        .setContentDescription(listOfNotNull(title, subtitle).joinToString(" "))
+        .setContentDescription(description)
         .build()
         .slice
 
@@ -182,3 +193,35 @@ internal class Rows(private val context: Context, private val inlineRequest: Inl
         const val ATTRIBUTION_REQUEST = 0
     }
 }
+
+// The builders Android 13 replaced with Presentations and Field.
+@Suppress("DEPRECATION")
+private fun legacyDataset(
+    fields: List<Pair<AutofillId, AutofillValue?>>,
+    menu: RemoteViews,
+    inline: InlinePresentation?,
+    auth: IntentSender?,
+    datasetId: String?,
+): Dataset {
+    val builder = Dataset.Builder(menu)
+    fields.forEach { (id, value) -> builder.setValue(id, value) }
+    if (inline != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) builder.setInlinePresentation(inline)
+    auth?.let(builder::setAuthentication)
+    datasetId?.let(builder::setId)
+    return builder.build()
+}
+
+@RequiresApi(Build.VERSION_CODES.R)
+private fun inlineOnlyDataset(ids: List<AutofillId>, inline: InlinePresentation, auth: IntentSender): Dataset =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val builder = Dataset.Builder(Presentations.Builder().setInlinePresentation(inline).build())
+        ids.forEach { builder.setField(it, null) }
+        builder.setAuthentication(auth).build()
+    } else {
+        @Suppress("DEPRECATION")
+        Dataset.Builder().apply {
+            setInlinePresentation(inline)
+            ids.forEach { setValue(it, null) }
+            setAuthentication(auth)
+        }.build()
+    }

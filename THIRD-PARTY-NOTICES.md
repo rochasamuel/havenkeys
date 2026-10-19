@@ -187,5 +187,7 @@ under the Apache License, Version 2.0 (the text is in
 a single colour each, Hipercard's transparent background path is dropped,
 Elo's unfilled path is given an explicit `#000000` fill (the SVG default),
 and colours are written as `#RRGGBB`. It is embedded in the desktop app and
-the browser extension. The marks are trademarks of their networks and are
+the browser extension, and written as vector drawables for the Android app
+(`apps/android/app/src/main/res/drawable/ic_brand_*.xml`, by
+`scripts/build-android-card-brands.mjs`). The marks are trademarks of their networks and are
 used only to show which network a saved card belongs to.

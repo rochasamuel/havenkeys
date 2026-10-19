@@ -18,6 +18,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import net.havenkeys.android.AppContainer
 import net.havenkeys.android.HavenApp
+import net.havenkeys.android.MainActivity
 import net.havenkeys.android.R
 import net.havenkeys.android.data.AutofillRepository
 import net.havenkeys.android.data.Outcome
@@ -30,8 +31,8 @@ import uniffi.havenkeys_mobile.LockState
 import uniffi.havenkeys_mobile.TargetFacts
 
 /**
- * Opened by a tapped "Unlock HavenKeys" row, a gated dataset (spec §7.3) or
- * a look-alike warning.
+ * Opened by a tapped "Unlock HavenKeys" row, a gated dataset (spec §7.3), a
+ * look-alike warning or the pinned icon on a page.
  * Unlocks if needed, then asks Rust for the fill; Rust re-checks the target
  * and its refusal returns nothing. Not exported: only our PendingIntents
  * reach it.
@@ -43,10 +44,17 @@ class AutofillAuthActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         hardenWindow()
-        val tapped = tappedRequest() ?: return cancel()
         val mode = intent.getStringExtra(DatasetFactory.EXTRA_MODE)
+        if (mode == DatasetFactory.MODE_OPEN) return openApp()
+        val tapped = tappedRequest() ?: return cancel()
         val itemId = intent.getStringExtra(DatasetFactory.EXTRA_ITEM_ID)
         unlockThen(container) { answer(tapped, mode, itemId) }
+    }
+
+    /** The pinned icon on a page: HavenKeys opens in its own task; nothing is filled. */
+    private fun openApp() {
+        startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        cancel()
     }
 
     private fun answer(tapped: TappedRequest, mode: String?, itemId: String?) {

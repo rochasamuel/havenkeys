@@ -7,6 +7,7 @@ import android.view.autofill.AutofillId
 import android.view.autofill.AutofillValue
 import android.view.inputmethod.InlineSuggestionsRequest
 import net.havenkeys.android.R
+import net.havenkeys.android.ui.kit.HavenIcon
 import uniffi.havenkeys_mobile.CardChoice
 import uniffi.havenkeys_mobile.CardValue
 import uniffi.havenkeys_mobile.IdentityChoice
@@ -51,13 +52,15 @@ class WalletDatasets(
         val datasets = plan.rows.mapNotNull { row ->
             val subtitle = cardSubtitle(row.card, row.expired, expiredWord)
             val values = row.values
+            val brand: ChipIcon = { card(row.card.brand) }
             if (values == null) {
                 val auth = autofillSender(context, DatasetFactory.MODE_CARD, row.card.id)
                 val targets = gated(WalletEntries.cardTargets(screen.fields, plan.frames))
-                rows.dataset(targets, cardTitle(row.card), subtitle, auth)
+                rows.dataset(targets, cardTitle(row.card), subtitle, auth, chipIcon = brand)
             } else {
                 val entries = valuedIn(screen, WalletEntries.card(screen.fields, plan.frames, values))
-                rows.dataset(entries, cardTitle(row.card), subtitle, null, datasetId = DatasetIds.of(row.card.id))
+                val id = DatasetIds.of(row.card.id)
+                rows.dataset(entries, cardTitle(row.card), subtitle, null, datasetId = id, chipIcon = brand)
             }
         }
         val saveInfo = if (plan.save) cardSaveInfo(screen, plan.frames.first()) else null
@@ -76,12 +79,14 @@ class WalletDatasets(
                 title,
                 plan.choice.email,
                 autofillSender(context, DatasetFactory.MODE_IDENTITY, null),
+                chipIcon = identityIcon,
             )
             else -> rows.dataset(
                 valuedIn(screen, WalletEntries.identity(screen.fields, form, values)),
                 title,
                 plan.choice.email,
                 null,
+                chipIcon = identityIcon,
             )
         }
         val documents = plan.documents.takeIf { it.isNotEmpty() }?.let { docs ->
@@ -90,10 +95,13 @@ class WalletDatasets(
                 context.getString(R.string.autofill_identity_with_docs, documentNames(context, docs)),
                 title,
                 autofillSender(context, DatasetFactory.MODE_IDENTITY_DOCS, null),
+                chipIcon = identityIcon,
             )
         }
         return responseOf(listOfNotNull(main, documents), identity.save?.saveInfoIn(screen), null)
     }
+
+    private val identityIcon: ChipIcon = { glyph(HavenIcon.IdCard) }
 
     private fun unlockTargets(): List<Int> = when (routed) {
         is Routed.Card -> WalletEntries.cardTargets(screen.fields, routed.form.frames)

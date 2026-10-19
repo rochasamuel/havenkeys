@@ -225,6 +225,7 @@
     <string name="autofill_setup_chrome">Chrome fills with its own password manager unless told otherwise. In Chrome, open Settings → Autofill services and choose “Autofill using another service”, then restart Chrome.</string>
     <string name="autofill_unlock">Unlock HavenKeys</string>
     <string name="autofill_search">Search HavenKeys…</string>
+    <string name="autofill_open">Open HavenKeys</string>
     <string name="autofill_code">One-time code</string>
     <string name="autofill_copy_code">Copy one-time code</string>
     <string name="autofill_lookalike_title">This isn’t %1$s</string>
