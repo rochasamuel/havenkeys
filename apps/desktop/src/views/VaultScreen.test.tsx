@@ -384,3 +384,20 @@ describe("VaultScreen plan", () => {
     expect(host.querySelector(".sidebar-foot .conn")!.className).toBe("conn");
   });
 });
+
+describe("VaultScreen tools", () => {
+  it("switches tools where scrollTo returns a Promise (newer Chromium, WebView2)", async () => {
+    // The scroll-to-top effect once returned this Promise; React took it for a
+    // cleanup and crashed calling it on the next switch.
+    const scrollTo = vi.fn(() => Promise.resolve());
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", { configurable: true, value: scrollTo });
+    await mountWith(three());
+    for (const tool of ["Vault health", "Trash", "Vault health", "All items"]) {
+      click(navButton(tool));
+      await settle();
+    }
+    expect(scrollTo).toHaveBeenCalled();
+    expect(host.querySelector(".nav")).toBeTruthy();
+    delete (HTMLElement.prototype as { scrollTo?: unknown }).scrollTo;
+  });
+});

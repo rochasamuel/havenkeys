@@ -16,8 +16,8 @@ interface Geometry {
 /**
  * A scrollbar that floats in `target`'s parent (positioned) instead of taking
  * width from the target (whose native bar must be hidden), as on macOS. It
- * shows while the parent is hovered or the target scrolls; the thumb drags
- * and a click on the track pages.
+ * shows while the target or the bar is hovered, or the target scrolls; the
+ * thumb drags and a click on the track pages.
  */
 export function OverlayScrollbar({ target }: { target: RefObject<HTMLElement | null> }) {
   const [geometry, setGeometry] = useState<Geometry | null>(null);
@@ -38,8 +38,7 @@ export function OverlayScrollbar({ target }: { target: RefObject<HTMLElement | n
 
   useEffect(() => {
     const el = target.current;
-    const host = el?.parentElement;
-    if (!el || !host) return;
+    if (!el) return;
     let timer: number | undefined;
     const onScroll = () => {
       measure();
@@ -54,13 +53,13 @@ export function OverlayScrollbar({ target }: { target: RefObject<HTMLElement | n
     const onLeave = () => setHovered(false);
     window.addEventListener("resize", measure);
     el.addEventListener("scroll", onScroll, { passive: true });
-    host.addEventListener("pointerenter", onEnter);
-    host.addEventListener("pointerleave", onLeave);
+    el.addEventListener("pointerenter", onEnter);
+    el.addEventListener("pointerleave", onLeave);
     return () => {
       window.removeEventListener("resize", measure);
       el.removeEventListener("scroll", onScroll);
-      host.removeEventListener("pointerenter", onEnter);
-      host.removeEventListener("pointerleave", onLeave);
+      el.removeEventListener("pointerenter", onEnter);
+      el.removeEventListener("pointerleave", onLeave);
       window.clearTimeout(timer);
     };
   }, [target, measure]);

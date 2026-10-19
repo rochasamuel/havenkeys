@@ -53,16 +53,16 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-it("shows over the area while its parent is hovered, sized and placed by the scroll", () => {
+it("shows over the area while it is hovered, sized and placed by the scroll", () => {
   const el = sized();
   el.scrollTop = 600;
-  act(() => void q("parent")!.dispatchEvent(new Event("pointerenter")));
+  act(() => void q("area")!.dispatchEvent(new Event("pointerenter")));
   expect(track()!.dataset.visible).toBe("true");
   expect(track()!.style.top).toBe("100px");
   expect(track()!.style.height).toBe("400px");
   expect(thumb().style.height).toBe("100px");
   expect(thumb().style.transform).toBe("translateY(150px)");
-  act(() => void q("parent")!.dispatchEvent(new Event("pointerleave")));
+  act(() => void q("area")!.dispatchEvent(new Event("pointerleave")));
   expect(track()!.dataset.visible).toBe("false");
 });
 
@@ -76,7 +76,7 @@ it("shows while scrolling, then fades", () => {
 
 it("drags the thumb to scroll, and a click on the track pages", () => {
   const el = sized();
-  act(() => void q("parent")!.dispatchEvent(new Event("pointerenter")));
+  act(() => void q("area")!.dispatchEvent(new Event("pointerenter")));
   act(() => void thumb().dispatchEvent(pointer("pointerdown", { clientY: 10 })));
   // The thumb has 300px to travel for 1200px of scroll: 4px a pixel.
   act(() => void thumb().dispatchEvent(pointer("pointermove", { clientY: 60 })));
@@ -88,6 +88,6 @@ it("drags the thumb to scroll, and a click on the track pages", () => {
 
 it("draws nothing when everything fits", () => {
   sized(400, 400);
-  act(() => void q("parent")!.dispatchEvent(new Event("pointerenter")));
+  act(() => void q("area")!.dispatchEvent(new Event("pointerenter")));
   expect(track()).toBeNull();
 });
