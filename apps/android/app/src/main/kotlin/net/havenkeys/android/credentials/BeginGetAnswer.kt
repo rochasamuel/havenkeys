@@ -16,6 +16,7 @@ import androidx.credentials.provider.PasswordCredentialEntry
 import androidx.credentials.provider.PublicKeyCredentialEntry
 import java.util.concurrent.atomic.AtomicInteger
 import net.havenkeys.android.R
+import net.havenkeys.android.autofill.ChipIcons
 import net.havenkeys.android.data.CredentialRepository
 
 /** Each entry needs its own PendingIntent: Android tells them apart by request code. */
@@ -58,8 +59,11 @@ private fun entriesFor(
     context: Context,
     offers: List<CredentialOffer>,
     options: List<BeginGetCredentialOption>,
-): List<CredentialEntry> =
-    offers.mapNotNull { offer ->
+): List<CredentialEntry> {
+    // The row's tile, as in the app and the keyboard: the library's default
+    // glyph is white and shows only on sheets that tint it.
+    val icons = ChipIcons(context)
+    return offers.mapNotNull { offer ->
         when (offer) {
             is CredentialOffer.Passkey -> PublicKeyCredentialEntry(
                 context = context,
@@ -71,6 +75,7 @@ private fun entriesFor(
                 ),
                 beginGetPublicKeyCredentialOption = options[offer.index] as BeginGetPublicKeyCredentialOption,
                 displayName = offer.offer.title,
+                icon = icons.monogram(offer.offer.title),
             )
             is CredentialOffer.Password -> PasswordCredentialEntry(
                 context = context,
@@ -81,10 +86,12 @@ private fun entriesFor(
                 ),
                 beginGetPasswordOption = options[offer.index] as BeginGetPasswordOption,
                 displayName = offer.match.title,
+                icon = icons.monogram(offer.match.title),
             )
             CredentialOffer.Unlock -> null
         }
     }
+}
 
 private fun getIntent(context: Context, kind: String, itemId: String, title: String) =
     Intent(context, CredentialGetActivity::class.java)

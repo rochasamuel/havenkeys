@@ -1,14 +1,18 @@
 package net.havenkeys.android.autofill
 
+import android.content.res.ColorStateList
+import android.graphics.Color
 import android.graphics.drawable.Icon
 import android.util.Size
 import android.view.View
 import android.view.autofill.AutofillId
 import android.view.autofill.AutofillValue
 import android.view.inputmethod.InlineSuggestionsRequest
+import android.widget.ImageView
 import android.widget.inline.InlinePresentationSpec
 import androidx.autofill.inline.UiVersions
 import androidx.autofill.inline.v1.InlineSuggestionUi
+import androidx.core.graphics.createBitmap
 import net.havenkeys.android.ui.kit.HavenIcon
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -17,8 +21,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ChipRowsTest {
     private val app = RuntimeEnvironment.getApplication()
     private val ids: List<AutofillId> = listOf(View(app).autofillId)
@@ -64,5 +70,20 @@ class ChipRowsTest {
             drawable.intrinsicWidth to drawable.intrinsicHeight
         }
         assertEquals(1, sizes.toSet().size)
+    }
+
+    // Gboard's chip style tints the start icon one flat colour; a picture keeps its own.
+    @Test
+    fun aKeyboardTintLeavesThePictureItsOwnColours() {
+        val view = ImageView(app).apply {
+            setImageIcon(ChipIcons(app).monogram("GitHub"))
+            imageTintList = ColorStateList.valueOf(Color.WHITE)
+        }
+        val drawable = view.drawable
+        val bitmap = createBitmap(drawable.intrinsicWidth, drawable.intrinsicHeight)
+        drawable.setBounds(0, 0, bitmap.width, bitmap.height)
+        drawable.draw(android.graphics.Canvas(bitmap))
+        // A corner of the tile, clear of the letter: the avatar's dark ground.
+        assertEquals(0xFF1D2B27.toInt(), bitmap.getPixel(bitmap.width / 2, bitmap.height / 8))
     }
 }

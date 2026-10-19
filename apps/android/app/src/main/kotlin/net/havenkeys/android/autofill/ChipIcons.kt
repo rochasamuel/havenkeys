@@ -2,11 +2,13 @@ package net.havenkeys.android.autofill
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BlendMode
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.drawable.Icon
+import android.os.Build
 import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.PathParser
@@ -20,8 +22,8 @@ import kotlin.math.roundToInt
 /**
  * The pictures at the start of keyboard chips, drawn as the app draws its
  * rows: a login's initial on the avatar tile, a card's network mark, the
- * identity's glyph, and HavenKeys' own round icon. Bitmaps, so the keyboard
- * shows them in their own colours. They name only what the chip's title
+ * identity's glyph, and HavenKeys' own round icon. Bitmaps that ignore the
+ * keyboard's icon tint, so they keep their own colours. They name only what the chip's title
  * already shows.
  */
 internal class ChipIcons(private val context: Context) {
@@ -90,7 +92,7 @@ internal class ChipIcons(private val context: Context) {
                 draw(canvas)
             }
         }
-        return Icon.createWithBitmap(bitmap)
+        return bitmap.icon()
     }
 
     private fun tile(background: Int, border: Int? = null, draw: (Canvas) -> Unit): Icon {
@@ -110,7 +112,13 @@ internal class ChipIcons(private val context: Context) {
             canvas.drawRoundRect(shape, radius, radius, stroke)
         }
         draw(canvas)
-        return Icon.createWithBitmap(bitmap)
+        return bitmap.icon()
+    }
+
+    // Keyboards tint the start icon one colour; DST draws the picture as it is.
+    // Chips need Android 11, so the guard only keeps lint's minimum honest.
+    private fun Bitmap.icon(): Icon = Icon.createWithBitmap(this).apply {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) setTintBlendMode(BlendMode.DST)
     }
 
     private companion object {
