@@ -2528,15 +2528,6 @@
   },
   {
    "site": "Itaú",
-   "id": "idl-more-access-input-operator",
-   "label_text": "Código do operador",
-   "platform": "extension",
-   "classifier": "login",
-   "got": "none",
-   "reason": "spec §4.2"
-  },
-  {
-   "site": "Itaú",
    "id": "idl-login-sensibility-input-agency",
    "label_text": "Agência",
    "platform": "extension",
@@ -2732,15 +2723,6 @@
    "classifier": "login",
    "got": "username",
    "reason": "bank field: B6 (Bank Account item)"
-  },
-  {
-   "site": "Itaú",
-   "id": "idl-more-access-input-operator",
-   "label_text": "Código do operador",
-   "platform": "android",
-   "classifier": "login",
-   "got": "none",
-   "reason": "spec §4.2"
   },
   {
    "site": "Itaú",

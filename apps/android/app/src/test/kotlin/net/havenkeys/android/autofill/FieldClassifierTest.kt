@@ -36,6 +36,13 @@ class FieldClassifierTest {
     }
 
     @Test
+    fun itausOperatorCodeIsAUsername() {
+        val html = mapOf("id" to "idl-more-access-input-operator", "autocomplete" to "off", "label" to "Código do operador")
+        val op = field(html = html)
+        assertEquals(FieldRole.USERNAME, role(op))
+    }
+
+    @Test
     fun aBirthDayPartIsNotAUsername() {
         assertEquals(FieldRole.UNKNOWN, role(field(html = mapOf("name" to "login_day", "autocomplete" to "bday-day"))))
     }

@@ -3,7 +3,7 @@ package net.havenkeys.android.autofill
 
 @Suppress("MagicNumber", "MaxLineLength")
 internal object SharedWords {
-    val USERNAME_STRONG: List<String> = listOf("username", "user name", "userid", "user id", "login", "login id", "email", "e mail", "email address", "account", "account name", "identifier", "sign in", "usuario", "nome de usuario", "correo")
+    val USERNAME_STRONG: List<String> = listOf("username", "user name", "userid", "user id", "login", "login id", "email", "e mail", "email address", "account", "account name", "identifier", "sign in", "usuario", "nome de usuario", "correo", "operador", "codigo do operador", "operator")
     val USERNAME_DOCUMENT: List<String> = listOf("cpf", "cnpj", "rg", "documento", "numero do documento", "matricula", "nif", "nie", "dni", "cif", "rut", "cuit", "cuil", "curp", "rfc", "cedula", "documento de identidad", "document number", "passport", "passaporte", "pasaporte", "national id", "codice fiscale")
     val USERNAME_WEAK: List<String> = listOf("user", "mail", "phone", "mobile", "telefone", "celular")
     val USERNAME_NEGATIVE: List<String> = listOf("search", "query", "q", "coupon", "promo", "captcha", "newsletter", "subscribe", "zip", "postal", "city", "street", "first name", "last name", "full name", "company", "code", "otp", "message", "comment", "amount", "quantity", "buscar", "pesquisar", "cupom")
@@ -11,7 +11,7 @@ internal object SharedWords {
     val EMAIL_WORDS: List<String> = listOf("email", "e mail")
     val OTP_STRONG: List<String> = listOf("otp", "totp", "2fa", "mfa", "one time", "one time code", "one time password", "verification code", "security code", "auth code", "authentication code", "authenticator", "two factor", "2 step", "two step", "codigo de verificacao", "codigo de seguranca", "codigo de verificacion", "token", "digit code", "sms code", "codigo sms")
     val OTP_WEAK: List<String> = listOf("code", "codigo", "pin", "verify", "verification")
-    val OTP_NEGATIVE: List<String> = listOf("postal code", "zip code", "promo code", "coupon", "discount", "country code", "area code", "captcha", "gift", "referral", "invite", "cvv", "cvc")
+    val OTP_NEGATIVE: List<String> = listOf("postal code", "zip code", "promo code", "coupon", "discount", "country code", "area code", "captcha", "gift", "referral", "invite", "cvv", "cvc", "codigo do operador")
     val PW_CONFIRM: List<String> = listOf("confirm", "confirmation", "re enter", "reenter", "repeat", "retype", "again", "verify", "confirmar", "confirme", "confirmacao", "repita", "repetir")
     val PW_NEW: List<String> = listOf("new", "create", "choose", "set", "nova", "novo", "nueva", "criar", "crie")
     val PW_CURRENT: List<String> = listOf("current", "old", "existing", "atual", "antiga", "actual")

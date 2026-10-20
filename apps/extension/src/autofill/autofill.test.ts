@@ -110,6 +110,12 @@ describe("field classification", () => {
     expect(otpScore(f({ text: "sms code" }), false)).toBeGreaterThanOrEqual(OTP_THRESHOLD);
   });
 
+  it("Itaú's operator code is a username, not a one-time code", () => {
+    const op = f({ attrs: normalize("idl-more-access-input-operator"), text: normalize("Código do operador") });
+    expect(usernameScore(op, ctx)).toBeGreaterThanOrEqual(USERNAME_THRESHOLD);
+    expect(otpScore(op, false)).toBe(0);
+  });
+
   it("an e-mail address field is a username; another address is not", () => {
     const words = (attrs: string, text: string) => f({ attrs: normalize(attrs), text: normalize(text) });
     expect(usernameScore(words("CPF or Email Address", "E-mail ou CPF"), ctx)).toBeGreaterThanOrEqual(USERNAME_THRESHOLD);

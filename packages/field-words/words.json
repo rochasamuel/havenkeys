@@ -61,7 +61,10 @@
         "sign in",
         "usuario",
         "nome de usuario",
-        "correo"
+        "correo",
+        "operador",
+        "codigo do operador",
+        "operator"
       ]
     },
     "USERNAME_DOCUMENT": {
@@ -193,7 +196,8 @@
         "referral",
         "invite",
         "cvv",
-        "cvc"
+        "cvc",
+        "codigo do operador"
       ]
     },
     "PW_CONFIRM": {
