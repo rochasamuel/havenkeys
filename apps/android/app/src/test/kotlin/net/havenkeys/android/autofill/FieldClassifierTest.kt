@@ -36,6 +36,11 @@ class FieldClassifierTest {
     }
 
     @Test
+    fun aBirthDayPartIsNotAUsername() {
+        assertEquals(FieldRole.UNKNOWN, role(field(html = mapOf("name" to "login_day", "autocomplete" to "bday-day"))))
+    }
+
+    @Test
     fun anEmailAddressFieldIsAUsernameAnotherAddressIsNot() {
         val drogasil = field(html = mapOf("name" to "CPF or Email Address", "label" to "E-mail ou CPF"))
         assertEquals(FieldRole.USERNAME, role(drogasil))

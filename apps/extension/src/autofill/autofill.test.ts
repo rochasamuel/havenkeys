@@ -5,7 +5,7 @@
 // or an ancestor is `hidden` or has `display:none`/`visibility:hidden`.
 
 import { beforeEach, describe, expect, it } from "vitest";
-import { classifyPasswords, groupIntent, USERNAME_THRESHOLD, usernameScore, type FieldFeatures } from "./classify";
+import { classifyPasswords, groupIntent, OTP_THRESHOLD, otpScore, USERNAME_THRESHOLD, usernameScore, type FieldFeatures } from "./classify";
 import { fillLogin, fillNewPassword, fillOtp, markUserEdit, setValue } from "./fill";
 import { classifyGroup, fieldsOf, groupFor, MAX_GROUP_INPUTS, type Env } from "./group";
 import { findLoginGroup, findOtpGroup, readSubmission } from "./page";
@@ -99,6 +99,15 @@ describe("field classification", () => {
       kind: "current-password",
       confidence: 1,
     });
+  });
+
+  it("a 'Buscar' or 'Cupom' box is not a username", () => {
+    expect(usernameScore(f({ attrs: "cupom", text: "buscar" }), ctx)).toBeLessThan(USERNAME_THRESHOLD);
+    expect(usernameScore(f({ attrs: "login", text: "pesquisar" }), ctx)).toBeLessThan(USERNAME_THRESHOLD);
+  });
+
+  it("an SMS code box is a one-time code", () => {
+    expect(otpScore(f({ text: "sms code" }), false)).toBeGreaterThanOrEqual(OTP_THRESHOLD);
   });
 
   it("an e-mail address field is a username; another address is not", () => {

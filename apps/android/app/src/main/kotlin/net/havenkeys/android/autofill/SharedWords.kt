@@ -15,7 +15,7 @@ internal object SharedWords {
     val PW_CONFIRM: List<String> = listOf("confirm", "confirmation", "re enter", "reenter", "repeat", "retype", "again", "verify", "confirmar", "confirme", "confirmacao", "repita", "repetir")
     val PW_NEW: List<String> = listOf("new", "create", "choose", "set", "nova", "novo", "nueva", "criar", "crie")
     val PW_CURRENT: List<String> = listOf("current", "old", "existing", "atual", "antiga", "actual")
-    val AC_NOT_LOGIN: List<String> = listOf("name", "given-name", "family-name", "additional-name", "nickname", "organization", "street-address", "address-line1", "address-line2", "address-level1", "address-level2", "postal-code", "country", "country-name", "bday", "sex", "url", "photo")
+    val AC_NOT_LOGIN: List<String> = listOf("name", "given-name", "family-name", "additional-name", "nickname", "organization", "street-address", "address-line1", "address-line2", "address-level1", "address-level2", "postal-code", "country", "country-name", "bday", "bday-day", "bday-month", "bday-year", "sex", "url", "photo")
     val CARD_NOT_AN_EXPIRY: List<String> = listOf("dd", "dia", "day", "nascimento", "birth", "bday", "birthday")
     val CARD_MONTH_WORDS: List<String> = listOf("month", "mes", "mm")
     val CARD_YEAR_WORDS: List<String> = listOf("year", "ano", "yy", "yyyy", "aa", "aaaa")
