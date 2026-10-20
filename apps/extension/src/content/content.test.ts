@@ -433,6 +433,24 @@ describe("menuKindFor", () => {
     expect(await kindFor(f("#c"))).toEqual({ kind: "identity", roles: ["fullName", "cpf"] });
   });
 
+  // Shopee's add-card form (2026-10): the CPF box shares its container with
+  // the card fields, so it is the only identity field there.
+  it("opens the identity menu on a lone CPF box beside a card form", async () => {
+    const box = (label: string, input: string) => `<div><div>${input}</div><label>${label}</label></div>`;
+    set(`<div>
+      ${box("Número do Cartão", `<input id="n" maxlength="19" inputmode="numeric" type="tel">`)}
+      ${box("Data de Validade (MM/AA)", `<input id="e" maxlength="5" inputmode="numeric" type="tel">`)}
+      ${box("CVV", `<input id="v" maxlength="3" type="password" autocomplete="new-password">`)}
+      ${box("CPF", `<input id="c" maxlength="18" type="text">`)}
+    </div>`);
+    expect(await kindFor(f("#c"))).toEqual({ kind: "identity", roles: ["cpf"] });
+  });
+
+  it("still offers nothing on a lone box named only by a plain word", async () => {
+    set(`<div><input id="t" aria-label="Telefone" type="tel"></div>`);
+    expect(await kindFor(f("#t"))).toBeNull();
+  });
+
   // Yahoo's "Create a Yahoo account" (login.yahoo.com/account/create, 2026-10).
   // Its only intent words are "Sign in with Google" (submit) and "Sign in
   // instead": the fields themselves (given-name, family-name, bday-*) say signup.

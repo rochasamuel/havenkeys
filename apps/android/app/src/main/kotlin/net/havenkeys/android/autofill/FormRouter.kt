@@ -24,10 +24,20 @@ object FormRouter {
         val identity = if (card == null) IdentityFormFinder.find(fields) else null
         return when {
             card != null -> Routed.Card(card)
-            identity != null && !signInOwnsFocus(fields, login) -> Routed.Identity(identity, save)
+            identity != null && !signInOwnsFocus(fields, login) && !loneLoginBox(fields, identity, login) ->
+                Routed.Identity(identity, save)
             login != null || save != null -> Routed.Login(login, save)
             else -> null
         }
+    }
+
+    /**
+     * A lone identity box the login finder takes as the username: gov.br's
+     * one-CPF first step is a sign-in, not a form for the identity.
+     */
+    private fun loneLoginBox(fields: List<FieldFacts>, identity: IdentityForm, login: LoginForm?): Boolean {
+        val focused = fields.firstOrNull { it.focused }?.index
+        return identity.fields.size == 1 && login != null && focused in login.usernames
     }
 
     /** A sign-in (a password or a code) holds the focused field, or nothing is focused. */

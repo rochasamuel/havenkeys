@@ -220,10 +220,17 @@ function classify(root: ParentNode, env: Env): IdentityField[] {
 }
 
 /** Two identity fields, or one named by autocomplete that is not an email/username box. */
+/**
+ * Two identity fields, or one the page names for sure: by autocomplete
+ * (not an email or username box: those are a login's first step), or a
+ * document number by its words, as a lone CPF box beside a card form.
+ */
 function qualifies(fields: IdentityField[]): boolean {
   if (fields.length >= 2) return true;
   const [only] = fields;
-  return only !== undefined && only.byAutocomplete && only.role !== "email" && only.role !== "username";
+  if (!only) return false;
+  if (isDocumentRole(only.role)) return true;
+  return only.byAutocomplete && only.role !== "email" && only.role !== "username";
 }
 
 /** The identity group around a field the user interacted with, if it qualifies. */

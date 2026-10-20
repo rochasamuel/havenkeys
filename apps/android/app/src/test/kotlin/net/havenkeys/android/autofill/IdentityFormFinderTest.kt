@@ -32,6 +32,13 @@ class IdentityFormFinderTest {
     }
 
     @Test
+    fun aLoneDocumentBoxNamedByItsWordsQualifiesAPlainOneDoesNot() {
+        val form = IdentityFormFinder.find(listOf(field(hint = "CPF", focused = true)))!!
+        assertEquals(listOf(IdentityRole.CPF), form.roles)
+        assertNull(IdentityFormFinder.find(listOf(field(hint = "Telefone", focused = true))))
+    }
+
+    @Test
     fun theFocusedFieldMustBeAnIdentityField() {
         val fields = listOf(field(hint = "Cidade"), field(id = "cep"), field(hint = "Coupon", focused = true))
         assertNull(IdentityFormFinder.find(fields))

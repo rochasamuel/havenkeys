@@ -12,7 +12,8 @@ data class IdentityForm(val fields: List<IdentityField>, val webDomain: String?,
 /**
  * The identity group around the focused field (identity.ts): its frame's
  * identity fields, when there are two, or one named by a hint that is not
- * an email or username box (those are a login's first step).
+ * an email or username box (those are a login's first step), or a lone
+ * document number named by its words (a CPF box beside a card form).
  */
 object IdentityFormFinder {
     fun find(fields: List<FieldFacts>): IdentityForm? {
@@ -25,8 +26,10 @@ object IdentityFormFinder {
                 .mapNotNull { f -> roles[f.index]?.let { f.index to it } }
                 .take(MAX_FIELDS)
         }.orEmpty()
+        // One field qualifies when the page names it for sure: by a hint (not a
+        // login's email or username), or a document number by its words.
         val qualifies = found.size >= 2 ||
-            found.singleOrNull()?.second?.let { it.byHint && it.role !in LOGIN_ROLES } == true
+            found.singleOrNull()?.second?.let { it.role.isDocument || it.byHint && it.role !in LOGIN_ROLES } == true
         return if (anchor != null && qualifies && found.any { it.first == anchor.index }) {
             IdentityForm(found.map { (i, r) -> IdentityField(i, r.role) }, anchor.webDomain, anchor.webScheme)
         } else {

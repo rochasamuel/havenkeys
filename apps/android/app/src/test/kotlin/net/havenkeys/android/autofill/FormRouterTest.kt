@@ -24,6 +24,13 @@ class FormRouterTest {
     }
 
     @Test
+    fun aLoneCpfLoginStepStaysALogin() {
+        // gov.br's first step: one CPF box, the password on the next screen.
+        val routed = FormRouter.route(listOf(field(id = "cpf", hint = "CPF", focused = true)))
+        assertTrue(routed is Routed.Login)
+    }
+
+    @Test
     fun anAddressFormGoesToTheIdentity() {
         val routed = FormRouter.route(
             listOf(field(hint = "Nome completo", focused = true), field(id = "cep"), field(hint = "Cidade")),
