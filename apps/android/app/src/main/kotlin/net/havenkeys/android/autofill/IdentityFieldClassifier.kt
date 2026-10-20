@@ -27,7 +27,7 @@ object IdentityFieldClassifier {
         val refused = shape == null || s.refused || isCard
         // Sites use type=tel for any digits (birth date, CEP, CPF): the words
         // decide before a tel box is taken for a phone.
-        val found = if (refused) null else byHint(s) ?: byEmailType(f) ?: byWords(s) ?: byPhoneType(f)
+        val found = if (refused) null else byHint(s) ?: byEmailType(f) ?: byWords(f, s) ?: byPhoneType(f)
         return found?.let { adjust(it, shape) }
     }
 
@@ -97,10 +97,12 @@ object IdentityFieldClassifier {
         return if (isPhone) IdentityRoleOf(IdentityRole.PHONE, byHint = false) else null
     }
 
-    private fun byWords(s: IdentitySignals): IdentityRoleOf? {
+    private fun byWords(f: FieldFacts, s: IdentitySignals): IdentityRoleOf? {
         val hit = WORDS.firstOrNull { (_, words) -> hasAny(s.attrs, words) || hasAny(s.text, words) }
-        return hit?.let { (role, words) -> compound(labelledPart(role, words, s.text), s.all) }
-            ?.let { IdentityRoleOf(it, byHint = false) }
+        val role = hit?.let { (role, words) -> compound(labelledPart(role, words, s.text), s.all) }
+        // "Número para contato" on a tel box is the phone; a house number names the address.
+        val telNumber = role == IdentityRole.NUMBER && byPhoneType(f) != null && !hasAny(s.all, ADDRESS)
+        return role?.let { IdentityRoleOf(if (telNumber) IdentityRole.PHONE else it, byHint = false) }
     }
 
     /**

@@ -42,6 +42,8 @@ class IdentityFieldClassifierTest {
         assertEquals(IdentityRole.PHONE, role(tel("Número de Telefone", "person[phone_number]")))
         assertEquals(IdentityRole.PHONE, role(tel("", placeholder = "(__) ____-____")))
         assertEquals(IdentityRole.PHONE, role(field(inputType = InputType.TYPE_CLASS_PHONE)))
+        assertEquals(IdentityRole.PHONE, role(tel("Número para contato", "contato")))
+        assertEquals(IdentityRole.PHONE, role(tel("Contact number", "contact")))
     }
 
     @Test

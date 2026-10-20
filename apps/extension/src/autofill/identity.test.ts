@@ -45,6 +45,10 @@ describe("identityRoleOf", () => {
     expect(role("#c")).toBe("cpf");
     expect(role("#t")).toBe("phone");
     expect(role("#p")).toBe("phone");
+    page(`<label for="k">Número para contato</label><input id="k" name="contato" type="tel">
+      <label for="e">Contact number</label><input id="e" name="contact" type="tel">`);
+    expect(role("#k")).toBe("phone");
+    expect(role("#e")).toBe("phone");
   });
 
   it("the visible label names the address part over a generic address name", () => {

@@ -40,8 +40,11 @@ class FieldClassifierTest {
         val code = field(html = mapOf("name" to "code", "label" to "Código", "placeholder" to "------"))
         assertEquals(FieldRole.OTP, role(code))
         val zeros = field(html = mapOf("inputmode" to "numeric", "maxlength" to "6", "placeholder" to "000000"))
-        assertEquals(FieldRole.OTP, role(zeros))
-        for (label in listOf("Código de rastreio", "Código de barras", "Código postal", "Código promocional")) {
+        // A mask alone names nothing: a bank's "0000" agência box is not a code.
+        assertEquals(FieldRole.UNKNOWN, role(zeros))
+        val others = listOf("Código de rastreio", "Código de rastreamento", "Código de barras", "Código postal")
+        val more = listOf("Código promocional", "Código do cliente", "Código da instalação", "Código do pedido")
+        for (label in others + more) {
             val other = field(html = mapOf("name" to "codigo", "label" to label, "placeholder" to "------"))
             assertTrue(label, role(other) != FieldRole.OTP)
         }

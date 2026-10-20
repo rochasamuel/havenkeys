@@ -190,6 +190,10 @@ export function identityRoleOf(el: IdentityElement): { role: IdentityRole; confi
     if (score < THRESHOLD) continue;
     const role = compound(labelledPart(found, words, text), `${attrs} ${text}`);
     if (!role || !allowed(role)) return null;
+    // "Número para contato" on a tel box is the phone; a house number names the address.
+    if (role === "number" && type === "tel" && !hasAny(`${attrs} ${text}`, ADDRESS)) {
+      return { role: "phone", confidence: 0.8, byAutocomplete: false };
+    }
     return { role: role === "street" && tag === "textarea" ? "addressLine1" : role, confidence: score / 100, byAutocomplete: false };
   }
   // Sites use type=tel for any digits (birth date, CEP, CPF): the words

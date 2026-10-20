@@ -238,7 +238,7 @@ Each field gets a score per role. No single heuristic decides.
 | Strong keyword in placeholder, aria-label, title, `<label>`, `aria-labelledby` | +40 | |
 | Weak keyword (user, mail, phone…) | +25 / +20 | |
 | OTP keyword (otp, 2fa, verification code, token, sms code…) / weak (code, código, pin) | | +70 / +30 |
-| Placeholder that is only a code mask (4–8 of `-`, `_`, `•`, `0`: `------`, `000000`) | | +35 |
+| Placeholder that is only a code mask (4–8 of `-`, `_`, `•`, `0`: `------`, `000000`) | | +30 (never enough alone) |
 | `maxlength` 4–8, numeric input mode | | +15, +10 |
 | 4–8 adjacent single-character boxes (split code) | | +65 |
 | Last text field before the first password field | +40 | |
@@ -258,8 +258,9 @@ The keyword lists and score weights above are not written in the
 classifiers. They live in one reviewed file,
 `packages/field-words/words.json`, shared by the extension and Android
 (spec `2026-10-19-shared-field-words-design`). Each entry is either shared
-or split per platform. Today only the username threshold differs: 50 in the
-extension, 40 on Android, because Android has no group context. A generator
+or split per platform. Among entries both platforms use, only the username
+threshold has different values: 50 in the extension, 40 on Android,
+because Android has no group context. A generator
 writes `apps/extension/src/autofill/words.generated.ts` and
 `apps/android/.../autofill/SharedWords.kt`. Both are committed, and CI
 (`field-words.yml`) fails when either is stale. The scoring logic stays in

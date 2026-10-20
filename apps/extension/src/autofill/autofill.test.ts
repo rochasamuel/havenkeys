@@ -123,9 +123,11 @@ describe("field classification", () => {
       return features(document.querySelector("input") as HTMLInputElement);
     };
     expect(otpScore(fields("code", "Código", "------"), false)).toBeGreaterThanOrEqual(OTP_THRESHOLD);
+    // A mask alone names nothing: a bank's "0000" agência box is not a code.
     page(`<input inputmode="numeric" maxlength="6" placeholder="000000">`);
-    expect(otpScore(features(document.querySelector("input") as HTMLInputElement), false)).toBeGreaterThanOrEqual(OTP_THRESHOLD);
-    for (const label of ["Código de rastreio", "Código de barras", "Código postal", "Código promocional"]) {
+    expect(otpScore(features(document.querySelector("input") as HTMLInputElement), false)).toBeLessThan(OTP_THRESHOLD);
+    const others = ["Código de rastreio", "Código de rastreamento", "Código de barras", "Código postal", "Código promocional"];
+    for (const label of [...others, "Código do cliente", "Código da instalação", "Código do pedido"]) {
       expect(otpScore(fields("codigo", label, "------"), false), label).toBeLessThan(OTP_THRESHOLD);
     }
   });

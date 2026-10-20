@@ -627,8 +627,9 @@ bad edit there could make a password box look like a username box, or a
 card box look like an identity field. That changes which fields the menu
 offers, but never which item's values may be filled: Rust still checks the
 origin on every fill. The file is reviewed like code. The generated copies
-are committed, and CI fails when they differ from the file, so no change
-can reach either classifier without passing through `words.json`. No new
+are committed, and CI fails when they differ from the file. That proves
+the copies match the file; it does not stop someone writing a keyword
+directly in a classifier, which code review must catch. No new
 data leaves Rust because of this change.
 
 ## 13. Secret Key, the account, and the server
