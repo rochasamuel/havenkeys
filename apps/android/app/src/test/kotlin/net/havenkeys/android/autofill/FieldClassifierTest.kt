@@ -36,6 +36,15 @@ class FieldClassifierTest {
     }
 
     @Test
+    fun anEmailAddressFieldIsAUsernameAnotherAddressIsNot() {
+        val drogasil = field(html = mapOf("name" to "CPF or Email Address", "label" to "E-mail ou CPF"))
+        assertEquals(FieldRole.USERNAME, role(drogasil))
+        val labelled = field(html = mapOf("type" to "email", "name" to "emailAddress", "label" to "Endereço de e-mail"))
+        assertEquals(FieldRole.USERNAME, role(labelled))
+        assertEquals(FieldRole.UNKNOWN, role(field(html = mapOf("name" to "account_address", "label" to "Address"))))
+    }
+
+    @Test
     fun hiddenOrDisabledFieldsAreUnknown() {
         assertEquals(FieldRole.UNKNOWN, role(field(hints = listOf("password"), visible = false)))
         assertEquals(FieldRole.UNKNOWN, role(field(hints = listOf("password"), enabled = false)))

@@ -7,6 +7,8 @@ internal object SharedWords {
     val USERNAME_DOCUMENT: List<String> = listOf("cpf", "cnpj", "rg", "documento", "numero do documento", "matricula", "nif", "nie", "dni", "cif", "rut", "cuit", "cuil", "curp", "rfc", "cedula", "documento de identidad", "document number", "passport", "passaporte", "pasaporte", "national id", "codice fiscale")
     val USERNAME_WEAK: List<String> = listOf("user", "mail", "phone", "mobile", "telefone", "celular")
     val USERNAME_NEGATIVE: List<String> = listOf("search", "query", "q", "coupon", "promo", "captcha", "newsletter", "subscribe", "zip", "postal", "city", "street", "first name", "last name", "full name", "company", "code", "otp", "message", "comment", "amount", "quantity", "buscar", "pesquisar", "cupom")
+    val USERNAME_NEGATIVE_UNLESS_EMAIL: List<String> = listOf("address")
+    val EMAIL_WORDS: List<String> = listOf("email", "e mail")
     val OTP_STRONG: List<String> = listOf("otp", "totp", "2fa", "mfa", "one time", "one time code", "one time password", "verification code", "security code", "auth code", "authentication code", "authenticator", "two factor", "2 step", "two step", "codigo de verificacao", "codigo de seguranca", "codigo de verificacion", "token", "digit code", "sms code", "codigo sms")
     val OTP_WEAK: List<String> = listOf("code", "codigo", "pin", "verify", "verification")
     val OTP_NEGATIVE: List<String> = listOf("postal code", "zip code", "promo code", "coupon", "discount", "country code", "area code", "captcha", "gift", "referral", "invite", "cvv", "cvc")

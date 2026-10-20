@@ -5,7 +5,7 @@
 // or an ancestor is `hidden` or has `display:none`/`visibility:hidden`.
 
 import { beforeEach, describe, expect, it } from "vitest";
-import { classifyPasswords, groupIntent, usernameScore, type FieldFeatures } from "./classify";
+import { classifyPasswords, groupIntent, USERNAME_THRESHOLD, usernameScore, type FieldFeatures } from "./classify";
 import { fillLogin, fillNewPassword, fillOtp, markUserEdit, setValue } from "./fill";
 import { classifyGroup, fieldsOf, groupFor, MAX_GROUP_INPUTS, type Env } from "./group";
 import { findLoginGroup, findOtpGroup, readSubmission } from "./page";
@@ -99,6 +99,13 @@ describe("field classification", () => {
       kind: "current-password",
       confidence: 1,
     });
+  });
+
+  it("an e-mail address field is a username; another address is not", () => {
+    const words = (attrs: string, text: string) => f({ attrs: normalize(attrs), text: normalize(text) });
+    expect(usernameScore(words("CPF or Email Address", "E-mail ou CPF"), ctx)).toBeGreaterThanOrEqual(USERNAME_THRESHOLD);
+    expect(usernameScore(f({ type: "email", attrs: "email address", text: normalize("Endereço de e-mail") }), ctx)).toBeGreaterThanOrEqual(USERNAME_THRESHOLD);
+    expect(usernameScore(words("account_address", "Address"), ctx)).toBeLessThan(USERNAME_THRESHOLD);
   });
 
   it("reads the form's intent, weighting the submit button and headings", () => {

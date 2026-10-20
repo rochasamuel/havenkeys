@@ -32,6 +32,11 @@ const BR_CHECKOUT = `<form>
   <button type="submit">Finalizar compra</button></form>`;
 
 describe("identityRoleOf", () => {
+  it("an e-mail address field is the e-mail, not the street", () => {
+    page(`<label for="e">Endereço de e-mail</label><input id="e" name="emailAddress">`);
+    expect(role("#e")).toBe("email");
+  });
+
   it("classifies a Brazilian checkout by its words", () => {
     page(BR_CHECKOUT);
     expect(role("#n")).toBe("fullName");

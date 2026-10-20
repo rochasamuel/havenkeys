@@ -14,6 +14,8 @@ import {
   USERNAME_DOCUMENT,
   USERNAME_WEAK,
   USERNAME_NEGATIVE,
+  USERNAME_NEGATIVE_UNLESS_EMAIL,
+  EMAIL_WORDS,
   OTP_STRONG,
   OTP_WEAK,
   OTP_NEGATIVE,
@@ -165,7 +167,8 @@ export function usernameScore(f: FieldFeatures, ctx: UsernameContext): number {
     s += USERNAME_WORD_IN_TEXT_WEAK;
     worded = true;
   }
-  if (hasAny(f.attrs, USERNAME_NEGATIVE) || hasAny(f.text, USERNAME_NEGATIVE)) s -= USERNAME_NEGATIVE_PENALTY;
+  const names = (list: readonly string[]) => hasAny(f.attrs, list) || hasAny(f.text, list);
+  if (names(USERNAME_NEGATIVE) || (names(USERNAME_NEGATIVE_UNLESS_EMAIL) && !names(EMAIL_WORDS))) s -= USERNAME_NEGATIVE_PENALTY;
   if (ctx.lastBeforePassword) s += USERNAME_LAST_BEFORE_PASSWORD;
   if (!ctx.hasPassword && ctx.loginIntent && worded) s += USERNAME_LOGIN_INTENT_BONUS;
   return s;

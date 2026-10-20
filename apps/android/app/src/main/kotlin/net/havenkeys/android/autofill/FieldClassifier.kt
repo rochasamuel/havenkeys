@@ -96,7 +96,9 @@ object FieldClassifier {
             s.text.has(USERNAME_WEAK) -> WORD_IN_TEXT_WEAK
             else -> 0
         }
-        if (s.words.has(USERNAME_NEGATIVE)) score -= NEGATIVE
+        val negative = s.words.has(USERNAME_NEGATIVE) ||
+            (s.words.has(USERNAME_NEGATIVE_UNLESS_EMAIL) && !s.words.has(EMAIL_WORDS))
+        if (negative) score -= NEGATIVE
         return score
     }
 
@@ -178,8 +180,9 @@ object FieldClassifier {
     private val USERNAME_STRONG = Phrases(SharedWords.USERNAME_STRONG + SharedWords.USERNAME_DOCUMENT)
     private val USERNAME_WEAK = Phrases(SharedWords.USERNAME_WEAK)
 
-    // Android's list has no "address": "email address" names a username.
     private val USERNAME_NEGATIVE = Phrases(SharedWords.USERNAME_NEGATIVE)
+    private val USERNAME_NEGATIVE_UNLESS_EMAIL = Phrases(SharedWords.USERNAME_NEGATIVE_UNLESS_EMAIL)
+    private val EMAIL_WORDS = Phrases(SharedWords.EMAIL_WORDS)
     private val AC_NOT_LOGIN = SharedWords.AC_NOT_LOGIN.toSet()
     private val CARD_WORDS = Phrases(SharedWords.LOGIN_CARD_WORDS)
 

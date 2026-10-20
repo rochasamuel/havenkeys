@@ -115,7 +115,6 @@
         "zip",
         "postal",
         "city",
-        "address",
         "street",
         "first name",
         "last name",
@@ -154,6 +153,19 @@
         "buscar",
         "pesquisar",
         "cupom"
+      ]
+    },
+    "USERNAME_NEGATIVE_UNLESS_EMAIL": {
+      "comment": "Counts against a username unless the same field names email (\"email address\", \"endereço de e-mail\").",
+      "words": [
+        "address"
+      ]
+    },
+    "EMAIL_WORDS": {
+      "comment": "Words naming an e-mail.",
+      "words": [
+        "email",
+        "e mail"
       ]
     },
     "OTP_STRONG": {
