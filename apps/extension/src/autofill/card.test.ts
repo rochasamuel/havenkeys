@@ -15,7 +15,26 @@ const years = Array.from({ length: 12 }, (_, i) => `<option>${2026 + i}</option>
 
 beforeEach(() => page(""));
 
+const floating = (label: string, input: string) =>
+  `<div class="sub"><div class="body"><div class="wrap">${input}</div></div><label class="placeholderLabel">${label}</label></div>`;
+
 describe("card classifier", () => {
+  it("reads a floating label next to the box (Shopee's add-card form)", () => {
+    page(`<div class="card">
+      ${floating("Número do Cartão", `<input id="n" maxlength="19" inputmode="numeric" autocomplete="off" type="tel">`)}
+      ${floating("Data de Validade (MM/AA)", `<input id="e" maxlength="5" inputmode="numeric" autocomplete="off" type="tel">`)}
+      ${floating("CVV", `<input id="c" maxlength="3" inputmode="numeric" autocomplete="new-password" type="password">`)}
+      ${floating("Nome no Cartão", `<input id="h" autocomplete="off" type="text">`)}
+      ${floating("CPF", `<input id="d" maxlength="18" type="text">`)}
+    </div>`);
+    expect(kinds("#n")).toEqual([["n", "number"], ["e", "expiry"], ["c", "verificationNumber"], ["h", "cardholderName"]]);
+  });
+
+  it("does not borrow a label from a wrapper that holds two boxes", () => {
+    page(`<div><input id="a" type="tel"><input id="b" type="tel"><label>Número do Cartão</label></div>`);
+    expect(cardKindOf($("#a"), false)).toBeNull();
+  });
+
   it("other holder details under a credit-card name are not the card number, in Portuguese and English", () => {
     const labels = [
       "CPF do titular", "CNPJ", "RG", "Documento", "Identidade", "CNH", "Passaporte", "Celular (DDD)", "Fone", "WhatsApp",

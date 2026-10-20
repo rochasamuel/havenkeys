@@ -31,6 +31,9 @@ const BR_CHECKOUT = `<form>
   <label for="s">UF</label><select id="s" name="uf"><option value="">--</option><option value="DF">DF</option></select>
   <button type="submit">Finalizar compra</button></form>`;
 
+const floating = (label: string, input: string) =>
+  `<div class="sub"><div class="body"><div class="wrap">${input}</div></div><label class="placeholderLabel">${label}</label></div>`;
+
 describe("identityRoleOf", () => {
   it("a tel box's label decides its role; a bare tel box is a phone", () => {
     page(`<label for="b">Data de nascimento</label><input id="b" name="nascimento" type="tel" placeholder="dd/mm/aaaa">
@@ -65,6 +68,15 @@ describe("identityRoleOf", () => {
     expect(role("#t")).toBe("city");
     expect(role("#r")).toBe("street");
     expect(role("#a")).toBe("street");
+  });
+
+  it("reads a floating label next to the box", () => {
+    page(`${floating("CPF", `<input id="d" maxlength="18" type="text">`)}
+      ${floating("CEP", `<input id="z" type="text">`)}
+      ${floating("Cidade", `<input id="c" maxlength="50" type="text">`)}`);
+    expect(role("#d")).toBe("cpf");
+    expect(role("#z")).toBe("postalCode");
+    expect(role("#c")).toBe("city");
   });
 
   it("an e-mail address field is the e-mail, not the street", () => {

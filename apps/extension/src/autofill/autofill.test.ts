@@ -147,7 +147,18 @@ describe("field classification", () => {
   });
 });
 
+const floating = (label: string, input: string) =>
+  `<div class="sub"><div class="body"><div class="wrap">${input}</div></div><label class="placeholderLabel">${label}</label></div>`;
+
 describe("login groups", () => {
+  it("reads floating labels next to the boxes", () => {
+    page(`<div>
+      ${floating("Usuário", `<input id="u" type="text" autocomplete="off">`)}
+      ${floating("Senha", `<input id="p" type="password">`)}
+    </div>`);
+    expect(groupFor($("#u"), env()).kind).toBe("username");
+  });
+
   it("an identity provider's button says nothing about the form's intent", () => {
     page(`<form><h1>Create account</h1><input id="u" type="email"><input id="p" type="password">
       <button type="submit">Sign in with Google</button><button type="submit">Continuar com a Apple</button></form>`);

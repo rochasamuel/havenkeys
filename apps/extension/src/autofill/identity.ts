@@ -8,6 +8,7 @@
 import { DOCUMENT_ROLES, MAX_IDENTITY_ROLES, type IdentityRole } from "@havenkeys/protocol";
 import { cardKindOf } from "./card-kind";
 import { groupRoot, MAX_GROUP_INPUTS, type Env } from "./group";
+import { labelText } from "./labels";
 import { hasAny, MAX_HINT_CHARS, normalize } from "./text";
 import {
   IDENTITY_BIRTH as BIRTH,
@@ -144,12 +145,6 @@ function compound(role: IdentityRole, all: string): IdentityRole | null {
 
 function attr(el: Element, n: string): string {
   return (el.getAttribute(n) ?? "").slice(0, MAX_HINT_CHARS);
-}
-
-function labelText(el: IdentityElement): string {
-  const parts: string[] = [];
-  for (const l of Array.from(el.labels ?? []).slice(0, 2)) parts.push((l.textContent ?? "").slice(0, MAX_HINT_CHARS));
-  return parts.join(" ");
 }
 
 function autocompleteRole(el: IdentityElement): IdentityRole | null {

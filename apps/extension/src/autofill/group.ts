@@ -25,6 +25,7 @@ import {
   type FieldFeatures,
   type GroupIntent,
 } from "./classify";
+import { labelText } from "./labels";
 import { MAX_HINT_CHARS, normalize } from "./text";
 import { isIdentityVisible } from "./visibility";
 
@@ -104,11 +105,8 @@ function labelledBy(el: HTMLElement): string {
     .slice(0, MAX_HINT_CHARS);
 }
 
-function labelText(el: HTMLInputElement): string {
-  const parts: string[] = [];
-  for (const l of Array.from(el.labels ?? []).slice(0, 2)) parts.push((l.textContent ?? "").slice(0, MAX_HINT_CHARS));
-  parts.push(labelledBy(el));
-  return parts.join(" ");
+function labelsOf(el: HTMLInputElement): string {
+  return `${labelText(el)} ${labelledBy(el)}`;
 }
 
 /** A one-time code's placeholder mask: 4 to 8 of `-`, `_`, `•` or `0`. */
@@ -120,7 +118,7 @@ export function features(el: HTMLInputElement): FieldFeatures {
     type: el.type.toLowerCase(),
     autocomplete: attr("autocomplete").toLowerCase().split(/\s+/).filter(Boolean),
     attrs: normalize(`${attr("name")} ${attr("id")}`),
-    text: normalize(`${attr("placeholder")} ${attr("aria-label")} ${attr("title")} ${labelText(el)}`, MAX_HINT_CHARS * 3),
+    text: normalize(`${attr("placeholder")} ${attr("aria-label")} ${attr("title")} ${labelsOf(el)}`, MAX_HINT_CHARS * 3),
     maxLength: el.maxLength,
     inputMode: attr("inputmode").toLowerCase(),
     codeMask: CODE_MASK.test(attr("placeholder").trim()),

@@ -6,6 +6,7 @@
 // is evaluated or inserted.
 
 import type { CardRole } from "@havenkeys/protocol";
+import { labelText } from "./labels";
 import { hasAny, MAX_HINT_CHARS, normalize } from "./text";
 import {
   CARD_NOT_AN_EXPIRY as NOT_AN_EXPIRY,
@@ -69,12 +70,6 @@ const AMBIGUOUS = new Set(CARD_AMBIGUOUS);
 
 function attr(el: Element, n: string): string {
   return (el.getAttribute(n) ?? "").slice(0, MAX_HINT_CHARS);
-}
-
-function labelText(el: CardElement): string {
-  const parts: string[] = [];
-  for (const l of Array.from(el.labels ?? []).slice(0, 2)) parts.push((l.textContent ?? "").slice(0, MAX_HINT_CHARS));
-  return parts.join(" ");
 }
 
 function autocompleteKind(el: CardElement): CardFieldKind | null {

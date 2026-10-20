@@ -235,7 +235,7 @@ Each field gets a score per role. No single heuristic decides.
 | `autocomplete=new-password` | ignored: sites set it on every field to switch off browser autofill (gov.br's CPF box) | |
 | `type=email` | +80 | |
 | Strong keyword in `name`/`id` (username, login, email, account, usuario, operador…) or a document-number word (CPF, CNPJ, RG, documento, matrícula, NIF, NIE, DNI, CIF, RUT, CUIT/CUIL, CURP, RFC, cédula, passport, national id, codice fiscale) | +50 | |
-| Strong keyword in placeholder, aria-label, title, `<label>`, `aria-labelledby` | +40 | |
+| Strong keyword in placeholder, aria-label, title, `<label>`, `aria-labelledby`, or a floating label (below) | +40 | |
 | Weak keyword (user, mail, phone…) | +25 / +20 | |
 | OTP keyword (otp, 2fa, verification code, token, sms code…) / weak (code, código, pin) | | +70 / +30 |
 | Placeholder that is only a code mask (4–8 of `-`, `_`, `•`, `0`: `------`, `000000`) | | +30 (never enough alone) |
@@ -249,6 +249,12 @@ Each field gets a score per role. No single heuristic decides.
 
 Keywords are compared as whole words after normalization (lowercase, accents
 removed, camelCase and punctuation split): `loginEmail` → `login email`.
+A field with no linked `<label>` reads a **floating label**: an unlinked
+`<label>` beside it, inside a wrapper (up to three levels up, 60 elements
+each) whose only control is that field. React forms such as Shopee's
+add-card page draw their labels this way. A wrapper holding a second
+control lends no label, so a field never takes its neighbour's. The login,
+card and identity classifiers all read it (`autofill/labels.ts`).
 Dotted single letters join first, so `C.P.F.` → `cpf` and `R.G.` → `rg`
 (but `e.mail` → `e mail`). English, Portuguese and Spanish are covered.
 
