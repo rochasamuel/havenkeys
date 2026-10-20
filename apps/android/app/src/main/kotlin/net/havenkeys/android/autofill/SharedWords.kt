@@ -22,6 +22,7 @@ internal object SharedWords {
     val CARD_CODE_WORDS: List<String> = listOf("code", "codigo", "cod")
     val CARD_NEGATIVE: List<String> = listOf("gift card", "cartao presente", "vale presente", "loyalty", "fidelidade", "coupon", "cupom", "promo", "search", "busca", "pesquisar", "parcela", "parcelas", "installment", "installments", "vezes", "quantidade")
     val CARD_NOT_A_NAME: List<String> = listOf("cpf", "documento", "nascimento", "birth", "email", "e mail", "telefone", "phone")
+    val CARD_NOT_A_NUMBER: List<String> = listOf("cpf", "cnpj", "rg", "documento", "document", "telefone", "phone", "celular", "mobile", "whatsapp")
     val IDENTITY_BIRTH: List<String> = listOf("nascimento", "birth", "naturalidade", "dob")
     val IDENTITY_PLACE: List<String> = listOf("cidade", "city", "town", "municipio", "pais", "country", "local", "place", "estado", "state", "uf")
     val IDENTITY_DOCUMENT: List<String> = listOf("documento", "document", "doc")

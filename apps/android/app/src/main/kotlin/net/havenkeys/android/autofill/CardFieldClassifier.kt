@@ -87,6 +87,7 @@ object CardFieldClassifier {
             hasAny(s.attrs, usable) || hasAny(s.text, usable)
         }?.first
         val refused = (kind == CardKind.CARDHOLDER_NAME && hasAny(s.all, NOT_A_NAME)) ||
+            (kind == CardKind.NUMBER && hasAny(s.all, NOT_A_NUMBER)) ||
             (kind == CardKind.EXPIRY && hasAny(s.all, NOT_AN_EXPIRY))
         return when {
             kind == null -> null
@@ -156,4 +157,5 @@ object CardFieldClassifier {
     private val CODE_WORDS = SharedWords.CARD_CODE_WORDS
     private val NEGATIVE = SharedWords.CARD_NEGATIVE
     private val NOT_A_NAME = SharedWords.CARD_NOT_A_NAME
+    private val NOT_A_NUMBER = SharedWords.CARD_NOT_A_NUMBER
 }

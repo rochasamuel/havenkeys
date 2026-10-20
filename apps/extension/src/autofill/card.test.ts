@@ -16,6 +16,17 @@ const years = Array.from({ length: 12 }, (_, i) => `<option>${2026 + i}</option>
 beforeEach(() => page(""));
 
 describe("card classifier", () => {
+  it("a CPF or phone box under a credit-card name is not the card number (Nuvem Pago)", () => {
+    page(`<input id="n" name="payment.creditCard.cardNumber" autocomplete="cc-number" type="tel">
+      <label for="d">CPF ou CNPJ do portador do cartão</label><input id="d" name="payment.creditCard.cardHolderIdNumber" autocomplete="card_holder_id_number">
+      <label for="t">Telefone</label><input id="t" name="payment.creditCard.cardHolderPhone" autocomplete="on" type="tel">`);
+    for (const strong of [false, true]) {
+      expect(cardKindOf($("#d"), strong)).toBeNull();
+      expect(cardKindOf($("#t"), strong)).toBeNull();
+    }
+    expect(kinds("#n")).toEqual([["n", "number"]]);
+  });
+
   it("Portuguese cardholder-name labels name the cardholder, even alone", () => {
     for (const label of ["Nome Descrito no Cartão", "Nome impresso no cartão", "Nome no cartão", "Titular do cartão"]) {
       page(`<label for="h">${label}</label><input id="h" name="person[payment_attributes][owner_account]">`);

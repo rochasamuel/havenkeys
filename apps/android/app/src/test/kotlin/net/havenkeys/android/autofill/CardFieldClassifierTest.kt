@@ -9,6 +9,17 @@ class CardFieldClassifierTest {
     private fun kind(f: FieldFacts, strong: Boolean = false) = CardFieldClassifier.kindOf(f, strong)?.kind
 
     @Test
+    fun aCpfOrPhoneBoxUnderACreditCardNameIsNotTheCardNumber() {
+        val cpf = mapOf(
+            "name" to "payment.creditCard.cardHolderIdNumber",
+            "label" to "CPF ou CNPJ do portador do cartão",
+        )
+        for (strong in listOf(false, true)) assertEquals(null, kind(field(html = cpf), strong))
+        val phone = mapOf("name" to "payment.creditCard.cardHolderPhone", "type" to "tel", "label" to "Telefone")
+        for (strong in listOf(false, true)) assertEquals(null, kind(field(html = phone), strong))
+    }
+
+    @Test
     fun portugueseCardholderNameLabelsNameTheCardholderEvenAlone() {
         val labels = listOf("Nome Descrito no Cartão", "Nome impresso no cartão", "Nome no cartão", "Titular do cartão")
         for (label in labels) {

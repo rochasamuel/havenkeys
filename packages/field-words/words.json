@@ -479,6 +479,21 @@
         "phone"
       ]
     },
+    "CARD_NOT_A_NUMBER": {
+      "comment": "A card-number match (often only \"credit card\" in a name like payment.creditCard.cardHolderPhone) that also names one of these is something else.",
+      "words": [
+        "cpf",
+        "cnpj",
+        "rg",
+        "documento",
+        "document",
+        "telefone",
+        "phone",
+        "celular",
+        "mobile",
+        "whatsapp"
+      ]
+    },
     "CARD_MONTH_NAMES": {
       "extension": [
         "jan",

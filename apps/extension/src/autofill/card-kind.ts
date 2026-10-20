@@ -14,6 +14,7 @@ import {
   CARD_CODE_WORDS as CODE_WORDS,
   CARD_NEGATIVE as NEGATIVE,
   CARD_NOT_A_NAME as NOT_A_NAME,
+  CARD_NOT_A_NUMBER as NOT_A_NUMBER,
   CARD_MONTH_NAMES as MONTH_NAMES,
   CARD_WORDS_VERIFICATION_NUMBER,
   CARD_WORDS_CARDHOLDER_NAME,
@@ -149,6 +150,7 @@ export function cardKindOf(el: CardElement, strong: boolean): { kind: CardFieldK
     const confidence = hasAny(attrs, words) ? 0.7 : hasAny(text, words) ? 0.6 : 0;
     if (confidence === 0) continue;
     if (kind === "cardholderName" && hasAny(all, NOT_A_NAME)) return null;
+    if (kind === "number" && hasAny(all, NOT_A_NUMBER)) return null;
     if (kind === "expiry" && hasAny(all, NOT_AN_EXPIRY)) return null;
     return allowed(kind) ? { kind, confidence, byAutocomplete: false } : null;
   }

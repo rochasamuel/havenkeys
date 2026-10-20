@@ -28,6 +28,7 @@ export const CARD_YEAR_WORDS: readonly string[] = ["year","ano","yy","yyyy","aa"
 export const CARD_CODE_WORDS: readonly string[] = ["code","codigo","cod"];
 export const CARD_NEGATIVE: readonly string[] = ["gift card","cartao presente","vale presente","loyalty","fidelidade","coupon","cupom","promo","search","busca","pesquisar","parcela","parcelas","installment","installments","vezes","quantidade"];
 export const CARD_NOT_A_NAME: readonly string[] = ["cpf","documento","nascimento","birth","email","e mail","telefone","phone"];
+export const CARD_NOT_A_NUMBER: readonly string[] = ["cpf","cnpj","rg","documento","document","telefone","phone","celular","mobile","whatsapp"];
 export const CARD_MONTH_NAMES: readonly string[] = ["jan","feb","fev","mar","apr","abr","may","mai","jun","jul","aug","ago","sep","set","oct","out","nov","dec","dez"];
 export const IDENTITY_BIRTH: readonly string[] = ["nascimento","birth","naturalidade","dob"];
 export const IDENTITY_PLACE: readonly string[] = ["cidade","city","town","municipio","pais","country","local","place","estado","state","uf"];
