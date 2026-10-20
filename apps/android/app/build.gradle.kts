@@ -25,8 +25,8 @@ android {
         applicationId = "net.havenkeys.android"
         minSdk = 28
         targetSdk = 36
-        versionCode = 20
-        versionName = "0.16.0"
+        versionCode = 21
+        versionName = "0.16.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
