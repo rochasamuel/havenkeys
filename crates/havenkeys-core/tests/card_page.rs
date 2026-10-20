@@ -127,6 +127,7 @@ fn processor_and_same_site_frames_are_served() {
         "https://checkoutshopper-live.adyen.com/checkoutshopper/securedfields/x/securedFields.html",
         "https://assets.braintreegateway.com/web/3.0/html/hosted-fields-frame.min.html",
         "https://secure-fields.mercadopago.com/",
+        "https://checkout-security.ms.tiendanube.com/?cartId=1&cartHash=x&storeId=2",
         "https://pay.example.com/card",
     ] {
         assert!(
@@ -145,6 +146,9 @@ fn look_alike_and_cross_site_frames_are_denied() {
         "https://evil.com/card",
         "http://js.stripe.com/v3/",
         "https://js.stripe.com:8443/",
+        "https://checkout-security.ms.tiendanube.com.evil.com/",
+        "https://evil.ms.tiendanube.com/",
+        "http://checkout-security.ms.tiendanube.com/",
     ] {
         assert!(
             matches!(v.cards_for_page(frame, Some(SHOP), NOW), Err(Error::Denied)),

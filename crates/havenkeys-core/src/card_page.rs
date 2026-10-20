@@ -43,6 +43,11 @@ pub const PAYMENT_FRAME_ORIGINS: &[&str] = &[
     // "prod" environment: the iframe loads cacheUrl, falling back to sourceUrl.
     "https://secure-fields.mercadopago.com",
     "https://api-static.mercadopago.com",
+    // Nuvem Pago (Nuvemshop / Tiendanube) transparent checkout: its card
+    // form is this frame, embedded in the store's checkout with the cart and
+    // store ids. Observed on a live Nuvem Pago checkout (2026-10-19); no
+    // public documentation names it.
+    "https://checkout-security.ms.tiendanube.com",
 ];
 
 /// Hosts whose subdomains serve card fields too. Stripe: "Adding

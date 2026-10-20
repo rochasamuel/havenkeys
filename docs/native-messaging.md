@@ -434,7 +434,10 @@ For every request the bridge and core check, in this order:
    `-live-au`, `-live-apse`, `-live-in`, `-live-nea` on `adyen.com`);
    Braintree Hosted Fields (`https://assets.braintreegateway.com`); Mercado
    Pago Secure Fields (`https://secure-fields.mercadopago.com`,
-   `https://api-static.mercadopago.com`). A processor origin must have the
+   `https://api-static.mercadopago.com`); Nuvem Pago, Nuvemshop's
+   transparent checkout (`https://checkout-security.ms.tiendanube.com`,
+   the one entry taken from a live checkout rather than documentation). A
+   processor origin must have the
    default port. No test or sandbox origins. Adding an origin is a code
    change with a test.
 6. **Secret minimization:** `find_matches` returns ID, title, username, a
