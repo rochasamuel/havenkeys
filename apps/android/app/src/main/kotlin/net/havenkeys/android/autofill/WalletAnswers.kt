@@ -24,10 +24,10 @@ internal suspend fun AutofillAuthActivity.answerCard(
     val container = (application as HavenApp).container
     val repo = container.autofillRepository
     when {
-        mode == DatasetFactory.MODE_UNLOCK -> finishOrCancel(
+        mode == DatasetFactory.MODE_UNLOCK -> finishWith(
             tapped.wallet(this).response(
                 WalletPlanner.plan(Routed.Card(form), tapped.target, container.isUnlocked(), repo, direct = false),
-            ),
+            ).orEmptyAfterUnlock(),
         )
         mode == DatasetFactory.MODE_CARD && itemId != null -> {
             val confirmation = CardConfirmation.prepare(repo, form, tapped.target, itemId) ?: return cancel()
@@ -93,9 +93,8 @@ private suspend fun AutofillAuthActivity.answerIdentityUnlock(tapped: TappedRequ
     val repo = container.autofillRepository
     val plan = WalletPlanner.plan(identity, tapped.target, unlocked, repo, direct = false)
     val wallet = tapped.wallet(this).response(plan)
-    finishOrCancel(
-        withLoginSaveFallback(wallet, identity.save) { tapped.loginSave(this, it, unlocked, repo) },
-    )
+    val answer = withLoginSaveFallback(wallet, identity.save) { tapped.loginSave(this, it, unlocked, repo) }
+    finishWith(answer.orEmptyAfterUnlock())
 }
 
 /**

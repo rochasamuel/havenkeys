@@ -81,7 +81,7 @@ class AutofillAuthActivity : FragmentActivity() {
                     repo,
                     saveable = login.save != null,
                 ),
-            )
+            ).orEmptyAfterUnlock()
             itemId == null -> null
             mode == DatasetFactory.MODE_FILL ->
                 (repo.fill(itemId, tapped.target) as? Outcome.Ok)?.value?.let(factory::loginDataset)

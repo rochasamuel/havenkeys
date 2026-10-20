@@ -2,6 +2,7 @@ package net.havenkeys.android.autofill
 
 import android.content.Context
 import android.os.Build
+import android.os.Bundle
 import android.service.autofill.Dataset
 import android.service.autofill.FillResponse
 import android.service.autofill.SaveInfo
@@ -190,3 +191,11 @@ internal fun SaveForm.saveInfoIn(screen: ParsedScreen, description: CharSequence
 }
 
 private fun List<Int>.idIn(screen: ParsedScreen): AutofillId? = firstOrNull()?.let(screen.ids::getOrNull)
+
+/**
+ * An unlock's answer replaces the locked response Android cached for the
+ * screen; null would cancel and leave the "Unlock HavenKeys" row there, so
+ * nothing to offer is an empty response.
+ */
+internal fun FillResponse?.orEmptyAfterUnlock(): FillResponse =
+    this ?: FillResponse.Builder().setClientState(Bundle()).build()
