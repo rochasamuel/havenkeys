@@ -234,7 +234,7 @@ describe("suggestion menus", () => {
   });
 
   it("an OTP field on a look-alike page warns too; passkey rows are not offered there", async () => {
-    const row = { itemId: GH, credentialId: "AQEBAQEBAQEBAQEBAQEBAQ", title: "GitHub", userName: "octo" };
+    const row = { itemId: GH, credentialId: "AQEBAQEBAQEBAQEBAQEBAQ", title: "GitHub", userName: "octo", replaced: false };
     const { h } = setup(defaultAnswer, { passkeys: { conditionalFor: () => [row], pickConditional: async () => ({ ok: true as const, value: null }) } });
     const f = frame({ url: LOOKALIKE, origin: "https://xn--gthub-n2e.com" });
     expect(await h.handleContent(f, { type: "cs_open_menu", kind: "otp" })).toEqual({ ok: true, token: T1, rows: 1 });
@@ -243,7 +243,7 @@ describe("suggestion menus", () => {
   });
 
   it("a login field on a look-alike page warns instead of offering a waiting passkey", async () => {
-    const row = { itemId: GH, credentialId: "AQEBAQEBAQEBAQEBAQEBAQ", title: "GitHub", userName: "octo" };
+    const row = { itemId: GH, credentialId: "AQEBAQEBAQEBAQEBAQEBAQ", title: "GitHub", userName: "octo", replaced: false };
     const { h } = setup(defaultAnswer, { passkeys: { conditionalFor: () => [row], pickConditional: async () => ({ ok: true as const, value: null }) } });
     const f = frame({ url: LOOKALIKE, origin: "https://xn--gthub-n2e.com" });
     expect(await h.handleContent(f, { type: "cs_open_menu", kind: "login" })).toEqual({ ok: true, token: T1, rows: 1 });
@@ -301,7 +301,7 @@ describe("suggestion menus", () => {
 
   it("frozen with a site's passkey autofill waiting: the menu offers only the passkey", async () => {
     const CRED = "AQEBAQEBAQEBAQEBAQEBAQ";
-    const row = { itemId: GH, credentialId: CRED, title: "GitHub", userName: "octo" };
+    const row = { itemId: GH, credentialId: CRED, title: "GitHub", userName: "octo", replaced: false };
     const frozen = (r: Request) =>
       r.type === "find_matches" ? { type: "find_matches", matches: [ghMatch], entitlement: "frozen" } : defaultAnswer(r);
     const passkeys = (rows: (typeof row)[]) => ({
@@ -950,7 +950,7 @@ describe("save prompts", () => {
 
 describe("passkeys in the field menu", () => {
   const CRED = "AQEBAQEBAQEBAQEBAQEBAQ";
-  const row = { itemId: GH, credentialId: CRED, title: "GitHub", userName: "octo" };
+  const row = { itemId: GH, credentialId: CRED, title: "GitHub", userName: "octo", replaced: false };
 
   function withPasskeys(rows = [row]) {
     const picks: unknown[] = [];
@@ -1036,7 +1036,7 @@ describe("passkey hints in the login menu", () => {
   });
 
   it("does not ask when the site offers passkey autofill (passkey rows already lead)", async () => {
-    const row = { itemId: GH, credentialId: "AQEBAQEBAQEBAQEBAQEBAQ", title: "GitHub", userName: "octo" };
+    const row = { itemId: GH, credentialId: "AQEBAQEBAQEBAQEBAQEBAQ", title: "GitHub", userName: "octo", replaced: false };
     const { h, requests } = setup(status(true), {
       passkeySite: () => GH_SITE,
       passkeys: { conditionalFor: () => [row], pickConditional: async () => ({ ok: true, value: null }) },
@@ -1275,7 +1275,7 @@ describe("suggestions preference", () => {
 
 describe("suggestions off: passkey autofill still shows", () => {
   const CRED = "AQEBAQEBAQEBAQEBAQEBAQ";
-  const row = { itemId: GH, credentialId: CRED, title: "GitHub", userName: "octo" };
+  const row = { itemId: GH, credentialId: CRED, title: "GitHub", userName: "octo", replaced: false };
 
   function offWithPasskeys(rows = [row]) {
     const requests: Request[] = [];

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const reveal = vi.fn();
 const itemFields = vi.fn();
+const listPasskeys = vi.fn();
 
 // Every other command answers null; event subscriptions return an unlisten.
 vi.mock("../lib/api", async (importOriginal) => {
@@ -12,6 +13,7 @@ vi.mock("../lib/api", async (importOriginal) => {
   const known: Record<string, unknown> = {
     reveal: (...a: unknown[]) => reveal(...a),
     itemFields: (...a: unknown[]) => itemFields(...a),
+    listPasskeys: (...a: unknown[]) => listPasskeys(...a),
   };
   return {
     ...original,
@@ -89,5 +91,45 @@ describe("ItemDetail secure note fields", () => {
     const fieldLabel = [...host.querySelectorAll("*")].find((e) => e.textContent === "Host")!;
     expect(fieldLabel).toBeDefined();
     expect(sheet.compareDocumentPosition(fieldLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe("ItemDetail passkeys", () => {
+  it("marks a replaced passkey as the older one", async () => {
+    const login: ItemOverview = { ...note, id: "l1", itemType: "login", title: "GitHub", username: "octo", hasPasskey: true };
+    listPasskeys.mockResolvedValue([
+      { credentialId: "new", rpId: "github.com", userName: "octo", displayName: null, createdAt: 2, replaced: false },
+      { credentialId: "old", rpId: "github.com", userName: "octo", displayName: null, createdAt: 1, replaced: true },
+    ]);
+    await act(async () =>
+      root.render(
+        <ToastProvider>
+          <ItemDetail item={login} revision={0} readOnly={false} onEdit={() => undefined} onDelete={() => undefined} onOpen={() => undefined} />
+        </ToastProvider>,
+      ),
+    );
+    const rows = [...host.querySelectorAll(".history-row")].map((r) => r.textContent ?? "");
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).not.toContain("Older passkey");
+    expect(rows[1]).toContain("Older passkey");
+  });
+
+  it("does not warn about losing access when deleting the older passkey", async () => {
+    const login: ItemOverview = { ...note, id: "l1", itemType: "login", title: "GitHub", username: "octo", hasPasskey: true };
+    listPasskeys.mockResolvedValue([
+      { credentialId: "new", rpId: "github.com", userName: "octo", displayName: null, createdAt: 2, replaced: false },
+      { credentialId: "old", rpId: "github.com", userName: "octo", displayName: null, createdAt: 1, replaced: true },
+    ]);
+    await act(async () =>
+      root.render(
+        <ToastProvider>
+          <ItemDetail item={login} revision={0} readOnly={false} onEdit={() => undefined} onDelete={() => undefined} onOpen={() => undefined} />
+        </ToastProvider>,
+      ),
+    );
+    const old = host.querySelectorAll(".history-row")[1]!;
+    await act(async () => (old.querySelector("button") as HTMLButtonElement).click());
+    expect(old.textContent).toContain("The newer passkey stays.");
+    expect(old.textContent).not.toContain("lose access");
   });
 });

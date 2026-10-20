@@ -387,6 +387,7 @@ mod tests {
             display_name: None,
             private_key: SecretBytes::new(key),
             created_at: 1,
+            replaced_at: None,
         }
     }
 

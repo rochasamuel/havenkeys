@@ -10,7 +10,7 @@ const CRED = "AQEBAQEBAQEBAQEBAQEBAQ";
 const T1 = "0".repeat(31) + "1";
 const getOpts: GetOptions = { rpId: null, challenge: "AQ", allowCredentials: [], conditional: false, timeoutMs: null };
 const createOpts: CreateOptions = { rpId: "github.com", challenge: "AQ", userId: "AQ", userName: "octo", userDisplayName: null, algs: [-7], excludeCredentials: [], timeoutMs: null, conditional: false };
-const match = { itemId: ITEM, credentialId: CRED, title: "GitHub", userName: "octo" };
+const match = { itemId: ITEM, credentialId: CRED, title: "GitHub", userName: "octo", replaced: false };
 const signed = { type: "passkey_get", credentialId: CRED, authenticatorData: "AA", clientDataJson: "e30", signature: "MEU", userHandle: "AQ" };
 const created = { type: "passkey_create", credentialId: CRED, attestationObject: "oA", clientDataJson: "e30", authenticatorData: "AA", publicKey: "MA", publicKeyAlgorithm: -7 };
 

@@ -119,6 +119,12 @@ pub enum Dispatched {
         write: StagedWrite,
         result: ResultBody,
     },
+    /// `result` stands on its own; the caller also sends `write`, a clean-up
+    /// that may fail (offline, frozen) without changing the answer.
+    Tidy {
+        write: StagedWrite,
+        result: ResultBody,
+    },
     /// The item may be opened in the desktop; the caller runs the open-item
     /// hook once the vault lock is released, then returns `result`.
     Open { item: Uuid, result: ResultBody },
@@ -393,9 +399,25 @@ pub(crate) fn dispatch_with(
                     credential_id: encode_b64url(&m.credential_id),
                     title: m.title,
                     user_name: m.user_name,
+                    replaced: m.replaced,
                 })
                 .collect();
-            Ok(Dispatched::Done(ResultBody::FindPasskeys { passkeys }))
+            let result = ResultBody::FindPasskeys { passkeys };
+            // The site listed an account's new passkey: it knows it, so the
+            // replaced one can go (security-review PK5).
+            let tidy = v
+                .stage_drop_replaced_passkeys(
+                    rp_id,
+                    url,
+                    top_url.as_deref(),
+                    &allow,
+                    now_ms(unix_seconds),
+                )
+                .map_err(code)?;
+            Ok(match tidy {
+                Some(write) => Dispatched::Tidy { write, result },
+                None => Dispatched::Done(result),
+            })
         }
         Request::PasskeyGet {
             item_id,

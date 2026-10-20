@@ -189,6 +189,7 @@ pub(crate) fn register(
         display_name: user.display_name,
         private_key: secret,
         created_at: now_ms,
+        replaced_at: None,
     };
     Ok((passkey, registration))
 }

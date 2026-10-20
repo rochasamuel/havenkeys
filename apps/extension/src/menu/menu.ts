@@ -420,7 +420,7 @@ function render(t: string, view: MenuView): void {
   }
   const kind = view.kind;
   const passkeyRows = view.passkeys.map((p) =>
-    row(monogram(p.title), p.title, msg.menu.passkeyRow(p.userName || msg.menu.passkeyAccountFallback), () =>
+    row(monogram(p.title), p.title, (p.replaced ? msg.menu.olderPasskeyRow : msg.menu.passkeyRow)(p.userName || msg.menu.passkeyAccountFallback), () =>
       pick({ type: "menu_pick_passkey", token: t, itemId: p.itemId, credentialId: p.credentialId }),
     ),
   );

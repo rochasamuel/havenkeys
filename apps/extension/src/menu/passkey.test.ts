@@ -80,10 +80,33 @@ describe("passkey card", () => {
     await vi.advanceTimersByTimeAsync(1500);
     expect(asked).toHaveLength(2);
     expect(text("question")).toBe("HavenKeys is locked");
-    replies = [{ ok: true, value: { state: "chooser", site: "github.com", passkeys: [{ itemId: ITEM, credentialId: CRED, title: "GitHub", userName: "octo" }] } }];
+    replies = [{ ok: true, value: { state: "chooser", site: "github.com", passkeys: [{ itemId: ITEM, credentialId: CRED, title: "GitHub", userName: "octo", replaced: false }] } }];
     await vi.advanceTimersByTimeAsync(1500);
     expect(asked).toHaveLength(3);
     expect(text("question")).toBe("Sign in with a passkey");
+  });
+
+  it("labels a replaced passkey in the chooser as the older one", async () => {
+    const OLD = "AgICAgICAgICAgICAgICAg";
+    replies = [
+      {
+        ok: true,
+        value: {
+          state: "chooser",
+          site: "github.com",
+          passkeys: [
+            { itemId: ITEM, credentialId: CRED, title: "GitHub", userName: "octo", replaced: false },
+            { itemId: ITEM, credentialId: OLD, title: "GitHub", userName: "octo", replaced: true },
+          ],
+        },
+      },
+    ];
+    await load();
+    const rows = [...document.querySelectorAll<HTMLButtonElement>("button.row")];
+    expect(rows[0]!.textContent).not.toContain("Older passkey");
+    // On the account line, so both rows keep the same height.
+    expect(rows[1]!.querySelector(".who")!.children).toHaveLength(2);
+    expect(rows[1]!.querySelector(".user")!.textContent).toBe("octo · Older passkey");
   });
 
   it("shows the already-saved card with a Close button and no Cancel", async () => {

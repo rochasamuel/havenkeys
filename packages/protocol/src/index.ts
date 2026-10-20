@@ -175,6 +175,8 @@ export interface PasskeyMatch {
   credentialId: string;
   title: string;
   userName: string;
+  /** A newer passkey for the same account exists (offered first). */
+  replaced: boolean;
 }
 
 /** A login that could hold a new passkey. */
@@ -310,10 +312,12 @@ const isCredentialId = (v: unknown): v is string => isB64Url(v, CREDENTIAL_ID_BY
 const isBlob = (v: unknown): v is string => isB64Url(v, 1, 256 * 1024);
 
 function parsePasskeyMatch(v: unknown): PasskeyMatch | null {
-  if (!isObj(v) || !hasExactKeys(v, ["itemId", "credentialId", "title", "userName"])) return null;
-  const { itemId, credentialId, title, userName } = v;
-  if (!isUuid(itemId) || !isCredentialId(credentialId) || !isStr(title) || !isStr(userName)) return null;
-  return { itemId, credentialId, title, userName };
+  const keys = ["itemId", "credentialId", "title", "userName"];
+  // The desktop sends `replaced` only when true; an older one never does.
+  if (!isObj(v) || !(hasExactKeys(v, keys) || hasExactKeys(v, [...keys, "replaced"]))) return null;
+  const { itemId, credentialId, title, userName, replaced = false } = v;
+  if (!isUuid(itemId) || !isCredentialId(credentialId) || !isStr(title) || !isStr(userName) || !isBool(replaced)) return null;
+  return { itemId, credentialId, title, userName, replaced };
 }
 
 function parseCandidate(v: unknown): PasskeyCandidate | null {

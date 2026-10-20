@@ -2809,3 +2809,79 @@ fn a1_wrong_origin_is_still_denied_when_frozen() {
         Some("denied")
     );
 }
+
+fn find_passkeys(f: &Fixture, allow: &[&str]) -> serde_json::Value {
+    call(
+        f,
+        serde_json::json!({
+            "type": "find_passkeys", "url": "https://github.com/", "rpId": "github.com",
+            "allowCredentials": allow,
+        }),
+    )
+}
+
+fn cred_of(created: &serde_json::Value) -> String {
+    created["result"]["credentialId"]
+        .as_str()
+        .unwrap()
+        .to_owned()
+}
+
+/// PK5: re-registering keeps the old passkey, offered after the new one,
+/// until the site lists the new one; then the old one is dropped.
+#[test]
+fn a_replaced_passkey_stays_until_the_site_names_the_new_one() {
+    let f = online_fixture();
+    let old = cred_of(&create_passkey(&f, "https://github.com/", Some(f.github)));
+    let new = cred_of(&create_passkey(&f, "https://github.com/", Some(f.github)));
+
+    let all = find_passkeys(&f, &[]);
+    assert_eq!(all["result"]["passkeys"][0]["credentialId"], new);
+    // Left out when false, so an older extension still reads the answer.
+    assert!(all["result"]["passkeys"][0].get("replaced").is_none());
+    assert_eq!(all["result"]["passkeys"][1]["credentialId"], old);
+    assert_eq!(all["result"]["passkeys"][1]["replaced"], true);
+
+    let before = f.changes.load(Ordering::SeqCst);
+    let named = find_passkeys(&f, &[&new]);
+    assert_eq!(named["result"]["passkeys"][0]["credentialId"], new);
+    assert_eq!(f.changes.load(Ordering::SeqCst), before + 1);
+    let all = find_passkeys(&f, &[]);
+    assert_eq!(all["result"]["passkeys"].as_array().unwrap().len(), 1);
+}
+
+/// The clean-up is best effort: offline, the answer is the same and the
+/// old passkey stays for next time.
+#[test]
+fn an_offline_clean_up_still_answers() {
+    let f = fixture();
+    let new = {
+        let mut v = f.vault.lock().unwrap();
+        let mut cred = Vec::new();
+        for rev in [10, 11] {
+            let s = v
+                .stage_passkey_create(
+                    havenkeys_core::passkey::PasskeyCreate {
+                        rp_id: "github.com",
+                        page_url: "https://github.com/",
+                        top_url: None,
+                        challenge: &[7; 32],
+                        user_handle: &[1],
+                        user_name: "octo",
+                        display_name: None,
+                        item_id: Some(f.github),
+                        conditional: false,
+                    },
+                    NOW,
+                )
+                .unwrap();
+            cred = s.registration.credential_id.clone();
+            v.commit_write(s.write, rev).unwrap();
+        }
+        havenkeys_core::passkey::encode_b64url(&cred)
+    };
+    let named = find_passkeys(&f, &[&new]);
+    assert_eq!(named["result"]["passkeys"][0]["credentialId"], new);
+    let all = find_passkeys(&f, &[]);
+    assert_eq!(all["result"]["passkeys"].as_array().unwrap().len(), 2);
+}

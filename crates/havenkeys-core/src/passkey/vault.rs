@@ -27,6 +27,8 @@ pub struct PasskeyMatch {
     pub credential_id: Vec<u8>,
     pub title: String,
     pub user_name: String,
+    /// A newer passkey for the same account exists; offered after it.
+    pub replaced: bool,
 }
 
 impl fmt::Debug for PasskeyMatch {
@@ -112,6 +114,7 @@ pub struct PasskeyInfo {
     pub user_name: String,
     pub display_name: Option<String>,
     pub created_at: i64,
+    pub replaced: bool,
 }
 
 pub(super) fn check_challenge(c: &[u8]) -> Result<()> {
@@ -248,6 +251,7 @@ impl VaultService {
                         credential_id: p.credential_id.0.clone(),
                         title: title.clone(),
                         user_name: p.user_name.clone(),
+                        replaced: p.replaced_at.is_some(),
                     });
                 }
             }
@@ -256,6 +260,7 @@ impl VaultService {
             (
                 m.title.to_lowercase(),
                 m.user_name.to_lowercase(),
+                m.replaced,
                 m.item_id,
             )
         });
@@ -336,6 +341,58 @@ impl VaultService {
             challenge,
             Some(client_data_hash),
         )
+    }
+
+    /// Drop the replaced passkeys whose account's current passkey the site
+    /// lists in `allowCredentials`: the site knows the new one, so the old
+    /// one is no longer needed. `None` when there is nothing to drop. Only
+    /// the first login with something to drop is staged; a request names
+    /// one account in practice.
+    pub fn stage_drop_replaced_passkeys(
+        &self,
+        rp_id: &str,
+        page_url: &str,
+        top_url: Option<&str>,
+        allow: &[Vec<u8>],
+        now_ms: i64,
+    ) -> Result<Option<StagedWrite>> {
+        self.session()?;
+        let ctx = authorize_rp(rp_id, page_url, top_url)?;
+        if allow.is_empty() {
+            return Ok(None);
+        }
+        // A replaced passkey whose account's current passkey the site named.
+        let proven = |all: &[Passkey], p: &Passkey| {
+            p.rp_id == ctx.rp_id
+                && p.replaced_at.is_some()
+                && all.iter().any(|q| {
+                    q.replaced_at.is_none()
+                        && q.rp_id == p.rp_id
+                        && q.user_handle == p.user_handle
+                        && allow.contains(&q.credential_id.0)
+                })
+        };
+        let holders: Vec<Uuid> = passkey_logins(self.session()?).map(|o| o.id).collect();
+        for id in holders {
+            let Ok(ItemDetails::Login { passkeys, .. }) = self.load_details(&id) else {
+                continue;
+            };
+            let gone: Vec<B64Url> = passkeys
+                .iter()
+                .filter(|p| proven(&passkeys, p))
+                .map(|p| p.credential_id.clone())
+                .collect();
+            if gone.is_empty() {
+                continue;
+            }
+            let (overview, mut details, base) = self.load_login_for_edit(id, now_ms)?;
+            let ItemDetails::Login { passkeys, .. } = &mut details else {
+                return Err(Error::Denied);
+            };
+            passkeys.retain(|p| !gone.contains(&p.credential_id));
+            return self.stage(overview, Some(&details), base).map(Some);
+        }
+        Ok(None)
     }
 
     /// `offered` without the logins that cannot take another passkey.
@@ -460,8 +517,19 @@ impl VaultService {
         let ItemDetails::Login { passkeys, .. } = &mut details else {
             return Err(Error::Denied);
         };
-        // Registering the same account again replaces its passkey.
-        passkeys.retain(|p| !(p.rp_id == passkey.rp_id && p.user_handle == passkey.user_handle));
+        // Registering the same account again replaces its passkey, but the
+        // old one stays, marked, until the site shows it knows the new one
+        // (`stage_drop_replaced_passkeys`): a site that rejects the new
+        // passkey must not leave the account without a working one. Only
+        // the newest old one is kept, and none when the login is full.
+        let same = |p: &Passkey| p.rp_id == passkey.rp_id && p.user_handle == passkey.user_handle;
+        passkeys.retain(|p| !(same(p) && p.replaced_at.is_some()));
+        if passkeys.len() >= MAX_PASSKEYS_PER_LOGIN {
+            passkeys.retain(|p| !same(p));
+        }
+        for p in passkeys.iter_mut().filter(|p| same(p)) {
+            p.replaced_at = Some(now_ms);
+        }
         if passkeys.len() >= MAX_PASSKEYS_PER_LOGIN {
             return Err(Error::InvalidInput(
                 "this login already has the maximum number of passkeys",
@@ -559,6 +627,7 @@ impl VaultService {
                     user_name: p.user_name.clone(),
                     display_name: p.display_name.clone(),
                     created_at: p.created_at,
+                    replaced: p.replaced_at.is_some(),
                 })
                 .collect()),
             ItemDetails::SecureNote { .. } | ItemDetails::Identity(_) | ItemDetails::Card(_) => {

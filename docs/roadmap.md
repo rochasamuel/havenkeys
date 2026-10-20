@@ -107,5 +107,5 @@ A hosted sync service, sharing. See CLAUDE.md for the current scope.
 
 Passkeys are in scope since 2026-09-23 (CLAUDE.md, amendment), as a provider
 for websites. Later passkey work — import/export in CXF, OS credential-provider
-integration, and the PK5 re-registration confirmation — is tracked in
+integration — is tracked in
 `docs/autofill-roadmap.md` §D (passkeys as a fill surface).
