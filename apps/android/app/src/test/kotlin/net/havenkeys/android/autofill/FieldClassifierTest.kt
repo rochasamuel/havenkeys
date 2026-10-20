@@ -37,9 +37,8 @@ class FieldClassifierTest {
 
     @Test
     fun itausOperatorCodeIsAUsername() {
-        val html = mapOf("id" to "idl-more-access-input-operator", "autocomplete" to "off", "label" to "Código do operador")
-        val op = field(html = html)
-        assertEquals(FieldRole.USERNAME, role(op))
+        val html = mapOf("id" to "idl-more-access-input-operator", "label" to "Código do operador")
+        assertEquals(FieldRole.USERNAME, role(field(html = html + ("autocomplete" to "off"))))
     }
 
     @Test
