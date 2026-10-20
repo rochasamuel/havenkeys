@@ -14,7 +14,8 @@
     "test:server": "scripts/test-server.sh",
     "lint:rust": "cargo clippy -p havenkeys-core -p havenkeys-protocol -p havenkeys-bridge -p havenkeys-native-host -p havenkeys-oslock -p havenkeys-server -p havenkeys-sync-client -p havenkeys-client --all-targets -- -D warnings",
     "audit": "pnpm audit && cargo audit && cargo deny check",
-    "ui:check": "node tools/ui-check/run.mjs"
+    "ui:check": "node tools/ui-check/run.mjs",
+    "check:field-words": "pnpm --filter @havenkeys/field-words check"
   },
   "devDependencies": {
     "playwright": "1.58.2"

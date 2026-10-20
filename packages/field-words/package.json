@@ -1,0 +1,10 @@
+{
+  "name": "@havenkeys/field-words",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "node generate.mjs",
+    "check": "node generate.mjs --check",
+    "test": "node --test"
+  }
+}
