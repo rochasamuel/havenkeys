@@ -1066,6 +1066,19 @@
         "password",
         "current-password"
       ]
+    },
+    "IDENTITY_SPECIFIC_ADDRESS_ROLES": {
+      "comment": "Address parts a visible label names over a generic \"endereco\"/\"address\" in the field name (identity roles).",
+      "raw": true,
+      "words": [
+        "city",
+        "state",
+        "neighborhood",
+        "complement",
+        "postalCode",
+        "number",
+        "country"
+      ]
     }
   },
   "numbers": {

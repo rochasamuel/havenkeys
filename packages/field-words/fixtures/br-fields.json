@@ -2572,33 +2572,6 @@
    "reason": "the label also says \"conta\" (an identity negative word); outside B5"
   },
   {
-   "site": "Globo",
-   "id": "user.endereco.pais.nome",
-   "label_text": "País",
-   "platform": "extension",
-   "classifier": "identity",
-   "got": "street",
-   "reason": "spec §4.5"
-  },
-  {
-   "site": "Globo",
-   "id": "",
-   "label_text": "Cidade (Informe a sua cidade e selecione uma das opções da lista apresentada)",
-   "platform": "extension",
-   "classifier": "identity",
-   "got": "street",
-   "reason": "spec §4.5"
-  },
-  {
-   "site": "Globo",
-   "id": "endereco.estado.nome",
-   "label_text": "Estado",
-   "platform": "extension",
-   "classifier": "identity",
-   "got": "street",
-   "reason": "spec §4.5"
-  },
-  {
    "site": "TETO Brasil doação (checkout substitute)",
    "id": "person_payment_attributes_owner_account",
    "label_text": "Nome Descrito no Cartão",
@@ -2624,24 +2597,6 @@
    "classifier": "login",
    "got": "username",
    "reason": "bank field: B6 (Bank Account item)"
-  },
-  {
-   "site": "TETO Brasil doação (checkout substitute)",
-   "id": "person_address_attributes_city",
-   "label_text": "Cidade",
-   "platform": "extension",
-   "classifier": "identity",
-   "got": "street",
-   "reason": "spec §4.5"
-  },
-  {
-   "site": "TETO Brasil doação (checkout substitute)",
-   "id": "person_address_attributes_state_abbr",
-   "label_text": "Estado",
-   "platform": "extension",
-   "classifier": "identity",
-   "got": "street",
-   "reason": "spec §4.5"
   },
   {
    "site": "Itaú",
@@ -2707,33 +2662,6 @@
    "reason": "Android decides new vs current password per form (LoginFormFinder), not per field"
   },
   {
-   "site": "Globo",
-   "id": "user.endereco.pais.nome",
-   "label_text": "País",
-   "platform": "android",
-   "classifier": "identity",
-   "got": "street",
-   "reason": "spec §4.5"
-  },
-  {
-   "site": "Globo",
-   "id": "",
-   "label_text": "Cidade (Informe a sua cidade e selecione uma das opções da lista apresentada)",
-   "platform": "android",
-   "classifier": "identity",
-   "got": "street",
-   "reason": "spec §4.5"
-  },
-  {
-   "site": "Globo",
-   "id": "endereco.estado.nome",
-   "label_text": "Estado",
-   "platform": "android",
-   "classifier": "identity",
-   "got": "street",
-   "reason": "spec §4.5"
-  },
-  {
    "site": "Ticketmaster BR (substitute)",
    "id": "password",
    "label_text": "Senha",
@@ -2768,24 +2696,6 @@
    "classifier": "login",
    "got": "username",
    "reason": "bank field: B6 (Bank Account item)"
-  },
-  {
-   "site": "TETO Brasil doação (checkout substitute)",
-   "id": "person_address_attributes_city",
-   "label_text": "Cidade",
-   "platform": "android",
-   "classifier": "identity",
-   "got": "street",
-   "reason": "spec §4.5"
-  },
-  {
-   "site": "TETO Brasil doação (checkout substitute)",
-   "id": "person_address_attributes_state_abbr",
-   "label_text": "Estado",
-   "platform": "android",
-   "classifier": "identity",
-   "got": "street",
-   "reason": "spec §4.5"
   }
  ]
 }

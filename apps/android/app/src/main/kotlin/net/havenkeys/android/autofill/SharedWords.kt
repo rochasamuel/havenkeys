@@ -84,6 +84,7 @@ internal object SharedWords {
     val USERNAME_HINTS: List<String> = listOf("username", "newusername", "emailaddress", "email")
     val PHONE_HINTS: List<String> = listOf("phone", "phonenumber", "tel")
     val PASSWORD_HINTS: List<String> = listOf("password", "current-password")
+    val IDENTITY_SPECIFIC_ADDRESS_ROLES: List<String> = listOf("city", "state", "neighborhood", "complement", "postalCode", "number", "country")
     const val USERNAME_THRESHOLD = 40
     const val OTP_THRESHOLD = 60
     const val USERNAME_AC_TEL = 30

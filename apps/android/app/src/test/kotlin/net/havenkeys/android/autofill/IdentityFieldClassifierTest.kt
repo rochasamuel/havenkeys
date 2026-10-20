@@ -45,6 +45,16 @@ class IdentityFieldClassifierTest {
     }
 
     @Test
+    fun theVisibleLabelNamesTheAddressPart() {
+        fun f(name: String, label: String) = field(html = mapOf("name" to name, "label" to label))
+        assertEquals(IdentityRole.CITY, role(f("enderecoAutoComplete", "Cidade (Informe a sua cidade)")))
+        assertEquals(IdentityRole.STATE, role(f("endereco_estado_nome", "Estado")))
+        assertEquals(IdentityRole.CITY, role(f("person[address_attributes][city]", "Cidade")))
+        assertEquals(IdentityRole.STREET, role(f("person[address_attributes][street]", "Rua")))
+        assertEquals(IdentityRole.STREET, role(f("address", "Endereço")))
+    }
+
+    @Test
     fun compoundLabelsAreNotGuessed() {
         assertNull(role(field(hint = "Cidade de nascimento")))
         assertNull(role(field(hint = "Número do documento")))

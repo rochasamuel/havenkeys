@@ -98,8 +98,19 @@ object IdentityFieldClassifier {
     }
 
     private fun byWords(s: IdentitySignals): IdentityRoleOf? {
-        val role = WORDS.firstOrNull { (_, words) -> hasAny(s.attrs, words) || hasAny(s.text, words) }?.first
-        return role?.let { compound(it, s.all) }?.let { IdentityRoleOf(it, byHint = false) }
+        val hit = WORDS.firstOrNull { (_, words) -> hasAny(s.attrs, words) || hasAny(s.text, words) }
+        return hit?.let { (role, words) -> compound(labelledPart(role, words, s.text), s.all) }
+            ?.let { IdentityRoleOf(it, byHint = false) }
+    }
+
+    /**
+     * A generic address in the name (`enderecoCidade`, `address[city]`) is
+     * read as the street; the visible label naming a specific part (Cidade,
+     * Estado, País…) wins over it (identity.ts's labelledPart).
+     */
+    private fun labelledPart(found: IdentityRole, words: List<String>, text: String): IdentityRole {
+        if (found != IdentityRole.STREET || hasAny(text, words)) return found
+        return WORDS.firstOrNull { (role, w) -> role in SPECIFIC_ADDRESS_ROLES && hasAny(text, w) }?.first ?: found
     }
 
     /** Null when the words make a role match wrong (identity.ts's compound labels). */
@@ -198,6 +209,8 @@ object IdentityFieldClassifier {
         IdentityRole.FULL_NAME to SharedWords.IDENTITY_WORDS_FULL_NAME_GENERIC,
     )
     private val NEGATIVE = SharedWords.IDENTITY_NEGATIVE
+    private val SPECIFIC_ADDRESS_ROLES = SharedWords.IDENTITY_SPECIFIC_ADDRESS_ROLES
+        .map { IdentityRole.valueOf(it.replace(Regex("([a-z])([A-Z])"), "$1_$2").uppercase()) }.toSet()
     private val BIRTH = SharedWords.IDENTITY_BIRTH
     private val PLACE = SharedWords.IDENTITY_PLACE
     private val DOCUMENT = SharedWords.IDENTITY_DOCUMENT

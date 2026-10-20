@@ -89,6 +89,7 @@ export const CARD_BRAND_MAESTRO: readonly string[] = ["maestro"];
 export const CARD_BRAND_OTHER: readonly string[] = [];
 export const CARD_AMBIGUOUS: readonly string[] = ["cid","security code","codigo de seguranca","cod seguranca","card code","titular","cardholder","card holder","holder name","nome do titular"];
 export const LOGIN_CARD_WORDS: readonly string[] = ["cc","card","cvv","cvc"];
+export const IDENTITY_SPECIFIC_ADDRESS_ROLES: readonly string[] = ["city","state","neighborhood","complement","postalCode","number","country"];
 export const USERNAME_THRESHOLD = 50;
 export const USERNAME_ALONE_THRESHOLD = 70;
 export const OTP_THRESHOLD = 60;

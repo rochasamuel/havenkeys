@@ -47,6 +47,20 @@ describe("identityRoleOf", () => {
     expect(role("#p")).toBe("phone");
   });
 
+  it("the visible label names the address part over a generic address name", () => {
+    page(`<label for="c">Cidade (Informe a sua cidade)</label><input id="c" name="enderecoAutoComplete">
+      <label for="s">Estado</label><input id="s" name="endereco_estado_nome">
+      <label for="t">Cidade</label><input id="t" name="person[address_attributes][city]">
+      <label for="p">País</label><select id="p" name="country"><option>Brasil</option></select>
+      <label for="r">Rua</label><input id="r" name="person[address_attributes][street]">
+      <label for="a">Endereço</label><input id="a" name="address">`);
+    expect(role("#c")).toBe("city");
+    expect(role("#s")).toBe("state");
+    expect(role("#t")).toBe("city");
+    expect(role("#r")).toBe("street");
+    expect(role("#a")).toBe("street");
+  });
+
   it("an e-mail address field is the e-mail, not the street", () => {
     page(`<label for="e">Endereço de e-mail</label><input id="e" name="emailAddress">`);
     expect(role("#e")).toBe("email");

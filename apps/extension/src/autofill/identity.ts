@@ -16,6 +16,7 @@ import {
   IDENTITY_ADDRESS as ADDRESS,
   IDENTITY_NEW as NEW,
   IDENTITY_NEGATIVE as NEGATIVE,
+  IDENTITY_SPECIFIC_ADDRESS_ROLES,
   IDENTITY_WORDS_FULL_NAME,
   IDENTITY_WORDS_FIRST_NAME,
   IDENTITY_WORDS_MIDDLE_NAME,
@@ -115,6 +116,16 @@ const WORDS: Array<[IdentityRole, readonly string[]]> = [
 
 
 
+/**
+ * A generic address in the name (`enderecoCidade`, `address[city]`) is
+ * read as the street; the visible label naming a specific part (Cidade,
+ * Estado, País…) wins over it.
+ */
+function labelledPart(found: IdentityRole, words: readonly string[], text: string): IdentityRole {
+  if (found !== "street" || hasAny(text, words)) return found;
+  return WORDS.find(([role, w]) => IDENTITY_SPECIFIC_ADDRESS_ROLES.includes(role) && hasAny(text, w))?.[0] ?? found;
+}
+
 /** Null when the words make a role match wrong; the role otherwise. */
 function compound(role: IdentityRole, all: string): IdentityRole | null {
   // "Cidade/País de nascimento", "Country of birth": a birthplace, not a birth date, city or country.
@@ -177,7 +188,7 @@ export function identityRoleOf(el: IdentityElement): { role: IdentityRole; confi
   for (const [found, words] of WORDS) {
     const score = hasAny(attrs, words) ? WORDS_ON_ATTRS : hasAny(text, words) ? WORDS_ON_TEXT : 0;
     if (score < THRESHOLD) continue;
-    const role = compound(found, `${attrs} ${text}`);
+    const role = compound(labelledPart(found, words, text), `${attrs} ${text}`);
     if (!role || !allowed(role)) return null;
     return { role: role === "street" && tag === "textarea" ? "addressLine1" : role, confidence: score / 100, byAutocomplete: false };
   }
