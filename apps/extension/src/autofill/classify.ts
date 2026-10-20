@@ -49,6 +49,7 @@ import {
   OTP_WORD_WEAK,
   OTP_LENGTH,
   OTP_NUMERIC,
+  OTP_CODE_MASK,
   OTP_SPLIT_GROUP,
   OTP_MIN_LENGTH,
   OTP_MAX_LENGTH,
@@ -75,6 +76,8 @@ export interface FieldFeatures {
   /** `maxLength`, or -1 when unset. */
   maxLength: number;
   inputMode: string;
+  /** The placeholder is only a code's mask: `------`, `000000`. */
+  codeMask: boolean;
 }
 
 export interface Classified {
@@ -185,6 +188,7 @@ export function otpScore(f: FieldFeatures, inSplitGroup: boolean): number {
   else if (hasAny(words, OTP_WEAK)) s += OTP_WORD_WEAK;
   if (f.maxLength >= OTP_MIN_LENGTH && f.maxLength <= OTP_MAX_LENGTH) s += OTP_LENGTH;
   if (f.inputMode === "numeric" || f.type === "tel" || f.type === "number") s += OTP_NUMERIC;
+  if (f.codeMask) s += OTP_CODE_MASK;
   if (inSplitGroup) s += OTP_SPLIT_GROUP;
   return s;
 }

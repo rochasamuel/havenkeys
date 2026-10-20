@@ -7,7 +7,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { classifyPasswords, groupIntent, OTP_THRESHOLD, otpScore, USERNAME_THRESHOLD, usernameScore, type FieldFeatures } from "./classify";
 import { fillLogin, fillNewPassword, fillOtp, markUserEdit, setValue } from "./fill";
-import { classifyGroup, fieldsOf, groupFor, MAX_GROUP_INPUTS, type Env } from "./group";
+import { classifyGroup, features, fieldsOf, groupFor, MAX_GROUP_INPUTS, type Env } from "./group";
 import { findLoginGroup, findOtpGroup, readSubmission } from "./page";
 import { hasPhrase, normalize } from "./text";
 
@@ -60,6 +60,7 @@ describe("field classification", () => {
     text: "",
     maxLength: -1,
     inputMode: "",
+    codeMask: false,
     ...over,
   });
   const ctx = { hasPassword: true, lastBeforePassword: false };
@@ -114,6 +115,19 @@ describe("field classification", () => {
     const op = f({ attrs: normalize("idl-more-access-input-operator"), text: normalize("Código do operador") });
     expect(usernameScore(op, ctx)).toBeGreaterThanOrEqual(USERNAME_THRESHOLD);
     expect(otpScore(op, false)).toBe(0);
+  });
+
+  it("a bare 'Código' box with a code mask is a one-time code; other codes are not", () => {
+    const fields = (attrs: string, label: string, placeholder = "") => {
+      page(`<label for="x">${label}</label><input id="x" name="${attrs}" placeholder="${placeholder}">`);
+      return features(document.querySelector("input") as HTMLInputElement);
+    };
+    expect(otpScore(fields("code", "Código", "------"), false)).toBeGreaterThanOrEqual(OTP_THRESHOLD);
+    page(`<input inputmode="numeric" maxlength="6" placeholder="000000">`);
+    expect(otpScore(features(document.querySelector("input") as HTMLInputElement), false)).toBeGreaterThanOrEqual(OTP_THRESHOLD);
+    for (const label of ["Código de rastreio", "Código de barras", "Código postal", "Código promocional"]) {
+      expect(otpScore(fields("codigo", label, "------"), false), label).toBeLessThan(OTP_THRESHOLD);
+    }
   });
 
   it("an e-mail address field is a username; another address is not", () => {

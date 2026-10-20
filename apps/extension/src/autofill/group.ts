@@ -111,6 +111,9 @@ function labelText(el: HTMLInputElement): string {
   return parts.join(" ");
 }
 
+/** A one-time code's placeholder mask: 4 to 8 of `-`, `_`, `•` or `0`. */
+const CODE_MASK = /^[-_•0]{4,8}$/;
+
 export function features(el: HTMLInputElement): FieldFeatures {
   const attr = (n: string) => (el.getAttribute(n) ?? "").slice(0, MAX_HINT_CHARS);
   return {
@@ -120,6 +123,7 @@ export function features(el: HTMLInputElement): FieldFeatures {
     text: normalize(`${attr("placeholder")} ${attr("aria-label")} ${attr("title")} ${labelText(el)}`, MAX_HINT_CHARS * 3),
     maxLength: el.maxLength,
     inputMode: attr("inputmode").toLowerCase(),
+    codeMask: CODE_MASK.test(attr("placeholder").trim()),
   };
 }
 

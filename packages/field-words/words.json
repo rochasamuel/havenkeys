@@ -197,7 +197,13 @@
         "invite",
         "cvv",
         "cvc",
-        "codigo do operador"
+        "codigo do operador",
+        "codigo postal",
+        "codigo promocional",
+        "codigo de rastreio",
+        "codigo de barras",
+        "codigo do cupom",
+        "codigo do produto"
       ]
     },
     "PW_CONFIRM": {
@@ -1120,6 +1126,7 @@
     },
     "PASSWORD_WORD_IN_ATTRS_WEAK": {
       "android": 30
-    }
+    },
+    "OTP_CODE_MASK": 35
   }
 }

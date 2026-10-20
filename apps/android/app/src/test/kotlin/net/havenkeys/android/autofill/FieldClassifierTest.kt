@@ -36,6 +36,18 @@ class FieldClassifierTest {
     }
 
     @Test
+    fun aBareCodeBoxWithACodeMaskIsAOneTimeCode() {
+        val code = field(html = mapOf("name" to "code", "label" to "Código", "placeholder" to "------"))
+        assertEquals(FieldRole.OTP, role(code))
+        val zeros = field(html = mapOf("inputmode" to "numeric", "maxlength" to "6", "placeholder" to "000000"))
+        assertEquals(FieldRole.OTP, role(zeros))
+        for (label in listOf("Código de rastreio", "Código de barras", "Código postal", "Código promocional")) {
+            val other = field(html = mapOf("name" to "codigo", "label" to label, "placeholder" to "------"))
+            assertTrue(label, role(other) != FieldRole.OTP)
+        }
+    }
+
+    @Test
     fun itausOperatorCodeIsAUsername() {
         val html = mapOf("id" to "idl-more-access-input-operator", "label" to "Código do operador")
         assertEquals(FieldRole.USERNAME, role(field(html = html + ("autocomplete" to "off"))))

@@ -113,6 +113,7 @@ object FieldClassifier {
         }
         if (s.maxLength in OTP_MIN_LENGTH..OTP_MAX_LENGTH) score += OTP_LENGTH
         if (s.isNumeric) score += OTP_NUMERIC
+        if (s.codeMask) score += OTP_CODE_MASK
         return score
     }
 
@@ -141,6 +142,9 @@ object FieldClassifier {
         val isNumeric = inputClass == InputType.TYPE_CLASS_NUMBER || inputClass == InputType.TYPE_CLASS_PHONE ||
             htmlType == "tel" || htmlType == "number" || f.htmlAttributes["inputmode"]?.lowercase() == "numeric"
         val maxLength = maxLengthOf(f)
+
+        /** The placeholder is only a code's mask: `------`, `000000` (group.ts). */
+        val codeMask = f.htmlAttributes["placeholder"]?.trim()?.matches(CODE_MASK) == true
         val isCard = tokens.any { it.startsWith("cc-") } || attrs.has(CARD_WORDS)
     }
 
@@ -219,6 +223,8 @@ private const val OTP_WORD = SharedWords.OTP_WORD
 private const val OTP_WORD_WEAK = SharedWords.OTP_WORD_WEAK
 private const val OTP_LENGTH = SharedWords.OTP_LENGTH
 private const val OTP_NUMERIC = SharedWords.OTP_NUMERIC
+private const val OTP_CODE_MASK = SharedWords.OTP_CODE_MASK
+private val CODE_MASK = Regex("[-_•0]{4,8}")
 private const val OTP_MIN_LENGTH = SharedWords.OTP_MIN_LENGTH
 private const val OTP_MAX_LENGTH = SharedWords.OTP_MAX_LENGTH
 

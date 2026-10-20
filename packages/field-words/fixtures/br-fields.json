@@ -2626,15 +2626,6 @@
    "reason": "spec §4.5"
   },
   {
-   "site": "Ticketmaster BR (substitute)",
-   "id": "c2_code",
-   "label_text": "Código",
-   "platform": "extension",
-   "classifier": "login",
-   "got": "none",
-   "reason": "spec §4.3"
-  },
-  {
    "site": "TETO Brasil doação (checkout substitute)",
    "id": "person_birthday",
    "label_text": "Data de Nascimento",
@@ -2840,15 +2831,6 @@
    "classifier": "login",
    "got": "password",
    "reason": "Android decides new vs current password per form (LoginFormFinder), not per field"
-  },
-  {
-   "site": "Ticketmaster BR (substitute)",
-   "id": "c2_code",
-   "label_text": "Código",
-   "platform": "android",
-   "classifier": "login",
-   "got": "none",
-   "reason": "spec §4.3"
   },
   {
    "site": "TETO Brasil doação (checkout substitute)",

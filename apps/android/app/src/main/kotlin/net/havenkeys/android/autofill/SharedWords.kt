@@ -11,7 +11,7 @@ internal object SharedWords {
     val EMAIL_WORDS: List<String> = listOf("email", "e mail")
     val OTP_STRONG: List<String> = listOf("otp", "totp", "2fa", "mfa", "one time", "one time code", "one time password", "verification code", "security code", "auth code", "authentication code", "authenticator", "two factor", "2 step", "two step", "codigo de verificacao", "codigo de seguranca", "codigo de verificacion", "token", "digit code", "sms code", "codigo sms")
     val OTP_WEAK: List<String> = listOf("code", "codigo", "pin", "verify", "verification")
-    val OTP_NEGATIVE: List<String> = listOf("postal code", "zip code", "promo code", "coupon", "discount", "country code", "area code", "captcha", "gift", "referral", "invite", "cvv", "cvc", "codigo do operador")
+    val OTP_NEGATIVE: List<String> = listOf("postal code", "zip code", "promo code", "coupon", "discount", "country code", "area code", "captcha", "gift", "referral", "invite", "cvv", "cvc", "codigo do operador", "codigo postal", "codigo promocional", "codigo de rastreio", "codigo de barras", "codigo do cupom", "codigo do produto")
     val PW_CONFIRM: List<String> = listOf("confirm", "confirmation", "re enter", "reenter", "repeat", "retype", "again", "verify", "confirmar", "confirme", "confirmacao", "repita", "repetir")
     val PW_NEW: List<String> = listOf("new", "create", "choose", "set", "nova", "novo", "nueva", "criar", "crie")
     val PW_CURRENT: List<String> = listOf("current", "old", "existing", "atual", "antiga", "actual")
@@ -104,4 +104,5 @@ internal object SharedWords {
     const val HINT = 100
     const val PASSWORD_INPUT = 90
     const val PASSWORD_WORD_IN_ATTRS_WEAK = 30
+    const val OTP_CODE_MASK = 35
 }
