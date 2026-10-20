@@ -234,21 +234,61 @@ Each field gets a score per role. No single heuristic decides.
 | `autocomplete=current-password` | disqualifies | |
 | `autocomplete=new-password` | ignored: sites set it on every field to switch off browser autofill (gov.br's CPF box) | |
 | `type=email` | +80 | |
-| Strong keyword in `name`/`id` (username, login, email, account, usuario…) or a document-number word (CPF, CNPJ, RG, documento, matrícula, NIF, NIE, DNI, CIF, RUT, CUIT/CUIL, CURP, RFC, cédula, passport, national id, codice fiscale) | +50 | |
+| Strong keyword in `name`/`id` (username, login, email, account, usuario, operador…) or a document-number word (CPF, CNPJ, RG, documento, matrícula, NIF, NIE, DNI, CIF, RUT, CUIT/CUIL, CURP, RFC, cédula, passport, national id, codice fiscale) | +50 | |
 | Strong keyword in placeholder, aria-label, title, `<label>`, `aria-labelledby` | +40 | |
 | Weak keyword (user, mail, phone…) | +25 / +20 | |
-| OTP keyword (otp, 2fa, verification code, token…) / weak (code, pin) | | +70 / +30 |
+| OTP keyword (otp, 2fa, verification code, token, sms code…) / weak (code, código, pin) | | +70 / +30 |
+| Placeholder that is only a code mask (4–8 of `-`, `_`, `•`, `0`: `------`, `000000`) | | +35 |
 | `maxlength` 4–8, numeric input mode | | +15, +10 |
 | 4–8 adjacent single-character boxes (split code) | | +65 |
 | Last text field before the first password field | +40 | |
 | Username-only step on a form whose intent is login, for a field with any username or document word | +30 | |
-| Negative words (search, coupon, newsletter, address, name…) | −80 | 0 for postal/zip/promo/CVV… |
+| Negative words (search, buscar, coupon, cupom, newsletter, name…; `address` unless the field also says email) | −80 | 0 for postal/zip/promo/CVV, código postal / de rastreio / de barras / do operador… |
 | Card or address `autocomplete` tokens | disqualifies | disqualifies |
 | Strong card claims (`cc-*` autocomplete, card-number words or shape, expiry words, cvv/cvc/csc words) | refused; the card classifier owns them (see Cards) | refused; same |
 
 Keywords are compared as whole words after normalization (lowercase, accents
 removed, camelCase and punctuation split): `loginEmail` → `login email`.
-English, Portuguese and Spanish are covered.
+Dotted single letters join first, so `C.P.F.` → `cpf` and `R.G.` → `rg`
+(but `e.mail` → `e mail`). English, Portuguese and Spanish are covered.
+
+### Shared field words
+
+The keyword lists and score weights above are not written in the
+classifiers. They live in one reviewed file,
+`packages/field-words/words.json`, shared by the extension and Android
+(spec `2026-10-19-shared-field-words-design`). Each entry is either shared
+or split per platform. Today only the username threshold differs: 50 in the
+extension, 40 on Android, because Android has no group context. A generator
+writes `apps/extension/src/autofill/words.generated.ts` and
+`apps/android/.../autofill/SharedWords.kt`. Both are committed, and CI
+(`field-words.yml`) fails when either is stale. The scoring logic stays in
+each platform's classifier.
+
+To add a word: edit `words.json`, run
+`pnpm --filter @havenkeys/field-words generate`, and commit all three
+files. The generator refuses a word that isn't already normalized
+(`"Usuário"`, `"e-mail"`), since such a word could never match.
+
+The shared fixture `packages/field-words/fixtures/br-fields.json` holds 137
+real fields from 35 Brazilian sites. Each has its expected role per
+classifier (login, identity, card), or `skip` where the true role depends
+on what the page is for. `br-fields.test.ts` and Android's `BrFieldsTest`
+both run it. `normalize.json` holds the normalizer's examples, which all
+three normalizers must pass. To add a site, add one record per field (no
+page HTML). A field a platform still gets wrong goes in `known_gaps` with a
+reason. A gap that starts passing fails the test until it's removed.
+
+Known gaps (2026-10-19):
+
+* Bank agência/conta boxes (Itaú, TETO's direct debit) score as usernames
+  because of `account`/`conta`. They wait for B6, the Bank Account item.
+* Nubank's CPF login box has `autocomplete=username`, so the identity
+  classifier calls it the username, not the CPF.
+* gov.br's CPF box label also says "conta", an identity negative word, so
+  the identity classifier skips it. Login fill is unaffected.
+* Android decides new vs current password per form (`LoginFormFinder`), so
+  a lone signup password reads as current when classified on its own.
 
 Thresholds: a username needs 50 when the group has a password field. Without
 one (a username-only step) it needs 70, so a stray text box does not qualify.

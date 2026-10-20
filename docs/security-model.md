@@ -618,6 +618,19 @@ events. It writes secrets only into the `value` of visible, enabled fields
 of the group the user chose, and never into attributes. Details and
 limitations are in `autofill.md`.
 
+### Field words are security-relevant input
+
+The keyword lists and weights the extension and Android use to recognise
+username, password, one-time-code, card and identity fields live in
+`packages/field-words/words.json` (spec 2026-10-19-shared-field-words). A
+bad edit there could make a password box look like a username box, or a
+card box look like an identity field. That changes which fields the menu
+offers, but never which item's values may be filled: Rust still checks the
+origin on every fill. The file is reviewed like code. The generated copies
+are committed, and CI fails when they differ from the file, so no change
+can reach either classifier without passing through `words.json`. No new
+data leaves Rust because of this change.
+
 ## 13. Secret Key, the account, and the server
 
 See `server-sync.md` and `crypto.md` for the full design. In summary:
