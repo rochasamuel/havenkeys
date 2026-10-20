@@ -9,6 +9,39 @@ import { DOCUMENT_ROLES, MAX_IDENTITY_ROLES, type IdentityRole } from "@havenkey
 import { cardKindOf } from "./card-kind";
 import { groupRoot, MAX_GROUP_INPUTS, type Env } from "./group";
 import { hasAny, MAX_HINT_CHARS, normalize } from "./text";
+import {
+  IDENTITY_BIRTH as BIRTH,
+  IDENTITY_PLACE as PLACE,
+  IDENTITY_DOCUMENT as DOCUMENT,
+  IDENTITY_ADDRESS as ADDRESS,
+  IDENTITY_NEW as NEW,
+  IDENTITY_NEGATIVE as NEGATIVE,
+  IDENTITY_WORDS_FULL_NAME,
+  IDENTITY_WORDS_FIRST_NAME,
+  IDENTITY_WORDS_MIDDLE_NAME,
+  IDENTITY_WORDS_LAST_NAME,
+  IDENTITY_WORDS_CPF,
+  IDENTITY_WORDS_RG,
+  IDENTITY_WORDS_PASSPORT,
+  IDENTITY_WORDS_DRIVERS_LICENSE,
+  IDENTITY_WORDS_BIRTH_DATE,
+  IDENTITY_WORDS_EMAIL,
+  IDENTITY_WORDS_PHONE,
+  IDENTITY_WORDS_USERNAME,
+  IDENTITY_WORDS_COMPANY,
+  IDENTITY_WORDS_POSTAL_CODE,
+  IDENTITY_WORDS_NEIGHBORHOOD,
+  IDENTITY_WORDS_COMPLEMENT,
+  IDENTITY_WORDS_NUMBER,
+  IDENTITY_WORDS_STREET,
+  IDENTITY_WORDS_CITY,
+  IDENTITY_WORDS_STATE,
+  IDENTITY_WORDS_COUNTRY,
+  IDENTITY_WORDS_FULL_NAME_GENERIC,
+  IDENTITY_THRESHOLD as THRESHOLD,
+  IDENTITY_WORDS_ON_ATTRS as WORDS_ON_ATTRS,
+  IDENTITY_WORDS_ON_TEXT as WORDS_ON_TEXT,
+} from "./words.generated";
 
 export type IdentityElement = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
 
@@ -26,7 +59,6 @@ export interface IdentityGroup {
 
 /** Input types that can hold an identity value. */
 const TEXT_TYPES = new Set(["text", "email", "tel", "number", "url", "date", ""]);
-const THRESHOLD = 60;
 
 /** autocomplete token → role. Prefixes (section-*, shipping, …) are stripped first. */
 const AUTOCOMPLETE: Record<string, IdentityRole> = {
@@ -57,44 +89,31 @@ const AC_PREFIX = /^(section-\S+|shipping|billing|home|work|mobile|fax|pager)$/;
 
 /** Words per role, English and Portuguese, normalized (no accents). Order matters: first hit wins. */
 const WORDS: Array<[IdentityRole, readonly string[]]> = [
-  ["fullName", ["nome completo", "full name", "your name", "seu nome"]],
-  ["firstName", ["first name", "given name", "primeiro nome", "firstname", "fname"]],
-  ["middleName", ["middle name", "nome do meio"]],
-  ["lastName", ["last name", "surname", "family name", "sobrenome", "lastname", "lname"]],
-  ["cpf", ["cpf"]],
-  ["rg", ["rg", "carteira de identidade", "registro geral"]],
-  ["passport", ["passport", "passaporte"]],
-  ["driversLicense", ["cnh", "driver license", "drivers license", "driving licence", "carteira de motorista"]],
-  ["birthDate", ["data de nascimento", "nascimento", "date of birth", "birth date", "birthday", "birthdate", "dob"]],
-  ["email", ["email", "e mail"]],
-  ["phone", ["celular", "telefone", "phone", "mobile", "tel", "whatsapp"]],
-  ["username", ["username", "user name", "nome de usuario"]],
-  ["company", ["empresa", "company", "organization", "organizacao", "nome fantasia", "razao social"]],
-  ["postalCode", ["cep", "zip", "zip code", "zipcode", "postal", "postal code", "postcode"]],
-  ["neighborhood", ["bairro", "neighborhood", "district"]],
-  ["complement", ["complemento", "apt", "apartment", "suite"]],
-  ["number", ["numero", "number", "house number", "num"]],
-  ["street", ["logradouro", "rua", "endereco", "street", "address", "address line 1"]],
-  ["city", ["cidade", "city", "municipio", "town"]],
-  ["state", ["estado", "uf", "state", "province"]],
-  ["country", ["pais", "country"]],
-  ["fullName", ["nome", "name"]],
+  ["fullName", IDENTITY_WORDS_FULL_NAME],
+  ["firstName", IDENTITY_WORDS_FIRST_NAME],
+  ["middleName", IDENTITY_WORDS_MIDDLE_NAME],
+  ["lastName", IDENTITY_WORDS_LAST_NAME],
+  ["cpf", IDENTITY_WORDS_CPF],
+  ["rg", IDENTITY_WORDS_RG],
+  ["passport", IDENTITY_WORDS_PASSPORT],
+  ["driversLicense", IDENTITY_WORDS_DRIVERS_LICENSE],
+  ["birthDate", IDENTITY_WORDS_BIRTH_DATE],
+  ["email", IDENTITY_WORDS_EMAIL],
+  ["phone", IDENTITY_WORDS_PHONE],
+  ["username", IDENTITY_WORDS_USERNAME],
+  ["company", IDENTITY_WORDS_COMPANY],
+  ["postalCode", IDENTITY_WORDS_POSTAL_CODE],
+  ["neighborhood", IDENTITY_WORDS_NEIGHBORHOOD],
+  ["complement", IDENTITY_WORDS_COMPLEMENT],
+  ["number", IDENTITY_WORDS_NUMBER],
+  ["street", IDENTITY_WORDS_STREET],
+  ["city", IDENTITY_WORDS_CITY],
+  ["state", IDENTITY_WORDS_STATE],
+  ["country", IDENTITY_WORDS_COUNTRY],
+  ["fullName", IDENTITY_WORDS_FULL_NAME_GENERIC],
 ];
 
-/** Wording that means "not the person's data" even when a role word matches. */
-const NEGATIVE = ["search", "busca", "pesquisar", "coupon", "cupom", "promo", "cc", "card", "cartao", "cvv", "cvc", "captcha", "quantity", "quantidade",
-  "order", "pedido", "account", "conta", "tracking", "rastreio", "invoice", "nota fiscal", "price", "preco", "mae", "mother", "titular", "holder", "unit",
-  "estado civil", "marital", "civil status"];
 
-/**
- * Compound labels the first-match word list would get wrong (final review
- * finding 4). Each is checked against the name, id and label text together.
- */
-const BIRTH = ["nascimento", "birth", "naturalidade", "dob"];
-const PLACE = ["cidade", "city", "town", "municipio", "pais", "country", "local", "place", "estado", "state", "uf"];
-const DOCUMENT = ["documento", "document", "doc"];
-const ADDRESS = ["endereco", "address", "logradouro", "rua", "street", "cep", "zip"];
-const NEW = ["new", "novo", "nova", "nuevo", "nueva"];
 
 /** Null when the words make a role match wrong; the role otherwise. */
 function compound(role: IdentityRole, all: string): IdentityRole | null {
@@ -111,8 +130,6 @@ function compound(role: IdentityRole, all: string): IdentityRole | null {
   return role;
 }
 
-const WORDS_ON_ATTRS = 70;
-const WORDS_ON_TEXT = 60;
 
 function attr(el: Element, n: string): string {
   return (el.getAttribute(n) ?? "").slice(0, MAX_HINT_CHARS);

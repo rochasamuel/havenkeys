@@ -8,6 +8,48 @@
 // See docs/autofill.md for the signal table.
 
 import { hasAny } from "./text";
+import {
+  USERNAME_STRONG,
+  USERNAME_DOCUMENT,
+  USERNAME_WEAK,
+  USERNAME_NEGATIVE,
+  OTP_STRONG,
+  OTP_WEAK,
+  OTP_NEGATIVE,
+  PW_CONFIRM,
+  PW_NEW,
+  PW_CURRENT,
+  INTENT_SIGNUP,
+  INTENT_CHANGE,
+  INTENT_LOGIN,
+  AC_NOT_LOGIN,
+  PROVIDER_BUTTON,
+  PROVIDER_NAMES,
+  AC_SIGNUP_ONLY,
+  SIGNUP_ONLY_WORDS,
+  USERNAME_THRESHOLD,
+  USERNAME_ALONE_THRESHOLD,
+  OTP_THRESHOLD,
+  USERNAME_LOGIN_INTENT_BONUS,
+  USERNAME_AC_USERNAME,
+  USERNAME_AC_EMAIL,
+  USERNAME_AC_TEL,
+  USERNAME_EMAIL_INPUT,
+  USERNAME_WORD_IN_ATTRS,
+  USERNAME_WORD_IN_ATTRS_WEAK,
+  USERNAME_WORD_IN_TEXT,
+  USERNAME_WORD_IN_TEXT_WEAK,
+  USERNAME_NEGATIVE_PENALTY,
+  USERNAME_LAST_BEFORE_PASSWORD,
+  OTP_AC,
+  OTP_WORD,
+  OTP_WORD_WEAK,
+  OTP_LENGTH,
+  OTP_NUMERIC,
+  OTP_SPLIT_GROUP,
+  OTP_MIN_LENGTH,
+  OTP_MAX_LENGTH,
+} from "./words.generated";
 
 export type FieldClassification =
   | "username"
@@ -44,246 +86,21 @@ export type GroupIntent = "login" | "signup" | "change" | "unknown";
 const TEXT_TYPES = new Set(["text", "email", "tel", "number", "search", "url", ""]);
 
 // ---------------------------------------------------------------- keywords
-// Matched as whole normalized words (see text.ts). English plus Portuguese
-// and Spanish, the languages of the first users.
+// The lists live in packages/field-words/words.json (shared with Android),
+// matched as whole normalized words (see text.ts).
 
-const USERNAME_STRONG = [
-  "username",
-  "user name",
-  "userid",
-  "user id",
-  "login",
-  "login id",
-  "email",
-  "e mail",
-  "email address",
-  "account",
-  "account name",
-  "identifier",
-  "sign in",
-  "usuario",
-  "nome de usuario",
-  "correo",
-];
-/**
- * National ID and document numbers that sites use as the login (gov.br's
- * CPF, Spain's DNI, Chile's RUT…). Counted like the strong words above.
- * Ambiguous short tokens (`id`, `ci`, `cc`: card fields) are left out.
- */
-const USERNAME_DOCUMENT = [
-  // Brazil
-  "cpf",
-  "cnpj",
-  "rg",
-  "documento",
-  "numero do documento",
-  "matricula",
-  // Portugal, Spain, Latin America
-  "nif",
-  "nie",
-  "dni",
-  "cif",
-  "rut",
-  "cuit",
-  "cuil",
-  "curp",
-  "rfc",
-  "cedula",
-  "documento de identidad",
-  // Elsewhere
-  "document number",
-  "passport",
-  "passaporte",
-  "pasaporte",
-  "national id",
-  "codice fiscale",
-];
 const USERNAME_STRONG_ALL = [...USERNAME_STRONG, ...USERNAME_DOCUMENT];
-const USERNAME_WEAK = ["user", "mail", "phone", "mobile", "telefone", "celular"];
-const USERNAME_NEGATIVE = [
-  "search",
-  "query",
-  "q",
-  "coupon",
-  "promo",
-  "captcha",
-  "newsletter",
-  "subscribe",
-  "zip",
-  "postal",
-  "city",
-  "address",
-  "street",
-  "first name",
-  "last name",
-  "full name",
-  "company",
-  "code",
-  "otp",
-  "message",
-  "comment",
-  "amount",
-  "quantity",
-];
 
-const OTP_STRONG = [
-  "otp",
-  "totp",
-  "2fa",
-  "mfa",
-  "one time",
-  "one time code",
-  "one time password",
-  "verification code",
-  "security code",
-  "auth code",
-  "authentication code",
-  "authenticator",
-  "two factor",
-  "2 step",
-  "two step",
-  "codigo de verificacao",
-  "codigo de seguranca",
-  "codigo de verificacion",
-  "token",
-];
-const OTP_WEAK = ["code", "codigo", "pin", "verify", "verification"];
-const OTP_NEGATIVE = [
-  "postal code",
-  "zip code",
-  "promo code",
-  "coupon",
-  "discount",
-  "country code",
-  "area code",
-  "captcha",
-  "gift",
-  "referral",
-  "invite",
-  "cvv",
-  "cvc",
-];
 
-const PW_CONFIRM = [
-  "confirm",
-  "confirmation",
-  "re enter",
-  "reenter",
-  "repeat",
-  "retype",
-  "again",
-  "verify",
-  "confirmar",
-  "confirme",
-  "confirmacao",
-  "repita",
-  "repetir",
-];
-const PW_NEW = ["new", "create", "choose", "set", "nova", "novo", "nueva", "criar", "crie"];
-const PW_CURRENT = ["current", "old", "existing", "atual", "antiga", "actual"];
 
-const INTENT_SIGNUP = [
-  "sign up",
-  "signup",
-  "register",
-  "registration",
-  "create account",
-  "create an account",
-  "create your account",
-  "join",
-  "cadastro",
-  "cadastrar",
-  "cadastre se",
-  "criar conta",
-  "crear cuenta",
-  "registrarse",
-];
-const INTENT_CHANGE = [
-  "change password",
-  "change your password",
-  "reset password",
-  "reset your password",
-  "update password",
-  "new password",
-  "alterar senha",
-  "redefinir senha",
-  "nova senha",
-  "cambiar contrasena",
-];
-const INTENT_LOGIN = [
-  "sign in",
-  "signin",
-  "log in",
-  "login",
-  "log on",
-  "entrar",
-  "acessar",
-  "iniciar sesion",
-  "welcome back",
-];
 
-/** autocomplete tokens that mark a field as something other than a login. */
-const AC_NOT_LOGIN = [
-  "name",
-  "given-name",
-  "family-name",
-  "additional-name",
-  "nickname",
-  "organization",
-  "street-address",
-  "address-line1",
-  "address-line2",
-  "address-level1",
-  "address-level2",
-  "postal-code",
-  "country",
-  "country-name",
-  "bday",
-  "bday-day",
-  "bday-month",
-  "bday-year",
-  "sex",
-  "url",
-  "photo",
-];
 
-/**
- * An identity provider's button ("Sign in with Google", "Continuar com a
- * Apple"). Signup and sign-in pages both have them, so their words are not
- * intent evidence.
- */
-const PROVIDER_BUTTON = [
-  "sign in with", "signin with", "log in with", "login with", "sign up with", "signup with", "continue with",
-  "entrar com", "acessar com", "continuar com", "cadastre se com", "cadastrar com", "inscreva se com",
-  "iniciar sesion con", "registrate con", "registrarse con", "continuar con",
-];
 
-/** Named providers: "Sign in with a passkey" or "with email" is still a sign-in. */
-const PROVIDER_NAMES = [
-  "google", "apple", "microsoft", "facebook", "meta", "github", "gitlab", "twitter", "x", "linkedin",
-  "amazon", "yahoo", "discord", "slack", "gov br", "paypal", "steam", "twitch",
-];
 
 export function isProviderButton(text: string): boolean {
   return hasAny(text, PROVIDER_BUTTON) && hasAny(text, PROVIDER_NAMES);
 }
 
-/**
- * Details a sign-in form never asks for: your name or birthday. A group with
- * a password and such a field is a signup. By autocomplete token this
- * outweighs any wording (Yahoo's signup says only "Sign in with Google" and
- * "Sign in instead"). By label it is weaker evidence (a library catalog's
- * sign-in asks for a last name and a PIN), so `classifyGroup` lets it decide
- * only when no heading, submit button or form name says sign in.
- */
-const AC_SIGNUP_ONLY = ["name", "given-name", "family-name", "additional-name", "bday", "bday-day", "bday-month", "bday-year", "sex"];
-/** Unambiguous label words only: "name"/"nome"/"nombre" alone also label usernames. */
-const SIGNUP_ONLY_WORDS = [
-  "first name", "firstname", "given name", "middle name", "last name", "lastname", "family name", "surname",
-  "date of birth", "birth date", "birthdate", "birthday",
-  "primeiro nome", "sobrenome", "data de nascimento",
-  "apellido", "apellidos", "fecha de nacimiento",
-];
 
 export function signupDetailByAutocomplete(f: FieldFeatures): boolean {
   return f.autocomplete.some((t) => AC_SIGNUP_ONLY.includes(t));
@@ -300,15 +117,15 @@ export function saysLogin(text: string): boolean {
 
 // ---------------------------------------------------------------- scores
 
-export const USERNAME_THRESHOLD = 50;
+export { USERNAME_THRESHOLD };
 /** Without a password field in the group, demand more (username-only step). */
-export const USERNAME_ALONE_THRESHOLD = 70;
-export const OTP_THRESHOLD = 60;
+export { USERNAME_ALONE_THRESHOLD };
+export { OTP_THRESHOLD };
 /**
  * A username-only step on a form that says it signs in, for a field whose
  * own wording names a username or document ("CPF" label, generic name).
  */
-export const USERNAME_LOGIN_INTENT_BONUS = 30;
+export { USERNAME_LOGIN_INTENT_BONUS };
 
 function isCardField(f: FieldFeatures): boolean {
   return f.autocomplete.some((t) => t.startsWith("cc-")) || hasAny(f.attrs, ["cc", "card", "cvv", "cvc"]);
@@ -332,23 +149,23 @@ export function usernameScore(f: FieldFeatures, ctx: UsernameContext): number {
   if (ac.some((t) => AC_NOT_LOGIN.includes(t))) return 0;
 
   let s = 0;
-  if (ac.includes("username")) s += 100;
-  if (ac.includes("email")) s += 90;
-  if (ac.includes("tel")) s += 30;
-  if (f.type === "email") s += 80;
+  if (ac.includes("username")) s += USERNAME_AC_USERNAME;
+  if (ac.includes("email")) s += USERNAME_AC_EMAIL;
+  if (ac.includes("tel")) s += USERNAME_AC_TEL;
+  if (f.type === "email") s += USERNAME_EMAIL_INPUT;
   let worded = true;
-  if (hasAny(f.attrs, USERNAME_STRONG_ALL)) s += 50;
-  else if (hasAny(f.attrs, USERNAME_WEAK)) s += 25;
+  if (hasAny(f.attrs, USERNAME_STRONG_ALL)) s += USERNAME_WORD_IN_ATTRS;
+  else if (hasAny(f.attrs, USERNAME_WEAK)) s += USERNAME_WORD_IN_ATTRS_WEAK;
   else worded = false;
   if (hasAny(f.text, USERNAME_STRONG_ALL)) {
-    s += 40;
+    s += USERNAME_WORD_IN_TEXT;
     worded = true;
   } else if (hasAny(f.text, USERNAME_WEAK)) {
-    s += 20;
+    s += USERNAME_WORD_IN_TEXT_WEAK;
     worded = true;
   }
-  if (hasAny(f.attrs, USERNAME_NEGATIVE) || hasAny(f.text, USERNAME_NEGATIVE)) s -= 80;
-  if (ctx.lastBeforePassword) s += 40;
+  if (hasAny(f.attrs, USERNAME_NEGATIVE) || hasAny(f.text, USERNAME_NEGATIVE)) s -= USERNAME_NEGATIVE_PENALTY;
+  if (ctx.lastBeforePassword) s += USERNAME_LAST_BEFORE_PASSWORD;
   if (!ctx.hasPassword && ctx.loginIntent && worded) s += USERNAME_LOGIN_INTENT_BONUS;
   return s;
 }
@@ -359,12 +176,12 @@ export function otpScore(f: FieldFeatures, inSplitGroup: boolean): number {
   const words = `${f.attrs} ${f.text}`;
   if (hasAny(words, OTP_NEGATIVE)) return 0;
   let s = 0;
-  if (f.autocomplete.includes("one-time-code")) s += 120;
-  if (hasAny(words, OTP_STRONG)) s += 70;
-  else if (hasAny(words, OTP_WEAK)) s += 30;
-  if (f.maxLength >= 4 && f.maxLength <= 8) s += 15;
-  if (f.inputMode === "numeric" || f.type === "tel" || f.type === "number") s += 10;
-  if (inSplitGroup) s += 65;
+  if (f.autocomplete.includes("one-time-code")) s += OTP_AC;
+  if (hasAny(words, OTP_STRONG)) s += OTP_WORD;
+  else if (hasAny(words, OTP_WEAK)) s += OTP_WORD_WEAK;
+  if (f.maxLength >= OTP_MIN_LENGTH && f.maxLength <= OTP_MAX_LENGTH) s += OTP_LENGTH;
+  if (f.inputMode === "numeric" || f.type === "tel" || f.type === "number") s += OTP_NUMERIC;
+  if (inSplitGroup) s += OTP_SPLIT_GROUP;
   return s;
 }
 

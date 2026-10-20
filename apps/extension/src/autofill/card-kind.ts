@@ -7,6 +7,23 @@
 
 import type { CardRole } from "@havenkeys/protocol";
 import { hasAny, MAX_HINT_CHARS, normalize } from "./text";
+import {
+  CARD_NOT_AN_EXPIRY as NOT_AN_EXPIRY,
+  CARD_MONTH_WORDS as MONTH_WORDS,
+  CARD_YEAR_WORDS as YEAR_WORDS,
+  CARD_CODE_WORDS as CODE_WORDS,
+  CARD_NEGATIVE as NEGATIVE,
+  CARD_NOT_A_NAME as NOT_A_NAME,
+  CARD_MONTH_NAMES as MONTH_NAMES,
+  CARD_WORDS_VERIFICATION_NUMBER,
+  CARD_WORDS_CARDHOLDER_NAME,
+  CARD_WORDS_NUMBER,
+  CARD_WORDS_EXPIRY_MONTH,
+  CARD_WORDS_EXPIRY_YEAR,
+  CARD_WORDS_EXPIRY,
+  CARD_WORDS_BRAND,
+  CARD_AMBIGUOUS,
+} from "./words.generated";
 
 export type CardElement = HTMLInputElement | HTMLSelectElement;
 /** A role, or month and year together in one field. */
@@ -30,13 +47,13 @@ const AC_PREFIX = /^(section-\S+|shipping|billing)$/;
 
 /** Words per kind, English and Portuguese, normalized. Order matters: first hit wins. */
 const WORDS: Array<[CardFieldKind, readonly string[]]> = [
-  ["verificationNumber", ["cvv", "cvc", "csc", "cvv2", "cvc2", "cid", "security code", "codigo de seguranca", "cod seguranca", "card code", "card verification"]],
-  ["cardholderName", ["name on card", "nome impresso", "nome impresso no cartao", "nome no cartao", "nome do titular", "titular", "cardholder", "card holder", "holder name"]],
-  ["number", ["card number", "numero do cartao", "numero cartao", "cardnumber", "ccnumber", "cc number", "credit card", "cartao de credito", "card no"]],
-  ["expiryMonth", ["exp month", "expiry month", "expiration month", "mes de validade", "mes validade", "mes de vencimento"]],
-  ["expiryYear", ["exp year", "expiry year", "expiration year", "ano de validade", "ano validade", "ano de vencimento"]],
-  ["expiry", ["expiry", "expiration", "exp date", "expiry date", "expiration date", "valid thru", "validade", "vencimento", "data de validade", "mm aa", "mm yy"]],
-  ["brand", ["card type", "bandeira", "card brand"]],
+  ["verificationNumber", CARD_WORDS_VERIFICATION_NUMBER],
+  ["cardholderName", CARD_WORDS_CARDHOLDER_NAME],
+  ["number", CARD_WORDS_NUMBER],
+  ["expiryMonth", CARD_WORDS_EXPIRY_MONTH],
+  ["expiryYear", CARD_WORDS_EXPIRY_YEAR],
+  ["expiry", CARD_WORDS_EXPIRY],
+  ["brand", CARD_WORDS_BRAND],
 ];
 
 /**
@@ -44,26 +61,12 @@ const WORDS: Array<[CardFieldKind, readonly string[]]> = [
  * code", a customer "cid", a bare "titular"). They claim a field only inside
  * a group that already has a number, CVV-word or expiry field (strong).
  */
-const AMBIGUOUS = new Set(["cid", "security code", "codigo de seguranca", "cod seguranca", "card code", "titular", "cardholder", "card holder", "holder name", "nome do titular"]);
+const AMBIGUOUS = new Set(CARD_AMBIGUOUS);
 
-/** Expiry words also appear in birth-date placeholders ("DD/MM/AA"). */
-const NOT_AN_EXPIRY = ["dd", "dia", "day", "nascimento", "birth", "bday", "birthday"];
 
-/** Weak words: only in a group that already has a number, CVV or expiry field. */
-const MONTH_WORDS = ["month", "mes", "mm"];
-const YEAR_WORDS = ["year", "ano", "yy", "yyyy", "aa", "aaaa"];
-const CODE_WORDS = ["code", "codigo", "cod"];
 
-/** Wording that means "not a payment card" (or not a card field: installments). */
-const NEGATIVE = [
-  "gift card", "cartao presente", "vale presente", "loyalty", "fidelidade", "coupon", "cupom", "promo", "search", "busca", "pesquisar",
-  "parcela", "parcelas", "installment", "installments", "vezes", "quantidade",
-];
 
-/** A cardholder-name field that also asks for one of these is something else. */
-const NOT_A_NAME = ["cpf", "documento", "nascimento", "birth", "email", "e mail", "telefone", "phone"];
 
-const MONTH_NAMES = ["jan", "feb", "fev", "mar", "apr", "abr", "may", "mai", "jun", "jul", "aug", "ago", "sep", "set", "oct", "out", "nov", "dec", "dez"];
 
 function attr(el: Element, n: string): string {
   return (el.getAttribute(n) ?? "").slice(0, MAX_HINT_CHARS);

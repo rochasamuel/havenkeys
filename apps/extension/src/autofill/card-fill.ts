@@ -12,6 +12,31 @@ import type { Env } from "./group";
 import { cardRolesOf, isCardFillable, type CardElement, type CardField, type CardGroup } from "./card";
 import { typedByUser } from "./fill";
 import { normalize } from "./text";
+import {
+  CARD_MONTH_JANUARY,
+  CARD_MONTH_FEBRUARY,
+  CARD_MONTH_MARCH,
+  CARD_MONTH_APRIL,
+  CARD_MONTH_MAY,
+  CARD_MONTH_JUNE,
+  CARD_MONTH_JULY,
+  CARD_MONTH_AUGUST,
+  CARD_MONTH_SEPTEMBER,
+  CARD_MONTH_OCTOBER,
+  CARD_MONTH_NOVEMBER,
+  CARD_MONTH_DECEMBER,
+  CARD_BRAND_VISA,
+  CARD_BRAND_MASTERCARD,
+  CARD_BRAND_AMEX,
+  CARD_BRAND_ELO,
+  CARD_BRAND_HIPERCARD,
+  CARD_BRAND_DINERS,
+  CARD_BRAND_DISCOVER,
+  CARD_BRAND_JCB,
+  CARD_BRAND_UNIONPAY,
+  CARD_BRAND_MAESTRO,
+  CARD_BRAND_OTHER,
+} from "./words.generated";
 
 /** What we last wrote into each element: a value equal to it is ours to replace. */
 const written = new WeakMap<CardElement, string>();
@@ -19,33 +44,33 @@ const inputSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 
 
 /** Month names and abbreviations, English and Portuguese, normalized; index 0 = January. */
 const MONTHS: ReadonlyArray<readonly string[]> = [
-  ["january", "jan", "janeiro"],
-  ["february", "feb", "fevereiro", "fev"],
-  ["march", "mar", "marco"],
-  ["april", "apr", "abril", "abr"],
-  ["may", "maio", "mai"],
-  ["june", "jun", "junho"],
-  ["july", "jul", "julho"],
-  ["august", "aug", "agosto", "ago"],
-  ["september", "sep", "sept", "setembro", "set"],
-  ["october", "oct", "outubro", "out"],
-  ["november", "nov", "novembro"],
-  ["december", "dec", "dezembro", "dez"],
+  CARD_MONTH_JANUARY,
+  CARD_MONTH_FEBRUARY,
+  CARD_MONTH_MARCH,
+  CARD_MONTH_APRIL,
+  CARD_MONTH_MAY,
+  CARD_MONTH_JUNE,
+  CARD_MONTH_JULY,
+  CARD_MONTH_AUGUST,
+  CARD_MONTH_SEPTEMBER,
+  CARD_MONTH_OCTOBER,
+  CARD_MONTH_NOVEMBER,
+  CARD_MONTH_DECEMBER,
 ];
 
 /** Every way a brand select may name a brand, normalized. */
 const BRAND_ALIASES: Record<string, readonly string[]> = {
-  visa: ["visa", "vi"],
-  mastercard: ["mastercard", "master card", "master", "mc"],
-  amex: ["amex", "american express", "ax"],
-  elo: ["elo"],
-  hipercard: ["hipercard", "hiper", "hc"],
-  diners: ["diners", "diners club", "dc"],
-  discover: ["discover", "di"],
-  jcb: ["jcb"],
-  unionpay: ["unionpay", "union pay", "cup"],
-  maestro: ["maestro"],
-  other: [],
+  visa: CARD_BRAND_VISA,
+  mastercard: CARD_BRAND_MASTERCARD,
+  amex: CARD_BRAND_AMEX,
+  elo: CARD_BRAND_ELO,
+  hipercard: CARD_BRAND_HIPERCARD,
+  diners: CARD_BRAND_DINERS,
+  discover: CARD_BRAND_DISCOVER,
+  jcb: CARD_BRAND_JCB,
+  unionpay: CARD_BRAND_UNIONPAY,
+  maestro: CARD_BRAND_MAESTRO,
+  other: CARD_BRAND_OTHER,
 };
 
 const hint = (el: Element) => `${el.getAttribute("placeholder") ?? ""}`.slice(0, 200).toLowerCase();

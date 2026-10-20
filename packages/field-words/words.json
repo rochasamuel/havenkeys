@@ -26,7 +26,7 @@
       ]
     },
     "PAY_WORDS": {
-      "comment": "Labels of buttons that pay for a checkout.",
+      "comment": "Labels of buttons that pay for a checkout (a typed card is read on these).",
       "extension": [
         "pay",
         "pay now",
@@ -43,7 +43,1030 @@
         "confirmar pagamento",
         "concluir compra"
       ]
+    },
+    "USERNAME_STRONG": {
+      "extension": [
+        "username",
+        "user name",
+        "userid",
+        "user id",
+        "login",
+        "login id",
+        "email",
+        "e mail",
+        "email address",
+        "account",
+        "account name",
+        "identifier",
+        "sign in",
+        "usuario",
+        "nome de usuario",
+        "correo"
+      ]
+    },
+    "USERNAME_DOCUMENT": {
+      "comment": "National ID and document numbers that sites use as the login (gov.br's CPF, Spain's DNI, Chile's RUT…). Counted like the strong words above. Ambiguous short tokens (`id`, `ci`, `cc`: card fields) are left out.",
+      "extension": [
+        "cpf",
+        "cnpj",
+        "rg",
+        "documento",
+        "numero do documento",
+        "matricula",
+        "nif",
+        "nie",
+        "dni",
+        "cif",
+        "rut",
+        "cuit",
+        "cuil",
+        "curp",
+        "rfc",
+        "cedula",
+        "documento de identidad",
+        "document number",
+        "passport",
+        "passaporte",
+        "pasaporte",
+        "national id",
+        "codice fiscale"
+      ]
+    },
+    "USERNAME_WEAK": {
+      "extension": [
+        "user",
+        "mail",
+        "phone",
+        "mobile",
+        "telefone",
+        "celular"
+      ]
+    },
+    "USERNAME_NEGATIVE": {
+      "extension": [
+        "search",
+        "query",
+        "q",
+        "coupon",
+        "promo",
+        "captcha",
+        "newsletter",
+        "subscribe",
+        "zip",
+        "postal",
+        "city",
+        "address",
+        "street",
+        "first name",
+        "last name",
+        "full name",
+        "company",
+        "code",
+        "otp",
+        "message",
+        "comment",
+        "amount",
+        "quantity"
+      ]
+    },
+    "OTP_STRONG": {
+      "extension": [
+        "otp",
+        "totp",
+        "2fa",
+        "mfa",
+        "one time",
+        "one time code",
+        "one time password",
+        "verification code",
+        "security code",
+        "auth code",
+        "authentication code",
+        "authenticator",
+        "two factor",
+        "2 step",
+        "two step",
+        "codigo de verificacao",
+        "codigo de seguranca",
+        "codigo de verificacion",
+        "token"
+      ]
+    },
+    "OTP_WEAK": {
+      "extension": [
+        "code",
+        "codigo",
+        "pin",
+        "verify",
+        "verification"
+      ]
+    },
+    "OTP_NEGATIVE": {
+      "extension": [
+        "postal code",
+        "zip code",
+        "promo code",
+        "coupon",
+        "discount",
+        "country code",
+        "area code",
+        "captcha",
+        "gift",
+        "referral",
+        "invite",
+        "cvv",
+        "cvc"
+      ]
+    },
+    "PW_CONFIRM": {
+      "extension": [
+        "confirm",
+        "confirmation",
+        "re enter",
+        "reenter",
+        "repeat",
+        "retype",
+        "again",
+        "verify",
+        "confirmar",
+        "confirme",
+        "confirmacao",
+        "repita",
+        "repetir"
+      ]
+    },
+    "PW_NEW": {
+      "extension": [
+        "new",
+        "create",
+        "choose",
+        "set",
+        "nova",
+        "novo",
+        "nueva",
+        "criar",
+        "crie"
+      ]
+    },
+    "PW_CURRENT": {
+      "extension": [
+        "current",
+        "old",
+        "existing",
+        "atual",
+        "antiga",
+        "actual"
+      ]
+    },
+    "INTENT_SIGNUP": {
+      "extension": [
+        "sign up",
+        "signup",
+        "register",
+        "registration",
+        "create account",
+        "create an account",
+        "create your account",
+        "join",
+        "cadastro",
+        "cadastrar",
+        "cadastre se",
+        "criar conta",
+        "crear cuenta",
+        "registrarse"
+      ]
+    },
+    "INTENT_CHANGE": {
+      "extension": [
+        "change password",
+        "change your password",
+        "reset password",
+        "reset your password",
+        "update password",
+        "new password",
+        "alterar senha",
+        "redefinir senha",
+        "nova senha",
+        "cambiar contrasena"
+      ]
+    },
+    "INTENT_LOGIN": {
+      "extension": [
+        "sign in",
+        "signin",
+        "log in",
+        "login",
+        "log on",
+        "entrar",
+        "acessar",
+        "iniciar sesion",
+        "welcome back"
+      ]
+    },
+    "AC_NOT_LOGIN": {
+      "comment": "autocomplete tokens that mark a field as something other than a login.",
+      "raw": true,
+      "extension": [
+        "name",
+        "given-name",
+        "family-name",
+        "additional-name",
+        "nickname",
+        "organization",
+        "street-address",
+        "address-line1",
+        "address-line2",
+        "address-level1",
+        "address-level2",
+        "postal-code",
+        "country",
+        "country-name",
+        "bday",
+        "bday-day",
+        "bday-month",
+        "bday-year",
+        "sex",
+        "url",
+        "photo"
+      ]
+    },
+    "PROVIDER_BUTTON": {
+      "comment": "An identity provider's button (\"Sign in with Google\", \"Continuar com a Apple\"). Signup and sign-in pages both have them, so their words are not intent evidence.",
+      "extension": [
+        "sign in with",
+        "signin with",
+        "log in with",
+        "login with",
+        "sign up with",
+        "signup with",
+        "continue with",
+        "entrar com",
+        "acessar com",
+        "continuar com",
+        "cadastre se com",
+        "cadastrar com",
+        "inscreva se com",
+        "iniciar sesion con",
+        "registrate con",
+        "registrarse con",
+        "continuar con"
+      ]
+    },
+    "PROVIDER_NAMES": {
+      "comment": "Named providers: \"Sign in with a passkey\" or \"with email\" is still a sign-in.",
+      "extension": [
+        "google",
+        "apple",
+        "microsoft",
+        "facebook",
+        "meta",
+        "github",
+        "gitlab",
+        "twitter",
+        "x",
+        "linkedin",
+        "amazon",
+        "yahoo",
+        "discord",
+        "slack",
+        "gov br",
+        "paypal",
+        "steam",
+        "twitch"
+      ]
+    },
+    "AC_SIGNUP_ONLY": {
+      "comment": "Details a sign-in form never asks for: your name or birthday. A group with a password and such a field is a signup. By autocomplete token this outweighs any wording (Yahoo's signup says only \"Sign in with Google\" and \"Sign in instead\"). By label it is weaker evidence (a library catalog's sign-in asks for a last name and a PIN), so `classifyGroup` lets it decide only when no heading, submit button or form name says sign in.",
+      "raw": true,
+      "extension": [
+        "name",
+        "given-name",
+        "family-name",
+        "additional-name",
+        "bday",
+        "bday-day",
+        "bday-month",
+        "bday-year",
+        "sex"
+      ]
+    },
+    "SIGNUP_ONLY_WORDS": {
+      "comment": "Unambiguous label words only: \"name\"/\"nome\"/\"nombre\" alone also label usernames.",
+      "extension": [
+        "first name",
+        "firstname",
+        "given name",
+        "middle name",
+        "last name",
+        "lastname",
+        "family name",
+        "surname",
+        "date of birth",
+        "birth date",
+        "birthdate",
+        "birthday",
+        "primeiro nome",
+        "sobrenome",
+        "data de nascimento",
+        "apellido",
+        "apellidos",
+        "fecha de nacimiento"
+      ]
+    },
+    "CARD_NOT_AN_EXPIRY": {
+      "comment": "Expiry words also appear in birth-date placeholders (\"DD/MM/AA\").",
+      "extension": [
+        "dd",
+        "dia",
+        "day",
+        "nascimento",
+        "birth",
+        "bday",
+        "birthday"
+      ]
+    },
+    "CARD_MONTH_WORDS": {
+      "comment": "Weak words: only in a group that already has a number, CVV or expiry field.",
+      "extension": [
+        "month",
+        "mes",
+        "mm"
+      ]
+    },
+    "CARD_YEAR_WORDS": {
+      "extension": [
+        "year",
+        "ano",
+        "yy",
+        "yyyy",
+        "aa",
+        "aaaa"
+      ]
+    },
+    "CARD_CODE_WORDS": {
+      "extension": [
+        "code",
+        "codigo",
+        "cod"
+      ]
+    },
+    "CARD_NEGATIVE": {
+      "comment": "Wording that means \"not a payment card\" (or not a card field: installments).",
+      "extension": [
+        "gift card",
+        "cartao presente",
+        "vale presente",
+        "loyalty",
+        "fidelidade",
+        "coupon",
+        "cupom",
+        "promo",
+        "search",
+        "busca",
+        "pesquisar",
+        "parcela",
+        "parcelas",
+        "installment",
+        "installments",
+        "vezes",
+        "quantidade"
+      ]
+    },
+    "CARD_NOT_A_NAME": {
+      "comment": "A cardholder-name field that also asks for one of these is something else.",
+      "extension": [
+        "cpf",
+        "documento",
+        "nascimento",
+        "birth",
+        "email",
+        "e mail",
+        "telefone",
+        "phone"
+      ]
+    },
+    "CARD_MONTH_NAMES": {
+      "extension": [
+        "jan",
+        "feb",
+        "fev",
+        "mar",
+        "apr",
+        "abr",
+        "may",
+        "mai",
+        "jun",
+        "jul",
+        "aug",
+        "ago",
+        "sep",
+        "set",
+        "oct",
+        "out",
+        "nov",
+        "dec",
+        "dez"
+      ]
+    },
+    "IDENTITY_BIRTH": {
+      "comment": "Compound labels the first-match word list would get wrong (final review finding 4). Each is checked against the name, id and label text together.",
+      "extension": [
+        "nascimento",
+        "birth",
+        "naturalidade",
+        "dob"
+      ]
+    },
+    "IDENTITY_PLACE": {
+      "extension": [
+        "cidade",
+        "city",
+        "town",
+        "municipio",
+        "pais",
+        "country",
+        "local",
+        "place",
+        "estado",
+        "state",
+        "uf"
+      ]
+    },
+    "IDENTITY_DOCUMENT": {
+      "extension": [
+        "documento",
+        "document",
+        "doc"
+      ]
+    },
+    "IDENTITY_ADDRESS": {
+      "extension": [
+        "endereco",
+        "address",
+        "logradouro",
+        "rua",
+        "street",
+        "cep",
+        "zip"
+      ]
+    },
+    "IDENTITY_NEW": {
+      "extension": [
+        "new",
+        "novo",
+        "nova",
+        "nuevo",
+        "nueva"
+      ]
+    },
+    "IDENTITY_NEGATIVE": {
+      "comment": "Wording that means \"not the person's data\" even when a role word matches.",
+      "extension": [
+        "search",
+        "busca",
+        "pesquisar",
+        "coupon",
+        "cupom",
+        "promo",
+        "cc",
+        "card",
+        "cartao",
+        "cvv",
+        "cvc",
+        "captcha",
+        "quantity",
+        "quantidade",
+        "order",
+        "pedido",
+        "account",
+        "conta",
+        "tracking",
+        "rastreio",
+        "invoice",
+        "nota fiscal",
+        "price",
+        "preco",
+        "mae",
+        "mother",
+        "titular",
+        "holder",
+        "unit",
+        "estado civil",
+        "marital",
+        "civil status"
+      ]
+    },
+    "CARD_WORDS_VERIFICATION_NUMBER": {
+      "comment": "Card field words by kind; order (card-kind.ts WORDS) matters: first hit wins.",
+      "extension": [
+        "cvv",
+        "cvc",
+        "csc",
+        "cvv2",
+        "cvc2",
+        "cid",
+        "security code",
+        "codigo de seguranca",
+        "cod seguranca",
+        "card code",
+        "card verification"
+      ]
+    },
+    "CARD_WORDS_CARDHOLDER_NAME": {
+      "extension": [
+        "name on card",
+        "nome impresso",
+        "nome impresso no cartao",
+        "nome no cartao",
+        "nome do titular",
+        "titular",
+        "cardholder",
+        "card holder",
+        "holder name"
+      ]
+    },
+    "CARD_WORDS_NUMBER": {
+      "extension": [
+        "card number",
+        "numero do cartao",
+        "numero cartao",
+        "cardnumber",
+        "ccnumber",
+        "cc number",
+        "credit card",
+        "cartao de credito",
+        "card no"
+      ]
+    },
+    "CARD_WORDS_EXPIRY_MONTH": {
+      "extension": [
+        "exp month",
+        "expiry month",
+        "expiration month",
+        "mes de validade",
+        "mes validade",
+        "mes de vencimento"
+      ]
+    },
+    "CARD_WORDS_EXPIRY_YEAR": {
+      "extension": [
+        "exp year",
+        "expiry year",
+        "expiration year",
+        "ano de validade",
+        "ano validade",
+        "ano de vencimento"
+      ]
+    },
+    "CARD_WORDS_EXPIRY": {
+      "extension": [
+        "expiry",
+        "expiration",
+        "exp date",
+        "expiry date",
+        "expiration date",
+        "valid thru",
+        "validade",
+        "vencimento",
+        "data de validade",
+        "mm aa",
+        "mm yy"
+      ]
+    },
+    "CARD_WORDS_BRAND": {
+      "extension": [
+        "card type",
+        "bandeira",
+        "card brand"
+      ]
+    },
+    "IDENTITY_WORDS_FULL_NAME": {
+      "comment": "Identity field words by role; order (identity.ts WORDS) matters: first hit wins.",
+      "extension": [
+        "nome completo",
+        "full name",
+        "your name",
+        "seu nome"
+      ]
+    },
+    "IDENTITY_WORDS_FIRST_NAME": {
+      "extension": [
+        "first name",
+        "given name",
+        "primeiro nome",
+        "firstname",
+        "fname"
+      ]
+    },
+    "IDENTITY_WORDS_MIDDLE_NAME": {
+      "extension": [
+        "middle name",
+        "nome do meio"
+      ]
+    },
+    "IDENTITY_WORDS_LAST_NAME": {
+      "extension": [
+        "last name",
+        "surname",
+        "family name",
+        "sobrenome",
+        "lastname",
+        "lname"
+      ]
+    },
+    "IDENTITY_WORDS_CPF": {
+      "extension": [
+        "cpf"
+      ]
+    },
+    "IDENTITY_WORDS_RG": {
+      "extension": [
+        "rg",
+        "carteira de identidade",
+        "registro geral"
+      ]
+    },
+    "IDENTITY_WORDS_PASSPORT": {
+      "extension": [
+        "passport",
+        "passaporte"
+      ]
+    },
+    "IDENTITY_WORDS_DRIVERS_LICENSE": {
+      "extension": [
+        "cnh",
+        "driver license",
+        "drivers license",
+        "driving licence",
+        "carteira de motorista"
+      ]
+    },
+    "IDENTITY_WORDS_BIRTH_DATE": {
+      "extension": [
+        "data de nascimento",
+        "nascimento",
+        "date of birth",
+        "birth date",
+        "birthday",
+        "birthdate",
+        "dob"
+      ]
+    },
+    "IDENTITY_WORDS_EMAIL": {
+      "extension": [
+        "email",
+        "e mail"
+      ]
+    },
+    "IDENTITY_WORDS_PHONE": {
+      "extension": [
+        "celular",
+        "telefone",
+        "phone",
+        "mobile",
+        "tel",
+        "whatsapp"
+      ]
+    },
+    "IDENTITY_WORDS_USERNAME": {
+      "extension": [
+        "username",
+        "user name",
+        "nome de usuario"
+      ]
+    },
+    "IDENTITY_WORDS_COMPANY": {
+      "extension": [
+        "empresa",
+        "company",
+        "organization",
+        "organizacao",
+        "nome fantasia",
+        "razao social"
+      ]
+    },
+    "IDENTITY_WORDS_POSTAL_CODE": {
+      "extension": [
+        "cep",
+        "zip",
+        "zip code",
+        "zipcode",
+        "postal",
+        "postal code",
+        "postcode"
+      ]
+    },
+    "IDENTITY_WORDS_NEIGHBORHOOD": {
+      "extension": [
+        "bairro",
+        "neighborhood",
+        "district"
+      ]
+    },
+    "IDENTITY_WORDS_COMPLEMENT": {
+      "extension": [
+        "complemento",
+        "apt",
+        "apartment",
+        "suite"
+      ]
+    },
+    "IDENTITY_WORDS_NUMBER": {
+      "extension": [
+        "numero",
+        "number",
+        "house number",
+        "num"
+      ]
+    },
+    "IDENTITY_WORDS_STREET": {
+      "extension": [
+        "logradouro",
+        "rua",
+        "endereco",
+        "street",
+        "address",
+        "address line 1"
+      ]
+    },
+    "IDENTITY_WORDS_CITY": {
+      "extension": [
+        "cidade",
+        "city",
+        "municipio",
+        "town"
+      ]
+    },
+    "IDENTITY_WORDS_STATE": {
+      "extension": [
+        "estado",
+        "uf",
+        "state",
+        "province"
+      ]
+    },
+    "IDENTITY_WORDS_COUNTRY": {
+      "extension": [
+        "pais",
+        "country"
+      ]
+    },
+    "IDENTITY_WORDS_FULL_NAME_GENERIC": {
+      "extension": [
+        "nome",
+        "name"
+      ]
+    },
+    "CARD_MONTH_JANUARY": {
+      "comment": "Month names for expiry selects (card-fill.ts MONTHS), index 0 = January.",
+      "extension": [
+        "january",
+        "jan",
+        "janeiro"
+      ]
+    },
+    "CARD_MONTH_FEBRUARY": {
+      "extension": [
+        "february",
+        "feb",
+        "fevereiro",
+        "fev"
+      ]
+    },
+    "CARD_MONTH_MARCH": {
+      "extension": [
+        "march",
+        "mar",
+        "marco"
+      ]
+    },
+    "CARD_MONTH_APRIL": {
+      "extension": [
+        "april",
+        "apr",
+        "abril",
+        "abr"
+      ]
+    },
+    "CARD_MONTH_MAY": {
+      "extension": [
+        "may",
+        "maio",
+        "mai"
+      ]
+    },
+    "CARD_MONTH_JUNE": {
+      "extension": [
+        "june",
+        "jun",
+        "junho"
+      ]
+    },
+    "CARD_MONTH_JULY": {
+      "extension": [
+        "july",
+        "jul",
+        "julho"
+      ]
+    },
+    "CARD_MONTH_AUGUST": {
+      "extension": [
+        "august",
+        "aug",
+        "agosto",
+        "ago"
+      ]
+    },
+    "CARD_MONTH_SEPTEMBER": {
+      "extension": [
+        "september",
+        "sep",
+        "sept",
+        "setembro",
+        "set"
+      ]
+    },
+    "CARD_MONTH_OCTOBER": {
+      "extension": [
+        "october",
+        "oct",
+        "outubro",
+        "out"
+      ]
+    },
+    "CARD_MONTH_NOVEMBER": {
+      "extension": [
+        "november",
+        "nov",
+        "novembro"
+      ]
+    },
+    "CARD_MONTH_DECEMBER": {
+      "extension": [
+        "december",
+        "dec",
+        "dezembro",
+        "dez"
+      ]
+    },
+    "CARD_BRAND_VISA": {
+      "comment": "Ways a brand select names each brand (card-fill.ts BRAND_ALIASES).",
+      "extension": [
+        "visa",
+        "vi"
+      ]
+    },
+    "CARD_BRAND_MASTERCARD": {
+      "extension": [
+        "mastercard",
+        "master card",
+        "master",
+        "mc"
+      ]
+    },
+    "CARD_BRAND_AMEX": {
+      "extension": [
+        "amex",
+        "american express",
+        "ax"
+      ]
+    },
+    "CARD_BRAND_ELO": {
+      "extension": [
+        "elo"
+      ]
+    },
+    "CARD_BRAND_HIPERCARD": {
+      "extension": [
+        "hipercard",
+        "hiper",
+        "hc"
+      ]
+    },
+    "CARD_BRAND_DINERS": {
+      "extension": [
+        "diners",
+        "diners club",
+        "dc"
+      ]
+    },
+    "CARD_BRAND_DISCOVER": {
+      "extension": [
+        "discover",
+        "di"
+      ]
+    },
+    "CARD_BRAND_JCB": {
+      "extension": [
+        "jcb"
+      ]
+    },
+    "CARD_BRAND_UNIONPAY": {
+      "extension": [
+        "unionpay",
+        "union pay",
+        "cup"
+      ]
+    },
+    "CARD_BRAND_MAESTRO": {
+      "extension": [
+        "maestro"
+      ]
+    },
+    "CARD_BRAND_OTHER": {
+      "extension": []
+    },
+    "CARD_AMBIGUOUS": {
+      "comment": "Card phrases that also name login or identity fields; they claim a field only in a strong group.",
+      "extension": [
+        "cid",
+        "security code",
+        "codigo de seguranca",
+        "cod seguranca",
+        "card code",
+        "titular",
+        "cardholder",
+        "card holder",
+        "holder name",
+        "nome do titular"
+      ]
     }
   },
-  "numbers": {}
+  "numbers": {
+    "USERNAME_THRESHOLD": {
+      "extension": 50
+    },
+    "USERNAME_ALONE_THRESHOLD": {
+      "extension": 70
+    },
+    "OTP_THRESHOLD": {
+      "extension": 60
+    },
+    "USERNAME_LOGIN_INTENT_BONUS": {
+      "extension": 30
+    },
+    "USERNAME_AC_USERNAME": {
+      "extension": 100
+    },
+    "USERNAME_AC_EMAIL": {
+      "extension": 90
+    },
+    "USERNAME_AC_TEL": {
+      "extension": 30
+    },
+    "USERNAME_EMAIL_INPUT": {
+      "extension": 80
+    },
+    "USERNAME_WORD_IN_ATTRS": {
+      "extension": 50
+    },
+    "USERNAME_WORD_IN_ATTRS_WEAK": {
+      "extension": 25
+    },
+    "USERNAME_WORD_IN_TEXT": {
+      "extension": 40
+    },
+    "USERNAME_WORD_IN_TEXT_WEAK": {
+      "extension": 20
+    },
+    "USERNAME_NEGATIVE_PENALTY": {
+      "extension": 80
+    },
+    "USERNAME_LAST_BEFORE_PASSWORD": {
+      "extension": 40
+    },
+    "OTP_AC": {
+      "extension": 120
+    },
+    "OTP_WORD": {
+      "extension": 70
+    },
+    "OTP_WORD_WEAK": {
+      "extension": 30
+    },
+    "OTP_LENGTH": {
+      "extension": 15
+    },
+    "OTP_NUMERIC": {
+      "extension": 10
+    },
+    "OTP_SPLIT_GROUP": {
+      "extension": 65
+    },
+    "OTP_MIN_LENGTH": {
+      "extension": 4
+    },
+    "OTP_MAX_LENGTH": {
+      "extension": 8
+    },
+    "IDENTITY_THRESHOLD": {
+      "extension": 60
+    },
+    "IDENTITY_WORDS_ON_ATTRS": {
+      "extension": 70
+    },
+    "IDENTITY_WORDS_ON_TEXT": {
+      "extension": 60
+    }
+  }
 }

@@ -36,44 +36,4 @@ export function hasAny(text: string, phrases: readonly string[]): boolean {
   return phrases.some((p) => hasPhrase(text, p));
 }
 
-/** Labels of form-less buttons that submit a login. */
-export const SUBMIT_WORDS = [
-  "sign in",
-  "log in",
-  "login",
-  "signin",
-  "continue",
-  "next",
-  "submit",
-  "sign up",
-  "register",
-  "create account",
-  "save",
-  "update",
-  "change password",
-  "entrar",
-  "acessar",
-  "continuar",
-  "proximo",
-  "avancar",
-  "cadastrar",
-  "salvar",
-];
-
-/** Labels of buttons that pay for a checkout (a typed card is read on these). */
-export const PAY_WORDS = [
-  "pay",
-  "pay now",
-  "place order",
-  "complete order",
-  "complete purchase",
-  "buy now",
-  "confirm payment",
-  "pagar",
-  "finalizar",
-  "finalizar compra",
-  "finalizar pedido",
-  "comprar",
-  "confirmar pagamento",
-  "concluir compra",
-];
+export { PAY_WORDS, SUBMIT_WORDS } from "./words.generated";
