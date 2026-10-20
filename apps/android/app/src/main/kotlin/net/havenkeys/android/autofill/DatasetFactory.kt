@@ -71,7 +71,8 @@ class DatasetFactory(
         offer.copies.mapNotNullTo(datasets, ::copyDataset)
         // Unlocked for nothing: say so, and offer the app (to add the login or search); it fills nothing.
         // The keyboard strip already ends with HavenKeys' icon, which opens the app.
-        if (offer.openApp && datasets.isEmpty() && !offer.search && pinned == null) {
+        val nothingElse = datasets.isEmpty() && pinned == null && !offer.search
+        if (offer.openApp && nothingElse) {
             rows.dataset(
                 listOfNotNull(usernameId, passwordId, otpId).map { it to null },
                 context.getString(R.string.autofill_no_logins),
