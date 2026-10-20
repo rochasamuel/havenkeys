@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { generate } from "./generate.mjs";
+import { generate, normalize } from "./generate.mjs";
 
 /** Runs `generate` on `words` in a temp dir; returns the outputs' paths. */
 function run(words, check = false, dir = mkdtempSync(join(tmpdir(), "words-"))) {
@@ -38,4 +38,9 @@ test("check reports stale output", () => {
   assert.deepEqual(run(words, true, dir).stale, []);
   writeFileSync(out.ts, readFileSync(out.ts, "utf8") + "// edited\n");
   assert.deepEqual(run(words, true, dir).stale, [out.ts]);
+});
+
+test("normalize matches the shared vectors", () => {
+  const vectors = JSON.parse(readFileSync(new URL("./fixtures/normalize.json", import.meta.url), "utf8"));
+  for (const { in: raw, out } of vectors) assert.equal(normalize(raw), out, raw);
 });

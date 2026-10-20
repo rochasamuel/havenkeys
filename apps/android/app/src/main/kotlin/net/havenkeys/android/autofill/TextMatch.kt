@@ -9,12 +9,14 @@ private const val ASCII_END = 128
 private const val MAX_DIGITS = 6
 
 /**
- * `"loginEmail_Endereço"` → `"login email endereco"` (text.ts's normalize).
+ * `"loginEmail_Endereço"` → `"login email endereco"`, `"C.P.F."` → `"cpf"`
+ * (text.ts's normalize; packages/field-words/fixtures/normalize.json).
  * Page and app strings are only ever compared against fixed lists.
  */
 internal fun normalize(raw: String?): String = raw
     ?.take(MAX_TEXT_CHARS)
     ?.replace(CAMEL, "\$1 \$2")
+    ?.replace(DOTTED_LETTERS) { it.value.replace(".", "") }
     ?.let { if (it.all { c -> c.code < ASCII_END }) it else stripAccents(it) }
     ?.lowercase()
     ?.replace(NOT_WORD, " ")
@@ -88,5 +90,8 @@ private fun stripAccents(text: String) =
     Normalizer.normalize(text, Normalizer.Form.NFKD).replace(COMBINING_MARKS, "")
 
 private val CAMEL = Regex("([a-z])([A-Z])")
+
+/** Single letters joined by dots, as a whole word: `C.P.F.`, `R.G`. */
+private val DOTTED_LETTERS = Regex("(?<![\\p{L}\\p{N}])\\p{L}(?:\\.\\p{L})+\\.?(?![\\p{L}\\p{N}])")
 private val COMBINING_MARKS = Regex("\\p{Mn}+")
 private val NOT_WORD = Regex("[^a-z0-9]+")

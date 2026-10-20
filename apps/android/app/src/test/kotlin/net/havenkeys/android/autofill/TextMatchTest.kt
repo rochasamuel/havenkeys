@@ -7,6 +7,15 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TextMatchTest {
+    /** packages/field-words/fixtures/normalize.json, shared with the extension and the generator. */
+    @Test
+    fun normalizeMatchesTheSharedVectors() {
+        val json = requireNotNull(javaClass.classLoader?.getResource("normalize.json")).readText()
+        val vectors = Regex("""\{ "in": "([^"]*)", "out": "([^"]*)" }""").findAll(json).map { it.groupValues }.toList()
+        assertTrue(vectors.size > 10)
+        for ((_, raw, out) in vectors) assertEquals(raw, out, normalize(raw))
+    }
+
     @Test
     fun normalizeSplitsCamelCaseAndDropsAccents() {
         assertEquals("login email endereco", normalize("loginEmail_Endereço"))

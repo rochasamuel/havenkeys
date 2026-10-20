@@ -20,6 +20,7 @@ export function normalize(raw) {
   return raw
     .slice(0, 200)
     .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/(?<![\p{L}\p{N}])\p{L}(?:\.\p{L})+\.?(?![\p{L}\p{N}])/gu, (m) => m.replaceAll(".", ""))
     .normalize("NFKD")
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase()

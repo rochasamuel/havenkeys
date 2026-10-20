@@ -1,0 +1,17 @@
+[
+  { "in": "C.P.F", "out": "cpf" },
+  { "in": "C.P.F.", "out": "cpf" },
+  { "in": "c.p.f", "out": "cpf" },
+  { "in": "R.G.", "out": "rg" },
+  { "in": "C.N.P.J.", "out": "cnpj" },
+  { "in": "Informe seu C.P.F.:", "out": "informe seu cpf" },
+  { "in": "Usuário", "out": "usuario" },
+  { "in": "E-mail / Login", "out": "e mail login" },
+  { "in": "loginEmail_Endereço", "out": "login email endereco" },
+  { "in": "Sr.", "out": "sr" },
+  { "in": "E. Silva", "out": "e silva" },
+  { "in": "e.mail", "out": "e mail" },
+  { "in": "www.site.com", "out": "www site com" },
+  { "in": "e-mail", "out": "e mail" },
+  { "in": "", "out": "" }
+]
