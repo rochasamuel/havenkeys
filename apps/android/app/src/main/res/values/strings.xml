@@ -226,6 +226,7 @@
     <string name="autofill_unlock">Unlock HavenKeys</string>
     <string name="autofill_search">Search HavenKeys…</string>
     <string name="autofill_open">Open HavenKeys</string>
+    <string name="autofill_no_logins">No logins found</string>
     <string name="autofill_code">One-time code</string>
     <string name="autofill_copy_code">Copy one-time code</string>
     <string name="autofill_lookalike_title">This isn’t %1$s</string>

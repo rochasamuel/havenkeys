@@ -69,6 +69,16 @@ class DatasetFactory(
         // A look-alike page's warning leads; it fills nothing (spec 2026-10-13-lookalike-warning §6).
         offer.lookalikeOf?.let(::lookalikeDataset)?.let { datasets.add(0, it) }
         offer.copies.mapNotNullTo(datasets, ::copyDataset)
+        // Unlocked for nothing: say so, and offer the app (to add the login or search); it fills nothing.
+        // The keyboard strip already ends with HavenKeys' icon, which opens the app.
+        if (offer.openApp && datasets.isEmpty() && !offer.search && pinned == null) {
+            rows.dataset(
+                listOfNotNull(usernameId, passwordId, otpId).map { it to null },
+                context.getString(R.string.autofill_no_logins),
+                context.getString(R.string.autofill_open),
+                autofillSender(context, MODE_OPEN, null),
+            )?.let(datasets::add)
+        }
         // The pinned icon searches in the keyboard; the dropdown keeps its row.
         if (offer.search) searchDataset(chip = pinned == null)?.let(datasets::add)
         pinned?.let { datasets.add(0, it) }

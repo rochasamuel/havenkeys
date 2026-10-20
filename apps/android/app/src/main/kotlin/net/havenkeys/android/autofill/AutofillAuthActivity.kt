@@ -73,15 +73,11 @@ class AutofillAuthActivity : FragmentActivity() {
         val form = login.form ?: return cancel()
         if (mode == DatasetFactory.MODE_LOOKALIKE) return explainLookalike(repo, tapped.target)
         val result: Parcelable? = when {
-            mode == DatasetFactory.MODE_UNLOCK -> factory.response(
-                FillPlanner.plan(
-                    form,
-                    tapped.target,
-                    container.isUnlocked(),
-                    repo,
-                    saveable = login.save != null,
-                ),
-            ).orEmptyAfterUnlock()
+            mode == DatasetFactory.MODE_UNLOCK -> {
+                val saveable = login.save != null
+                val plan = FillPlanner.plan(form, tapped.target, container.isUnlocked(), repo, saveable = saveable)
+                factory.response(if (plan is FillPlan.Offer) plan.copy(openApp = true) else plan).orEmptyAfterUnlock()
+            }
             itemId == null -> null
             mode == DatasetFactory.MODE_FILL ->
                 (repo.fill(itemId, tapped.target) as? Outcome.Ok)?.value?.let(factory::loginDataset)

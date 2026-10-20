@@ -214,6 +214,7 @@
     <string name="autofill_unlock">Desbloquear o HavenKeys</string>
     <string name="autofill_search">Pesquisar no HavenKeys…</string>
     <string name="autofill_open">Abrir o HavenKeys</string>
+    <string name="autofill_no_logins">Nenhum login encontrado</string>
     <string name="autofill_code">Código de uso único</string>
     <string name="autofill_copy_code">Copiar código de verificação</string>
     <string name="autofill_lookalike_title">Este site não é %1$s</string>

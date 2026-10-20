@@ -26,6 +26,8 @@ sealed interface FillPlan {
          * answer): one warning row, and the save sheet says so.
          */
         val lookalikeOf: String? = null,
+        /** Just unlocked and nothing else to show: one row says so and opens HavenKeys. */
+        val openApp: Boolean = false,
     ) : FillPlan
 }
 
