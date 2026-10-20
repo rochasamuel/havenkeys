@@ -45,7 +45,7 @@
       ]
     },
     "USERNAME_STRONG": {
-      "extension": [
+      "words": [
         "username",
         "user name",
         "userid",
@@ -66,7 +66,7 @@
     },
     "USERNAME_DOCUMENT": {
       "comment": "National ID and document numbers that sites use as the login (gov.br's CPF, Spain's DNI, Chile's RUT…). Counted like the strong words above. Ambiguous short tokens (`id`, `ci`, `cc`: card fields) are left out.",
-      "extension": [
+      "words": [
         "cpf",
         "cnpj",
         "rg",
@@ -93,7 +93,7 @@
       ]
     },
     "USERNAME_WEAK": {
-      "extension": [
+      "words": [
         "user",
         "mail",
         "phone",
@@ -127,6 +127,33 @@
         "comment",
         "amount",
         "quantity"
+      ],
+      "android": [
+        "search",
+        "query",
+        "q",
+        "coupon",
+        "promo",
+        "captcha",
+        "newsletter",
+        "subscribe",
+        "zip",
+        "postal",
+        "city",
+        "street",
+        "first name",
+        "last name",
+        "full name",
+        "company",
+        "code",
+        "otp",
+        "message",
+        "comment",
+        "amount",
+        "quantity",
+        "buscar",
+        "pesquisar",
+        "cupom"
       ]
     },
     "OTP_STRONG": {
@@ -150,10 +177,34 @@
         "codigo de seguranca",
         "codigo de verificacion",
         "token"
+      ],
+      "android": [
+        "otp",
+        "totp",
+        "2fa",
+        "mfa",
+        "one time",
+        "one time code",
+        "one time password",
+        "verification code",
+        "security code",
+        "auth code",
+        "authentication code",
+        "authenticator",
+        "two factor",
+        "2 step",
+        "two step",
+        "codigo de verificacao",
+        "codigo de seguranca",
+        "codigo de verificacion",
+        "token",
+        "digit code",
+        "sms code",
+        "codigo sms"
       ]
     },
     "OTP_WEAK": {
-      "extension": [
+      "words": [
         "code",
         "codigo",
         "pin",
@@ -162,7 +213,7 @@
       ]
     },
     "OTP_NEGATIVE": {
-      "extension": [
+      "words": [
         "postal code",
         "zip code",
         "promo code",
@@ -179,7 +230,7 @@
       ]
     },
     "PW_CONFIRM": {
-      "extension": [
+      "words": [
         "confirm",
         "confirmation",
         "re enter",
@@ -196,7 +247,7 @@
       ]
     },
     "PW_NEW": {
-      "extension": [
+      "words": [
         "new",
         "create",
         "choose",
@@ -209,7 +260,7 @@
       ]
     },
     "PW_CURRENT": {
-      "extension": [
+      "words": [
         "current",
         "old",
         "existing",
@@ -285,6 +336,26 @@
         "bday-day",
         "bday-month",
         "bday-year",
+        "sex",
+        "url",
+        "photo"
+      ],
+      "android": [
+        "name",
+        "given-name",
+        "family-name",
+        "additional-name",
+        "nickname",
+        "organization",
+        "street-address",
+        "address-line1",
+        "address-line2",
+        "address-level1",
+        "address-level2",
+        "postal-code",
+        "country",
+        "country-name",
+        "bday",
         "sex",
         "url",
         "photo"
@@ -375,7 +446,7 @@
     },
     "CARD_NOT_AN_EXPIRY": {
       "comment": "Expiry words also appear in birth-date placeholders (\"DD/MM/AA\").",
-      "extension": [
+      "words": [
         "dd",
         "dia",
         "day",
@@ -387,14 +458,14 @@
     },
     "CARD_MONTH_WORDS": {
       "comment": "Weak words: only in a group that already has a number, CVV or expiry field.",
-      "extension": [
+      "words": [
         "month",
         "mes",
         "mm"
       ]
     },
     "CARD_YEAR_WORDS": {
-      "extension": [
+      "words": [
         "year",
         "ano",
         "yy",
@@ -404,7 +475,7 @@
       ]
     },
     "CARD_CODE_WORDS": {
-      "extension": [
+      "words": [
         "code",
         "codigo",
         "cod"
@@ -412,7 +483,7 @@
     },
     "CARD_NEGATIVE": {
       "comment": "Wording that means \"not a payment card\" (or not a card field: installments).",
-      "extension": [
+      "words": [
         "gift card",
         "cartao presente",
         "vale presente",
@@ -434,7 +505,7 @@
     },
     "CARD_NOT_A_NAME": {
       "comment": "A cardholder-name field that also asks for one of these is something else.",
-      "extension": [
+      "words": [
         "cpf",
         "documento",
         "nascimento",
@@ -470,7 +541,7 @@
     },
     "IDENTITY_BIRTH": {
       "comment": "Compound labels the first-match word list would get wrong (final review finding 4). Each is checked against the name, id and label text together.",
-      "extension": [
+      "words": [
         "nascimento",
         "birth",
         "naturalidade",
@@ -478,7 +549,7 @@
       ]
     },
     "IDENTITY_PLACE": {
-      "extension": [
+      "words": [
         "cidade",
         "city",
         "town",
@@ -493,14 +564,14 @@
       ]
     },
     "IDENTITY_DOCUMENT": {
-      "extension": [
+      "words": [
         "documento",
         "document",
         "doc"
       ]
     },
     "IDENTITY_ADDRESS": {
-      "extension": [
+      "words": [
         "endereco",
         "address",
         "logradouro",
@@ -521,7 +592,7 @@
     },
     "IDENTITY_NEGATIVE": {
       "comment": "Wording that means \"not the person's data\" even when a role word matches.",
-      "extension": [
+      "words": [
         "search",
         "busca",
         "pesquisar",
@@ -558,7 +629,7 @@
     },
     "CARD_WORDS_VERIFICATION_NUMBER": {
       "comment": "Card field words by kind; order (card-kind.ts WORDS) matters: first hit wins.",
-      "extension": [
+      "words": [
         "cvv",
         "cvc",
         "csc",
@@ -573,7 +644,7 @@
       ]
     },
     "CARD_WORDS_CARDHOLDER_NAME": {
-      "extension": [
+      "words": [
         "name on card",
         "nome impresso",
         "nome impresso no cartao",
@@ -586,7 +657,7 @@
       ]
     },
     "CARD_WORDS_NUMBER": {
-      "extension": [
+      "words": [
         "card number",
         "numero do cartao",
         "numero cartao",
@@ -599,7 +670,7 @@
       ]
     },
     "CARD_WORDS_EXPIRY_MONTH": {
-      "extension": [
+      "words": [
         "exp month",
         "expiry month",
         "expiration month",
@@ -609,7 +680,7 @@
       ]
     },
     "CARD_WORDS_EXPIRY_YEAR": {
-      "extension": [
+      "words": [
         "exp year",
         "expiry year",
         "expiration year",
@@ -619,7 +690,7 @@
       ]
     },
     "CARD_WORDS_EXPIRY": {
-      "extension": [
+      "words": [
         "expiry",
         "expiration",
         "exp date",
@@ -634,7 +705,7 @@
       ]
     },
     "CARD_WORDS_BRAND": {
-      "extension": [
+      "words": [
         "card type",
         "bandeira",
         "card brand"
@@ -642,7 +713,7 @@
     },
     "IDENTITY_WORDS_FULL_NAME": {
       "comment": "Identity field words by role; order (identity.ts WORDS) matters: first hit wins.",
-      "extension": [
+      "words": [
         "nome completo",
         "full name",
         "your name",
@@ -650,7 +721,7 @@
       ]
     },
     "IDENTITY_WORDS_FIRST_NAME": {
-      "extension": [
+      "words": [
         "first name",
         "given name",
         "primeiro nome",
@@ -659,13 +730,13 @@
       ]
     },
     "IDENTITY_WORDS_MIDDLE_NAME": {
-      "extension": [
+      "words": [
         "middle name",
         "nome do meio"
       ]
     },
     "IDENTITY_WORDS_LAST_NAME": {
-      "extension": [
+      "words": [
         "last name",
         "surname",
         "family name",
@@ -675,25 +746,25 @@
       ]
     },
     "IDENTITY_WORDS_CPF": {
-      "extension": [
+      "words": [
         "cpf"
       ]
     },
     "IDENTITY_WORDS_RG": {
-      "extension": [
+      "words": [
         "rg",
         "carteira de identidade",
         "registro geral"
       ]
     },
     "IDENTITY_WORDS_PASSPORT": {
-      "extension": [
+      "words": [
         "passport",
         "passaporte"
       ]
     },
     "IDENTITY_WORDS_DRIVERS_LICENSE": {
-      "extension": [
+      "words": [
         "cnh",
         "driver license",
         "drivers license",
@@ -702,7 +773,7 @@
       ]
     },
     "IDENTITY_WORDS_BIRTH_DATE": {
-      "extension": [
+      "words": [
         "data de nascimento",
         "nascimento",
         "date of birth",
@@ -713,13 +784,13 @@
       ]
     },
     "IDENTITY_WORDS_EMAIL": {
-      "extension": [
+      "words": [
         "email",
         "e mail"
       ]
     },
     "IDENTITY_WORDS_PHONE": {
-      "extension": [
+      "words": [
         "celular",
         "telefone",
         "phone",
@@ -729,14 +800,14 @@
       ]
     },
     "IDENTITY_WORDS_USERNAME": {
-      "extension": [
+      "words": [
         "username",
         "user name",
         "nome de usuario"
       ]
     },
     "IDENTITY_WORDS_COMPANY": {
-      "extension": [
+      "words": [
         "empresa",
         "company",
         "organization",
@@ -746,7 +817,7 @@
       ]
     },
     "IDENTITY_WORDS_POSTAL_CODE": {
-      "extension": [
+      "words": [
         "cep",
         "zip",
         "zip code",
@@ -757,14 +828,14 @@
       ]
     },
     "IDENTITY_WORDS_NEIGHBORHOOD": {
-      "extension": [
+      "words": [
         "bairro",
         "neighborhood",
         "district"
       ]
     },
     "IDENTITY_WORDS_COMPLEMENT": {
-      "extension": [
+      "words": [
         "complemento",
         "apt",
         "apartment",
@@ -772,7 +843,7 @@
       ]
     },
     "IDENTITY_WORDS_NUMBER": {
-      "extension": [
+      "words": [
         "numero",
         "number",
         "house number",
@@ -780,7 +851,7 @@
       ]
     },
     "IDENTITY_WORDS_STREET": {
-      "extension": [
+      "words": [
         "logradouro",
         "rua",
         "endereco",
@@ -790,7 +861,7 @@
       ]
     },
     "IDENTITY_WORDS_CITY": {
-      "extension": [
+      "words": [
         "cidade",
         "city",
         "municipio",
@@ -798,7 +869,7 @@
       ]
     },
     "IDENTITY_WORDS_STATE": {
-      "extension": [
+      "words": [
         "estado",
         "uf",
         "state",
@@ -806,27 +877,27 @@
       ]
     },
     "IDENTITY_WORDS_COUNTRY": {
-      "extension": [
+      "words": [
         "pais",
         "country"
       ]
     },
     "IDENTITY_WORDS_FULL_NAME_GENERIC": {
-      "extension": [
+      "words": [
         "nome",
         "name"
       ]
     },
     "CARD_MONTH_JANUARY": {
       "comment": "Month names for expiry selects (card-fill.ts MONTHS), index 0 = January.",
-      "extension": [
+      "words": [
         "january",
         "jan",
         "janeiro"
       ]
     },
     "CARD_MONTH_FEBRUARY": {
-      "extension": [
+      "words": [
         "february",
         "feb",
         "fevereiro",
@@ -834,14 +905,14 @@
       ]
     },
     "CARD_MONTH_MARCH": {
-      "extension": [
+      "words": [
         "march",
         "mar",
         "marco"
       ]
     },
     "CARD_MONTH_APRIL": {
-      "extension": [
+      "words": [
         "april",
         "apr",
         "abril",
@@ -849,28 +920,28 @@
       ]
     },
     "CARD_MONTH_MAY": {
-      "extension": [
+      "words": [
         "may",
         "maio",
         "mai"
       ]
     },
     "CARD_MONTH_JUNE": {
-      "extension": [
+      "words": [
         "june",
         "jun",
         "junho"
       ]
     },
     "CARD_MONTH_JULY": {
-      "extension": [
+      "words": [
         "july",
         "jul",
         "julho"
       ]
     },
     "CARD_MONTH_AUGUST": {
-      "extension": [
+      "words": [
         "august",
         "aug",
         "agosto",
@@ -878,7 +949,7 @@
       ]
     },
     "CARD_MONTH_SEPTEMBER": {
-      "extension": [
+      "words": [
         "september",
         "sep",
         "sept",
@@ -887,7 +958,7 @@
       ]
     },
     "CARD_MONTH_OCTOBER": {
-      "extension": [
+      "words": [
         "october",
         "oct",
         "outubro",
@@ -895,14 +966,14 @@
       ]
     },
     "CARD_MONTH_NOVEMBER": {
-      "extension": [
+      "words": [
         "november",
         "nov",
         "novembro"
       ]
     },
     "CARD_MONTH_DECEMBER": {
-      "extension": [
+      "words": [
         "december",
         "dec",
         "dezembro",
@@ -911,13 +982,13 @@
     },
     "CARD_BRAND_VISA": {
       "comment": "Ways a brand select names each brand (card-fill.ts BRAND_ALIASES).",
-      "extension": [
+      "words": [
         "visa",
         "vi"
       ]
     },
     "CARD_BRAND_MASTERCARD": {
-      "extension": [
+      "words": [
         "mastercard",
         "master card",
         "master",
@@ -925,51 +996,51 @@
       ]
     },
     "CARD_BRAND_AMEX": {
-      "extension": [
+      "words": [
         "amex",
         "american express",
         "ax"
       ]
     },
     "CARD_BRAND_ELO": {
-      "extension": [
+      "words": [
         "elo"
       ]
     },
     "CARD_BRAND_HIPERCARD": {
-      "extension": [
+      "words": [
         "hipercard",
         "hiper",
         "hc"
       ]
     },
     "CARD_BRAND_DINERS": {
-      "extension": [
+      "words": [
         "diners",
         "diners club",
         "dc"
       ]
     },
     "CARD_BRAND_DISCOVER": {
-      "extension": [
+      "words": [
         "discover",
         "di"
       ]
     },
     "CARD_BRAND_JCB": {
-      "extension": [
+      "words": [
         "jcb"
       ]
     },
     "CARD_BRAND_UNIONPAY": {
-      "extension": [
+      "words": [
         "unionpay",
         "union pay",
         "cup"
       ]
     },
     "CARD_BRAND_MAESTRO": {
-      "extension": [
+      "words": [
         "maestro"
       ]
     },
@@ -978,7 +1049,7 @@
     },
     "CARD_AMBIGUOUS": {
       "comment": "Card phrases that also name login or identity fields; they claim a field only in a strong group.",
-      "extension": [
+      "words": [
         "cid",
         "security code",
         "codigo de seguranca",
@@ -990,18 +1061,65 @@
         "holder name",
         "nome do titular"
       ]
+    },
+    "LOGIN_CARD_WORDS": {
+      "comment": "Words in a field name or id that make it a card field, never a login one.",
+      "words": [
+        "cc",
+        "card",
+        "cvv",
+        "cvc"
+      ]
+    },
+    "PASSWORD_WORDS": {
+      "comment": "Words naming a password field.",
+      "android": [
+        "password",
+        "passwd",
+        "pass",
+        "pwd",
+        "senha",
+        "contrasena",
+        "passphrase"
+      ]
+    },
+    "USERNAME_HINTS": {
+      "comment": "Android autofill hints / autocomplete tokens naming a username, lowercased.",
+      "raw": true,
+      "android": [
+        "username",
+        "newusername",
+        "emailaddress",
+        "email"
+      ]
+    },
+    "PHONE_HINTS": {
+      "comment": "Android autofill hints naming a phone, lowercased.",
+      "raw": true,
+      "android": [
+        "phone",
+        "phonenumber",
+        "tel"
+      ]
+    },
+    "PASSWORD_HINTS": {
+      "comment": "Android autofill hints naming a password, lowercased.",
+      "raw": true,
+      "android": [
+        "password",
+        "current-password"
+      ]
     }
   },
   "numbers": {
     "USERNAME_THRESHOLD": {
-      "extension": 50
+      "extension": 50,
+      "android": 40
     },
     "USERNAME_ALONE_THRESHOLD": {
       "extension": 70
     },
-    "OTP_THRESHOLD": {
-      "extension": 60
-    },
+    "OTP_THRESHOLD": 60,
     "USERNAME_LOGIN_INTENT_BONUS": {
       "extension": 30
     },
@@ -1011,54 +1129,26 @@
     "USERNAME_AC_EMAIL": {
       "extension": 90
     },
-    "USERNAME_AC_TEL": {
-      "extension": 30
-    },
-    "USERNAME_EMAIL_INPUT": {
-      "extension": 80
-    },
-    "USERNAME_WORD_IN_ATTRS": {
-      "extension": 50
-    },
-    "USERNAME_WORD_IN_ATTRS_WEAK": {
-      "extension": 25
-    },
-    "USERNAME_WORD_IN_TEXT": {
-      "extension": 40
-    },
-    "USERNAME_WORD_IN_TEXT_WEAK": {
-      "extension": 20
-    },
-    "USERNAME_NEGATIVE_PENALTY": {
-      "extension": 80
-    },
+    "USERNAME_AC_TEL": 30,
+    "USERNAME_EMAIL_INPUT": 80,
+    "USERNAME_WORD_IN_ATTRS": 50,
+    "USERNAME_WORD_IN_ATTRS_WEAK": 25,
+    "USERNAME_WORD_IN_TEXT": 40,
+    "USERNAME_WORD_IN_TEXT_WEAK": 20,
+    "USERNAME_NEGATIVE_PENALTY": 80,
     "USERNAME_LAST_BEFORE_PASSWORD": {
       "extension": 40
     },
-    "OTP_AC": {
-      "extension": 120
-    },
-    "OTP_WORD": {
-      "extension": 70
-    },
-    "OTP_WORD_WEAK": {
-      "extension": 30
-    },
-    "OTP_LENGTH": {
-      "extension": 15
-    },
-    "OTP_NUMERIC": {
-      "extension": 10
-    },
+    "OTP_AC": 120,
+    "OTP_WORD": 70,
+    "OTP_WORD_WEAK": 30,
+    "OTP_LENGTH": 15,
+    "OTP_NUMERIC": 10,
     "OTP_SPLIT_GROUP": {
       "extension": 65
     },
-    "OTP_MIN_LENGTH": {
-      "extension": 4
-    },
-    "OTP_MAX_LENGTH": {
-      "extension": 8
-    },
+    "OTP_MIN_LENGTH": 4,
+    "OTP_MAX_LENGTH": 8,
     "IDENTITY_THRESHOLD": {
       "extension": 60
     },
@@ -1067,6 +1157,18 @@
     },
     "IDENTITY_WORDS_ON_TEXT": {
       "extension": 60
+    },
+    "PASSWORD_THRESHOLD": {
+      "android": 40
+    },
+    "HINT": {
+      "android": 100
+    },
+    "PASSWORD_INPUT": {
+      "android": 90
+    },
+    "PASSWORD_WORD_IN_ATTRS_WEAK": {
+      "android": 30
     }
   }
 }

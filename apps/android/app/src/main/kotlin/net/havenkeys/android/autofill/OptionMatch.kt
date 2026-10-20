@@ -10,18 +10,18 @@ import uniffi.havenkeys_mobile.IdentityRole
 internal object OptionMatch {
     /** Month names and abbreviations, English and Portuguese, normalized; index 0 = January. */
     val MONTHS: List<List<String>> = listOf(
-        listOf("january", "jan", "janeiro"),
-        listOf("february", "feb", "fevereiro", "fev"),
-        listOf("march", "mar", "marco"),
-        listOf("april", "apr", "abril", "abr"),
-        listOf("may", "maio", "mai"),
-        listOf("june", "jun", "junho"),
-        listOf("july", "jul", "julho"),
-        listOf("august", "aug", "agosto", "ago"),
-        listOf("september", "sep", "sept", "setembro", "set"),
-        listOf("october", "oct", "outubro", "out"),
-        listOf("november", "nov", "novembro"),
-        listOf("december", "dec", "dezembro", "dez"),
+        SharedWords.CARD_MONTH_JANUARY,
+        SharedWords.CARD_MONTH_FEBRUARY,
+        SharedWords.CARD_MONTH_MARCH,
+        SharedWords.CARD_MONTH_APRIL,
+        SharedWords.CARD_MONTH_MAY,
+        SharedWords.CARD_MONTH_JUNE,
+        SharedWords.CARD_MONTH_JULY,
+        SharedWords.CARD_MONTH_AUGUST,
+        SharedWords.CARD_MONTH_SEPTEMBER,
+        SharedWords.CARD_MONTH_OCTOBER,
+        SharedWords.CARD_MONTH_NOVEMBER,
+        SharedWords.CARD_MONTH_DECEMBER,
     )
 
     fun words(option: String): List<String> = normalize(option).split(' ').filter { it.isNotEmpty() }
@@ -70,16 +70,16 @@ internal object OptionMatch {
     const val MONTHS_IN_YEAR = 12
     private const val MAX_SCAN = 500
     private val BRAND_ALIASES = mapOf(
-        "visa" to setOf("visa", "vi"),
-        "mastercard" to setOf("mastercard", "master card", "master", "mc"),
-        "amex" to setOf("amex", "american express", "ax"),
-        "elo" to setOf("elo"),
-        "hipercard" to setOf("hipercard", "hiper", "hc"),
-        "diners" to setOf("diners", "diners club", "dc"),
-        "discover" to setOf("discover", "di"),
-        "jcb" to setOf("jcb"),
-        "unionpay" to setOf("unionpay", "union pay", "cup"),
-        "maestro" to setOf("maestro"),
+        "visa" to SharedWords.CARD_BRAND_VISA.toSet(),
+        "mastercard" to SharedWords.CARD_BRAND_MASTERCARD.toSet(),
+        "amex" to SharedWords.CARD_BRAND_AMEX.toSet(),
+        "elo" to SharedWords.CARD_BRAND_ELO.toSet(),
+        "hipercard" to SharedWords.CARD_BRAND_HIPERCARD.toSet(),
+        "diners" to SharedWords.CARD_BRAND_DINERS.toSet(),
+        "discover" to SharedWords.CARD_BRAND_DISCOVER.toSet(),
+        "jcb" to SharedWords.CARD_BRAND_JCB.toSet(),
+        "unionpay" to SharedWords.CARD_BRAND_UNIONPAY.toSet(),
+        "maestro" to SharedWords.CARD_BRAND_MAESTRO.toSet(),
     )
     private val UF: List<Pair<String, String>> = listOf(
         "ac" to "acre", "al" to "alagoas", "ap" to "amapa", "am" to "amazonas", "ba" to "bahia",

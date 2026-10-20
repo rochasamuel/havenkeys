@@ -139,43 +139,21 @@ object CardFieldClassifier {
         "cc-type" to CardKind.BRAND,
     )
 
-    // card-kind.ts's lists, in its order: the first hit wins.
+    // card-kind.ts's WORDS order (lists in words.json): the first hit wins.
     private val WORDS: List<Pair<CardKind, List<String>>> = listOf(
-        CardKind.VERIFICATION_NUMBER to listOf(
-            "cvv", "cvc", "csc", "cvv2", "cvc2", "cid", "security code", "codigo de seguranca",
-            "cod seguranca", "card code", "card verification",
-        ),
-        CardKind.CARDHOLDER_NAME to listOf(
-            "name on card", "nome impresso", "nome impresso no cartao", "nome no cartao", "nome do titular",
-            "titular", "cardholder", "card holder", "holder name",
-        ),
-        CardKind.NUMBER to listOf(
-            "card number", "numero do cartao", "numero cartao", "cardnumber", "ccnumber", "cc number",
-            "credit card", "cartao de credito", "card no",
-        ),
-        CardKind.EXPIRY_MONTH to listOf(
-            "exp month", "expiry month", "expiration month", "mes de validade", "mes validade", "mes de vencimento",
-        ),
-        CardKind.EXPIRY_YEAR to listOf(
-            "exp year", "expiry year", "expiration year", "ano de validade", "ano validade", "ano de vencimento",
-        ),
-        CardKind.EXPIRY to listOf(
-            "expiry", "expiration", "exp date", "expiry date", "expiration date", "valid thru", "validade",
-            "vencimento", "data de validade", "mm aa", "mm yy",
-        ),
-        CardKind.BRAND to listOf("card type", "bandeira", "card brand"),
+        CardKind.VERIFICATION_NUMBER to SharedWords.CARD_WORDS_VERIFICATION_NUMBER,
+        CardKind.CARDHOLDER_NAME to SharedWords.CARD_WORDS_CARDHOLDER_NAME,
+        CardKind.NUMBER to SharedWords.CARD_WORDS_NUMBER,
+        CardKind.EXPIRY_MONTH to SharedWords.CARD_WORDS_EXPIRY_MONTH,
+        CardKind.EXPIRY_YEAR to SharedWords.CARD_WORDS_EXPIRY_YEAR,
+        CardKind.EXPIRY to SharedWords.CARD_WORDS_EXPIRY,
+        CardKind.BRAND to SharedWords.CARD_WORDS_BRAND,
     )
-    private val AMBIGUOUS = setOf(
-        "cid", "security code", "codigo de seguranca", "cod seguranca", "card code", "titular", "cardholder",
-        "card holder", "holder name", "nome do titular",
-    )
-    private val NOT_AN_EXPIRY = listOf("dd", "dia", "day", "nascimento", "birth", "bday", "birthday")
-    private val MONTH_WORDS = listOf("month", "mes", "mm")
-    private val YEAR_WORDS = listOf("year", "ano", "yy", "yyyy", "aa", "aaaa")
-    private val CODE_WORDS = listOf("code", "codigo", "cod")
-    private val NEGATIVE = listOf(
-        "gift card", "cartao presente", "vale presente", "loyalty", "fidelidade", "coupon", "cupom", "promo",
-        "search", "busca", "pesquisar", "parcela", "parcelas", "installment", "installments", "vezes", "quantidade",
-    )
-    private val NOT_A_NAME = listOf("cpf", "documento", "nascimento", "birth", "email", "e mail", "telefone", "phone")
+    private val AMBIGUOUS = SharedWords.CARD_AMBIGUOUS.toSet()
+    private val NOT_AN_EXPIRY = SharedWords.CARD_NOT_AN_EXPIRY
+    private val MONTH_WORDS = SharedWords.CARD_MONTH_WORDS
+    private val YEAR_WORDS = SharedWords.CARD_YEAR_WORDS
+    private val CODE_WORDS = SharedWords.CARD_CODE_WORDS
+    private val NEGATIVE = SharedWords.CARD_NEGATIVE
+    private val NOT_A_NAME = SharedWords.CARD_NOT_A_NAME
 }

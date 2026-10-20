@@ -9,6 +9,7 @@
 
 import { hasAny } from "./text";
 import {
+  LOGIN_CARD_WORDS,
   USERNAME_STRONG,
   USERNAME_DOCUMENT,
   USERNAME_WEAK,
@@ -128,7 +129,7 @@ export { OTP_THRESHOLD };
 export { USERNAME_LOGIN_INTENT_BONUS };
 
 function isCardField(f: FieldFeatures): boolean {
-  return f.autocomplete.some((t) => t.startsWith("cc-")) || hasAny(f.attrs, ["cc", "card", "cvv", "cvc"]);
+  return f.autocomplete.some((t) => t.startsWith("cc-")) || hasAny(f.attrs, LOGIN_CARD_WORDS);
 }
 
 export interface UsernameContext {

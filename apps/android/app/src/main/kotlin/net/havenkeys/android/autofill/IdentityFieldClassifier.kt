@@ -169,47 +169,34 @@ object IdentityFieldClassifier {
         "username" to IdentityRole.USERNAME,
     )
 
-    // identity.ts's WORDS, in its order: the first hit wins.
+    // identity.ts's WORDS order (lists in words.json): the first hit wins.
     private val WORDS: List<Pair<IdentityRole, List<String>>> = listOf(
-        IdentityRole.FULL_NAME to listOf("nome completo", "full name", "your name", "seu nome"),
-        IdentityRole.FIRST_NAME to listOf("first name", "given name", "primeiro nome", "firstname", "fname"),
-        IdentityRole.MIDDLE_NAME to listOf("middle name", "nome do meio"),
-        IdentityRole.LAST_NAME to listOf("last name", "surname", "family name", "sobrenome", "lastname", "lname"),
-        IdentityRole.CPF to listOf("cpf"),
-        IdentityRole.RG to listOf("rg", "carteira de identidade", "registro geral"),
-        IdentityRole.PASSPORT to listOf("passport", "passaporte"),
-        IdentityRole.DRIVERS_LICENSE to listOf(
-            "cnh", "driver license", "drivers license", "driving licence", "carteira de motorista",
-        ),
-        IdentityRole.BIRTH_DATE to listOf(
-            "data de nascimento", "nascimento", "date of birth", "birth date", "birthday", "birthdate", "dob",
-        ),
-        IdentityRole.EMAIL to listOf("email", "e mail"),
-        IdentityRole.PHONE to listOf("celular", "telefone", "phone", "mobile", "tel", "whatsapp"),
-        IdentityRole.USERNAME to listOf("username", "user name", "nome de usuario"),
-        IdentityRole.COMPANY to listOf(
-            "empresa", "company", "organization", "organizacao", "nome fantasia", "razao social",
-        ),
-        IdentityRole.POSTAL_CODE to listOf("cep", "zip", "zip code", "zipcode", "postal", "postal code", "postcode"),
-        IdentityRole.NEIGHBORHOOD to listOf("bairro", "neighborhood", "district"),
-        IdentityRole.COMPLEMENT to listOf("complemento", "apt", "apartment", "suite"),
-        IdentityRole.NUMBER to listOf("numero", "number", "house number", "num"),
-        IdentityRole.STREET to listOf("logradouro", "rua", "endereco", "street", "address", "address line 1"),
-        IdentityRole.CITY to listOf("cidade", "city", "municipio", "town"),
-        IdentityRole.STATE to listOf("estado", "uf", "state", "province"),
-        IdentityRole.COUNTRY to listOf("pais", "country"),
-        IdentityRole.FULL_NAME to listOf("nome", "name"),
+        IdentityRole.FULL_NAME to SharedWords.IDENTITY_WORDS_FULL_NAME,
+        IdentityRole.FIRST_NAME to SharedWords.IDENTITY_WORDS_FIRST_NAME,
+        IdentityRole.MIDDLE_NAME to SharedWords.IDENTITY_WORDS_MIDDLE_NAME,
+        IdentityRole.LAST_NAME to SharedWords.IDENTITY_WORDS_LAST_NAME,
+        IdentityRole.CPF to SharedWords.IDENTITY_WORDS_CPF,
+        IdentityRole.RG to SharedWords.IDENTITY_WORDS_RG,
+        IdentityRole.PASSPORT to SharedWords.IDENTITY_WORDS_PASSPORT,
+        IdentityRole.DRIVERS_LICENSE to SharedWords.IDENTITY_WORDS_DRIVERS_LICENSE,
+        IdentityRole.BIRTH_DATE to SharedWords.IDENTITY_WORDS_BIRTH_DATE,
+        IdentityRole.EMAIL to SharedWords.IDENTITY_WORDS_EMAIL,
+        IdentityRole.PHONE to SharedWords.IDENTITY_WORDS_PHONE,
+        IdentityRole.USERNAME to SharedWords.IDENTITY_WORDS_USERNAME,
+        IdentityRole.COMPANY to SharedWords.IDENTITY_WORDS_COMPANY,
+        IdentityRole.POSTAL_CODE to SharedWords.IDENTITY_WORDS_POSTAL_CODE,
+        IdentityRole.NEIGHBORHOOD to SharedWords.IDENTITY_WORDS_NEIGHBORHOOD,
+        IdentityRole.COMPLEMENT to SharedWords.IDENTITY_WORDS_COMPLEMENT,
+        IdentityRole.NUMBER to SharedWords.IDENTITY_WORDS_NUMBER,
+        IdentityRole.STREET to SharedWords.IDENTITY_WORDS_STREET,
+        IdentityRole.CITY to SharedWords.IDENTITY_WORDS_CITY,
+        IdentityRole.STATE to SharedWords.IDENTITY_WORDS_STATE,
+        IdentityRole.COUNTRY to SharedWords.IDENTITY_WORDS_COUNTRY,
+        IdentityRole.FULL_NAME to SharedWords.IDENTITY_WORDS_FULL_NAME_GENERIC,
     )
-    private val NEGATIVE = listOf(
-        "search", "busca", "pesquisar", "coupon", "cupom", "promo", "cc", "card", "cartao", "cvv", "cvc", "captcha",
-        "quantity", "quantidade", "order", "pedido", "account", "conta", "tracking", "rastreio", "invoice",
-        "nota fiscal", "price", "preco", "mae", "mother", "titular", "holder", "unit", "estado civil", "marital",
-        "civil status",
-    )
-    private val BIRTH = listOf("nascimento", "birth", "naturalidade", "dob")
-    private val PLACE = listOf(
-        "cidade", "city", "town", "municipio", "pais", "country", "local", "place", "estado", "state", "uf",
-    )
-    private val DOCUMENT = listOf("documento", "document", "doc")
-    private val ADDRESS = listOf("endereco", "address", "logradouro", "rua", "street", "cep", "zip")
+    private val NEGATIVE = SharedWords.IDENTITY_NEGATIVE
+    private val BIRTH = SharedWords.IDENTITY_BIRTH
+    private val PLACE = SharedWords.IDENTITY_PLACE
+    private val DOCUMENT = SharedWords.IDENTITY_DOCUMENT
+    private val ADDRESS = SharedWords.IDENTITY_ADDRESS
 }

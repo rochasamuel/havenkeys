@@ -154,7 +154,7 @@ object FieldClassifier {
     }
 
     /** A keyword list: one-word phrases looked up, longer ones searched padded with spaces. */
-    private class Phrases(vararg all: String) {
+    private class Phrases(all: List<String>) {
         val single = all.filter { ' ' !in it }.toSet()
         val multi = all.filter { ' ' in it }.map { " $it " }
     }
@@ -169,82 +169,55 @@ object FieldClassifier {
 
     // Android View.AUTOFILL_HINT_* / androidx HintConstants values and HTML
     // autocomplete tokens, lowercased.
-    private val USERNAME_HINTS = setOf("username", "newusername", "emailaddress", "email")
-    private val PHONE_HINTS = setOf("phone", "phonenumber", "tel")
-    private val PASSWORD_HINTS = setOf("password", "current-password")
+    private val USERNAME_HINTS = SharedWords.USERNAME_HINTS.toSet()
+    private val PHONE_HINTS = SharedWords.PHONE_HINTS.toSet()
+    private val PASSWORD_HINTS = SharedWords.PASSWORD_HINTS.toSet()
 
-    // Keyword lists from apps/extension/src/autofill/classify.ts (English,
-    // Portuguese, Spanish), matched as whole normalized words.
-    private val USERNAME_STRONG = Phrases(
-        "username", "user name", "userid", "user id", "login", "login id", "email", "e mail",
-        "email address", "account", "account name", "identifier", "sign in", "usuario",
-        "nome de usuario", "correo",
-        // National ID and document numbers used as the login.
-        "cpf", "cnpj", "rg", "documento", "numero do documento", "matricula", "nif", "nie", "dni",
-        "cif", "rut", "cuit", "cuil", "curp", "rfc", "cedula", "documento de identidad",
-        "document number", "passport", "passaporte", "pasaporte", "national id", "codice fiscale",
-    )
-    private val USERNAME_WEAK = Phrases("user", "mail", "phone", "mobile", "telefone", "celular")
+    // Keyword lists: packages/field-words/words.json (shared with the extension),
+    // matched as whole normalized words.
+    private val USERNAME_STRONG = Phrases(SharedWords.USERNAME_STRONG + SharedWords.USERNAME_DOCUMENT)
+    private val USERNAME_WEAK = Phrases(SharedWords.USERNAME_WEAK)
 
-    // classify.ts's list without "address": "email address" names a username.
-    private val USERNAME_NEGATIVE = Phrases(
-        "search", "query", "q", "coupon", "promo", "captcha", "newsletter", "subscribe", "zip",
-        "postal", "city", "street", "first name", "last name", "full name", "company", "code",
-        "otp", "message", "comment", "amount", "quantity", "buscar", "pesquisar", "cupom",
-    )
-    private val AC_NOT_LOGIN = setOf(
-        "name", "given-name", "family-name", "additional-name", "nickname", "organization",
-        "street-address", "address-line1", "address-line2", "address-level1", "address-level2",
-        "postal-code", "country", "country-name", "bday", "sex", "url", "photo",
-    )
-    private val CARD_WORDS = Phrases("cc", "card", "cvv", "cvc")
+    // Android's list has no "address": "email address" names a username.
+    private val USERNAME_NEGATIVE = Phrases(SharedWords.USERNAME_NEGATIVE)
+    private val AC_NOT_LOGIN = SharedWords.AC_NOT_LOGIN.toSet()
+    private val CARD_WORDS = Phrases(SharedWords.LOGIN_CARD_WORDS)
 
-    private val PASSWORD_WORDS = Phrases("password", "passwd", "pass", "pwd", "senha", "contrasena", "passphrase")
-    private val PW_CONFIRM = Phrases(
-        "confirm", "confirmation", "re enter", "reenter", "repeat", "retype", "again", "verify",
-        "confirmar", "confirme", "confirmacao", "repita", "repetir",
-    )
-    private val PW_NEW = Phrases("new", "create", "choose", "set", "nova", "novo", "nueva", "criar", "crie")
-    private val PW_CURRENT = Phrases("current", "old", "existing", "atual", "antiga", "actual")
+    private val PASSWORD_WORDS = Phrases(SharedWords.PASSWORD_WORDS)
+    private val PW_CONFIRM = Phrases(SharedWords.PW_CONFIRM)
+    private val PW_NEW = Phrases(SharedWords.PW_NEW)
+    private val PW_CURRENT = Phrases(SharedWords.PW_CURRENT)
 
-    private val OTP_STRONG = Phrases(
-        "otp", "totp", "2fa", "mfa", "one time", "one time code", "one time password",
-        "verification code", "security code", "auth code", "authentication code", "authenticator",
-        "two factor", "2 step", "two step", "codigo de verificacao", "codigo de seguranca",
-        "codigo de verificacion", "token", "digit code", "sms code", "codigo sms",
-    )
-    private val OTP_WEAK = Phrases("code", "codigo", "pin", "verify", "verification")
-    private val OTP_NEGATIVE = Phrases(
-        "postal code", "zip code", "promo code", "coupon", "discount", "country code", "area code",
-        "captcha", "gift", "referral", "invite", "cvv", "cvc",
-    )
+    private val OTP_STRONG = Phrases(SharedWords.OTP_STRONG)
+    private val OTP_WEAK = Phrases(SharedWords.OTP_WEAK)
+    private val OTP_NEGATIVE = Phrases(SharedWords.OTP_NEGATIVE)
 }
 
-// Signal weights (classify.ts's scale; a role needs its threshold to win).
-private const val USERNAME_THRESHOLD = 40
-private const val PASSWORD_THRESHOLD = 40
-private const val OTP_THRESHOLD = 60
+// Signal weights (packages/field-words/words.json; a role needs its threshold to win).
+private const val USERNAME_THRESHOLD = SharedWords.USERNAME_THRESHOLD
+private const val PASSWORD_THRESHOLD = SharedWords.PASSWORD_THRESHOLD
+private const val OTP_THRESHOLD = SharedWords.OTP_THRESHOLD
 private const val MAX_CONFIDENCE = 100
 private const val EXCLUDED = -1000
 
-private const val HINT = 100
-private const val PHONE_HINT = 30
-private const val EMAIL_INPUT = 80
-private const val PASSWORD_INPUT = 90
-private const val WORD_IN_ATTRS = 50
-private const val WORD_IN_TEXT = 40
-private const val WORD_IN_ATTRS_WEAK_USER = 25
-private const val WORD_IN_ATTRS_WEAK = 30
-private const val WORD_IN_TEXT_WEAK = 20
-private const val NEGATIVE = 80
+private const val HINT = SharedWords.HINT
+private const val PHONE_HINT = SharedWords.USERNAME_AC_TEL
+private const val EMAIL_INPUT = SharedWords.USERNAME_EMAIL_INPUT
+private const val PASSWORD_INPUT = SharedWords.PASSWORD_INPUT
+private const val WORD_IN_ATTRS = SharedWords.USERNAME_WORD_IN_ATTRS
+private const val WORD_IN_TEXT = SharedWords.USERNAME_WORD_IN_TEXT
+private const val WORD_IN_ATTRS_WEAK_USER = SharedWords.USERNAME_WORD_IN_ATTRS_WEAK
+private const val WORD_IN_ATTRS_WEAK = SharedWords.PASSWORD_WORD_IN_ATTRS_WEAK
+private const val WORD_IN_TEXT_WEAK = SharedWords.USERNAME_WORD_IN_TEXT_WEAK
+private const val NEGATIVE = SharedWords.USERNAME_NEGATIVE_PENALTY
 
-private const val OTP_HINT = 120
-private const val OTP_WORD = 70
-private const val OTP_WORD_WEAK = 30
-private const val OTP_LENGTH = 15
-private const val OTP_NUMERIC = 10
-private const val OTP_MIN_LENGTH = 4
-private const val OTP_MAX_LENGTH = 8
+private const val OTP_HINT = SharedWords.OTP_AC
+private const val OTP_WORD = SharedWords.OTP_WORD
+private const val OTP_WORD_WEAK = SharedWords.OTP_WORD_WEAK
+private const val OTP_LENGTH = SharedWords.OTP_LENGTH
+private const val OTP_NUMERIC = SharedWords.OTP_NUMERIC
+private const val OTP_MIN_LENGTH = SharedWords.OTP_MIN_LENGTH
+private const val OTP_MAX_LENGTH = SharedWords.OTP_MAX_LENGTH
 
 /** A visible, enabled text input that is not a card field: a card field only ever gets cards. */
 private fun isLoginCandidate(f: FieldFacts): Boolean =

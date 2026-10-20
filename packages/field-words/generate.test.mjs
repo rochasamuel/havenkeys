@@ -9,7 +9,7 @@ import { generate } from "./generate.mjs";
 function run(words, check = false, dir = mkdtempSync(join(tmpdir(), "words-"))) {
   const wordsPath = join(dir, "words.json");
   writeFileSync(wordsPath, JSON.stringify(words));
-  const out = { ts: join(dir, "words.generated.ts"), kotlin: join(dir, "Words.kt") };
+  const out = { ts: join(dir, "words.generated.ts"), kotlin: join(dir, "SharedWords.kt") };
   return { dir, out, ...generate({ check, wordsPath, out }) };
 }
 
