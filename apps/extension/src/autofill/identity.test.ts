@@ -32,6 +32,21 @@ const BR_CHECKOUT = `<form>
   <button type="submit">Finalizar compra</button></form>`;
 
 describe("identityRoleOf", () => {
+  it("a tel box's label decides its role; a bare tel box is a phone", () => {
+    page(`<label for="b">Data de nascimento</label><input id="b" name="nascimento" type="tel" placeholder="dd/mm/aaaa">
+      <label for="z">CEP</label><input id="z" name="person[address_attributes][postal_code]" type="tel" placeholder="_____-___">
+      <label for="n">Número</label><input id="n" name="person[address_attributes][number]" type="tel">
+      <label for="c">CPF</label><input id="c" name="cpf" type="tel">
+      <label for="t">Número de Telefone</label><input id="t" name="person[phone_number]" type="tel">
+      <input id="p" type="tel" placeholder="(__) ____-____">`);
+    expect(role("#b")).toBe("birthDate");
+    expect(role("#z")).toBe("postalCode");
+    expect(role("#n")).toBe("number");
+    expect(role("#c")).toBe("cpf");
+    expect(role("#t")).toBe("phone");
+    expect(role("#p")).toBe("phone");
+  });
+
   it("an e-mail address field is the e-mail, not the street", () => {
     page(`<label for="e">Endereço de e-mail</label><input id="e" name="emailAddress">`);
     expect(role("#e")).toBe("email");

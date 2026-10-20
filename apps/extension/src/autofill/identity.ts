@@ -173,7 +173,6 @@ export function identityRoleOf(el: IdentityElement): { role: IdentityRole; confi
   const fromAc = autocompleteRole(el);
   if (fromAc) return allowed(fromAc) ? { role: fromAc, confidence: 1, byAutocomplete: true } : null;
   if (type === "email") return { role: "email", confidence: 0.8, byAutocomplete: false };
-  if (type === "tel") return { role: "phone", confidence: 0.8, byAutocomplete: false };
 
   for (const [found, words] of WORDS) {
     const score = hasAny(attrs, words) ? WORDS_ON_ATTRS : hasAny(text, words) ? WORDS_ON_TEXT : 0;
@@ -182,6 +181,9 @@ export function identityRoleOf(el: IdentityElement): { role: IdentityRole; confi
     if (!role || !allowed(role)) return null;
     return { role: role === "street" && tag === "textarea" ? "addressLine1" : role, confidence: score / 100, byAutocomplete: false };
   }
+  // Sites use type=tel for any digits (birth date, CEP, CPF): the words
+  // decide first, and a tel box nothing names is a phone.
+  if (type === "tel") return { role: "phone", confidence: 0.8, byAutocomplete: false };
   return null;
 }
 

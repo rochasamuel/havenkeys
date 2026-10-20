@@ -25,7 +25,9 @@ object IdentityFieldClassifier {
         val s = IdentitySignals(f)
         val isCard = shape != Shape.MULTI_LINE && CardFieldClassifier.kindOf(f, false) != null
         val refused = shape == null || s.refused || isCard
-        val found = if (refused) null else byHint(s) ?: byType(f) ?: byWords(s)
+        // Sites use type=tel for any digits (birth date, CEP, CPF): the words
+        // decide before a tel box is taken for a phone.
+        val found = if (refused) null else byHint(s) ?: byEmailType(f) ?: byWords(s) ?: byPhoneType(f)
         return found?.let { adjust(it, shape) }
     }
 
@@ -81,17 +83,18 @@ object IdentityFieldClassifier {
         return role?.let { IdentityRoleOf(it, byHint = true) }
     }
 
-    private fun byType(f: FieldFacts): IdentityRoleOf? {
-        val type = f.htmlAttributes["type"]?.lowercase()
+    private fun byEmailType(f: FieldFacts): IdentityRoleOf? {
         val inputClass = f.inputType and InputType.TYPE_MASK_CLASS
         val variation = f.inputType and InputType.TYPE_MASK_VARIATION
-        val role = when {
-            type == "email" || (inputClass == InputType.TYPE_CLASS_TEXT && variation in EMAIL_VARIATIONS) ->
-                IdentityRole.EMAIL
-            type == "tel" || inputClass == InputType.TYPE_CLASS_PHONE -> IdentityRole.PHONE
-            else -> null
-        }
-        return role?.let { IdentityRoleOf(it, byHint = false) }
+        val isEmail = f.htmlAttributes["type"]?.lowercase() == "email" ||
+            (inputClass == InputType.TYPE_CLASS_TEXT && variation in EMAIL_VARIATIONS)
+        return if (isEmail) IdentityRoleOf(IdentityRole.EMAIL, byHint = false) else null
+    }
+
+    private fun byPhoneType(f: FieldFacts): IdentityRoleOf? {
+        val isPhone = f.htmlAttributes["type"]?.lowercase() == "tel" ||
+            (f.inputType and InputType.TYPE_MASK_CLASS) == InputType.TYPE_CLASS_PHONE
+        return if (isPhone) IdentityRoleOf(IdentityRole.PHONE, byHint = false) else null
     }
 
     private fun byWords(s: IdentitySignals): IdentityRoleOf? {

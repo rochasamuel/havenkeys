@@ -31,6 +31,20 @@ class IdentityFieldClassifierTest {
     }
 
     @Test
+    fun aTelBoxsLabelDecidesItsRole() {
+        fun tel(label: String, name: String = "", placeholder: String = "") = field(
+            html = mapOf("type" to "tel", "name" to name, "label" to label, "placeholder" to placeholder),
+        )
+        assertEquals(IdentityRole.BIRTH_DATE, role(tel("Data de nascimento", "nascimento", "dd/mm/aaaa")))
+        assertEquals(IdentityRole.POSTAL_CODE, role(tel("CEP", "person[address_attributes][postal_code]", "_____-___")))
+        assertEquals(IdentityRole.NUMBER, role(tel("Número", "person[address_attributes][number]")))
+        assertEquals(IdentityRole.CPF, role(tel("CPF", "cpf")))
+        assertEquals(IdentityRole.PHONE, role(tel("Número de Telefone", "person[phone_number]")))
+        assertEquals(IdentityRole.PHONE, role(tel("", placeholder = "(__) ____-____")))
+        assertEquals(IdentityRole.PHONE, role(field(inputType = InputType.TYPE_CLASS_PHONE)))
+    }
+
+    @Test
     fun compoundLabelsAreNotGuessed() {
         assertNull(role(field(hint = "Cidade de nascimento")))
         assertNull(role(field(hint = "Número do documento")))

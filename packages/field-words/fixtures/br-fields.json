@@ -2563,15 +2563,6 @@
    "reason": "autocomplete=username names the identity username; a CPF login box is outside identity fill (B5 leaves it)"
   },
   {
-   "site": "Nubank",
-   "id": "cpf",
-   "label_text": "Digite seu CPF",
-   "platform": "extension",
-   "classifier": "identity",
-   "got": "phone",
-   "reason": "spec §4.4"
-  },
-  {
    "site": "gov.br (sso.acesso.gov.br)",
    "id": "accountId",
    "label_text": "Digite seu CPF para criar ou acessar sua conta gov.br CPF Continuar",
@@ -2579,24 +2570,6 @@
    "classifier": "identity",
    "got": "none",
    "reason": "the label also says \"conta\" (an identity negative word); outside B5"
-  },
-  {
-   "site": "Vivo",
-   "id": "cpf",
-   "label_text": "CPF",
-   "platform": "extension",
-   "classifier": "identity",
-   "got": "phone",
-   "reason": "spec §4.4"
-  },
-  {
-   "site": "Globo",
-   "id": "nascimento",
-   "label_text": "Data de nascimento",
-   "platform": "extension",
-   "classifier": "identity",
-   "got": "phone",
-   "reason": "spec §4.4"
   },
   {
    "site": "Globo",
@@ -2627,24 +2600,6 @@
   },
   {
    "site": "TETO Brasil doação (checkout substitute)",
-   "id": "person_birthday",
-   "label_text": "Data de Nascimento",
-   "platform": "extension",
-   "classifier": "identity",
-   "got": "phone",
-   "reason": "spec §4.4"
-  },
-  {
-   "site": "TETO Brasil doação (checkout substitute)",
-   "id": "person_payment_attributes_tax_identification_number",
-   "label_text": "CPF",
-   "platform": "extension",
-   "classifier": "identity",
-   "got": "phone",
-   "reason": "spec §4.4"
-  },
-  {
-   "site": "TETO Brasil doação (checkout substitute)",
    "id": "person_payment_attributes_owner_account",
    "label_text": "Nome Descrito no Cartão",
    "platform": "extension",
@@ -2669,24 +2624,6 @@
    "classifier": "login",
    "got": "username",
    "reason": "bank field: B6 (Bank Account item)"
-  },
-  {
-   "site": "TETO Brasil doação (checkout substitute)",
-   "id": "person_address_attributes_postal_code",
-   "label_text": "CEP",
-   "platform": "extension",
-   "classifier": "identity",
-   "got": "phone",
-   "reason": "spec §4.4"
-  },
-  {
-   "site": "TETO Brasil doação (checkout substitute)",
-   "id": "person_address_attributes_number",
-   "label_text": "Número",
-   "platform": "extension",
-   "classifier": "identity",
-   "got": "phone",
-   "reason": "spec §4.4"
   },
   {
    "site": "TETO Brasil doação (checkout substitute)",
@@ -2752,15 +2689,6 @@
    "reason": "autocomplete=username names the identity username; a CPF login box is outside identity fill (B5 leaves it)"
   },
   {
-   "site": "Nubank",
-   "id": "cpf",
-   "label_text": "Digite seu CPF",
-   "platform": "android",
-   "classifier": "identity",
-   "got": "phone",
-   "reason": "spec §4.4"
-  },
-  {
    "site": "gov.br (sso.acesso.gov.br)",
    "id": "accountId",
    "label_text": "Digite seu CPF para criar ou acessar sua conta gov.br CPF Continuar",
@@ -2770,15 +2698,6 @@
    "reason": "the label also says \"conta\" (an identity negative word); outside B5"
   },
   {
-   "site": "Vivo",
-   "id": "cpf",
-   "label_text": "CPF",
-   "platform": "android",
-   "classifier": "identity",
-   "got": "phone",
-   "reason": "spec §4.4"
-  },
-  {
    "site": "Globo",
    "id": "senha",
    "label_text": "Senha · 8 a 15 dígitos",
@@ -2786,15 +2705,6 @@
    "classifier": "login",
    "got": "password",
    "reason": "Android decides new vs current password per form (LoginFormFinder), not per field"
-  },
-  {
-   "site": "Globo",
-   "id": "nascimento",
-   "label_text": "Data de nascimento",
-   "platform": "android",
-   "classifier": "identity",
-   "got": "phone",
-   "reason": "spec §4.4"
   },
   {
    "site": "Globo",
@@ -2834,24 +2744,6 @@
   },
   {
    "site": "TETO Brasil doação (checkout substitute)",
-   "id": "person_birthday",
-   "label_text": "Data de Nascimento",
-   "platform": "android",
-   "classifier": "identity",
-   "got": "phone",
-   "reason": "spec §4.4"
-  },
-  {
-   "site": "TETO Brasil doação (checkout substitute)",
-   "id": "person_payment_attributes_tax_identification_number",
-   "label_text": "CPF",
-   "platform": "android",
-   "classifier": "identity",
-   "got": "phone",
-   "reason": "spec §4.4"
-  },
-  {
-   "site": "TETO Brasil doação (checkout substitute)",
    "id": "person_payment_attributes_owner_account",
    "label_text": "Nome Descrito no Cartão",
    "platform": "android",
@@ -2876,24 +2768,6 @@
    "classifier": "login",
    "got": "username",
    "reason": "bank field: B6 (Bank Account item)"
-  },
-  {
-   "site": "TETO Brasil doação (checkout substitute)",
-   "id": "person_address_attributes_postal_code",
-   "label_text": "CEP",
-   "platform": "android",
-   "classifier": "identity",
-   "got": "phone",
-   "reason": "spec §4.4"
-  },
-  {
-   "site": "TETO Brasil doação (checkout substitute)",
-   "id": "person_address_attributes_number",
-   "label_text": "Número",
-   "platform": "android",
-   "classifier": "identity",
-   "got": "phone",
-   "reason": "spec §4.4"
   },
   {
    "site": "TETO Brasil doação (checkout substitute)",
