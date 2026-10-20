@@ -16,6 +16,23 @@ const years = Array.from({ length: 12 }, (_, i) => `<option>${2026 + i}</option>
 beforeEach(() => page(""));
 
 describe("card classifier", () => {
+  it("other holder details under a credit-card name are not the card number, in Portuguese and English", () => {
+    const labels = [
+      "CPF do titular", "CNPJ", "RG", "Documento", "Identidade", "CNH", "Passaporte", "Celular (DDD)", "Fone", "WhatsApp",
+      "Contato", "E-mail", "Data de nascimento", "CEP de cobrança", "Endereço", "Tax ID", "Taxpayer ID", "SSN",
+      "National ID", "ID number", "Passport", "Phone number", "Mobile", "Contact", "Email", "Date of birth", "ZIP code",
+      "Billing address",
+    ];
+    for (const label of labels) {
+      page(`<label for="x">${label}</label><input id="x" name="payment.creditCard.holderInfo">`);
+      expect(cardKindOf($("#x"), false), label).toBeNull();
+    }
+    for (const label of ["Número do cartão", "Card number"]) {
+      page(`<label for="x">${label}</label><input id="x" name="payment.creditCard.number">`);
+      expect(cardKindOf($("#x"), false)?.kind, label).toBe("number");
+    }
+  });
+
   it("a CPF or phone box under a credit-card name is not the card number (Nuvem Pago)", () => {
     page(`<input id="n" name="payment.creditCard.cardNumber" autocomplete="cc-number" type="tel">
       <label for="d">CPF ou CNPJ do portador do cartão</label><input id="d" name="payment.creditCard.cardHolderIdNumber" autocomplete="card_holder_id_number">

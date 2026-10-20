@@ -9,6 +9,24 @@ class CardFieldClassifierTest {
     private fun kind(f: FieldFacts, strong: Boolean = false) = CardFieldClassifier.kindOf(f, strong)?.kind
 
     @Test
+    fun otherHolderDetailsUnderACreditCardNameAreNotTheCardNumber() {
+        val labels = listOf(
+            "CPF do titular", "CNPJ", "RG", "Documento", "Identidade", "CNH", "Passaporte", "Celular (DDD)", "Fone",
+            "WhatsApp", "Contato", "E-mail", "Data de nascimento", "CEP de cobrança", "Endereço", "Tax ID",
+            "Taxpayer ID", "SSN", "National ID", "ID number", "Passport", "Phone number", "Mobile", "Contact", "Email",
+            "Date of birth", "ZIP code", "Billing address",
+        )
+        for (label in labels) {
+            val f = field(html = mapOf("name" to "payment.creditCard.holderInfo", "label" to label))
+            assertEquals(label, null, kind(f))
+        }
+        for (label in listOf("Número do cartão", "Card number")) {
+            val f = field(html = mapOf("name" to "payment.creditCard.number", "label" to label))
+            assertEquals(label, CardKind.NUMBER, kind(f))
+        }
+    }
+
+    @Test
     fun aCpfOrPhoneBoxUnderACreditCardNameIsNotTheCardNumber() {
         val cpf = mapOf(
             "name" to "payment.creditCard.cardHolderIdNumber",

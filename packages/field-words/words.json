@@ -487,11 +487,39 @@
         "rg",
         "documento",
         "document",
+        "identidade",
+        "identity",
+        "id number",
+        "cnh",
+        "passaporte",
+        "passport",
+        "tax id",
+        "taxpayer",
+        "ssn",
+        "social security",
+        "national id",
         "telefone",
+        "fone",
         "phone",
         "celular",
+        "cel",
         "mobile",
-        "whatsapp"
+        "whatsapp",
+        "whats app",
+        "ddd",
+        "contato",
+        "contact",
+        "email",
+        "e mail",
+        "nascimento",
+        "birth",
+        "birthday",
+        "dob",
+        "cep",
+        "zip",
+        "postal",
+        "endereco",
+        "address"
       ]
     },
     "CARD_MONTH_NAMES": {
@@ -776,7 +804,8 @@
         "phone",
         "mobile",
         "tel",
-        "whatsapp"
+        "whatsapp",
+        "whats app"
       ]
     },
     "IDENTITY_WORDS_USERNAME": {

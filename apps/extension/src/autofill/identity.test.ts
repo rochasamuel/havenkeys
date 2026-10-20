@@ -49,6 +49,8 @@ describe("identityRoleOf", () => {
       <label for="e">Contact number</label><input id="e" name="contact" type="tel">`);
     expect(role("#k")).toBe("phone");
     expect(role("#e")).toBe("phone");
+    page(`<label for="w">WhatsApp</label><input id="w" name="whatsApp">`);
+    expect(role("#w")).toBe("phone");
   });
 
   it("the visible label names the address part over a generic address name", () => {
