@@ -63,6 +63,9 @@ android {
     buildFeatures { compose = true }
     packaging { jniLibs { useLegacyPackaging = false } }
 
+    // The shared Brazilian field fixture (packages/field-words), read by BrFieldsTest.
+    sourceSets["test"].resources.srcDir("../../../packages/field-words/fixtures")
+
     testOptions {
         // The ui/kit component tests run on the JVM under Robolectric and
         // need the merged resources (strings, fonts).
