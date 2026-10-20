@@ -4,6 +4,7 @@ import type { Env } from "./group";
 import { groupFor } from "./group";
 import { identityRoleOf } from "./identity";
 import { cardFieldsForFill, cardGroupFor, cardRolesOf } from "./card";
+import { cardKindOf } from "./card-kind";
 
 const env: Env = { isVisible: (el) => !el.hidden, path: "/" };
 const page = (html: string) => (document.body.innerHTML = html);
@@ -15,6 +16,13 @@ const years = Array.from({ length: 12 }, (_, i) => `<option>${2026 + i}</option>
 beforeEach(() => page(""));
 
 describe("card classifier", () => {
+  it("Portuguese cardholder-name labels name the cardholder, even alone", () => {
+    for (const label of ["Nome Descrito no Cartão", "Nome impresso no cartão", "Nome no cartão", "Titular do cartão"]) {
+      page(`<label for="h">${label}</label><input id="h" name="person[payment_attributes][owner_account]">`);
+      expect(cardKindOf($("#h"), false)?.kind, label).toBe("cardholderName");
+    }
+  });
+
   it("reads a Brazilian checkout by its words", () => {
     page(`<form>
       <input id="num" name="numero_cartao" aria-label="Número do cartão" inputmode="numeric" maxlength="19">

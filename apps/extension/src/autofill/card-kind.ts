@@ -66,8 +66,6 @@ const AMBIGUOUS = new Set(CARD_AMBIGUOUS);
 
 
 
-
-
 function attr(el: Element, n: string): string {
   return (el.getAttribute(n) ?? "").slice(0, MAX_HINT_CHARS);
 }

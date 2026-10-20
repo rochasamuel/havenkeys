@@ -9,6 +9,16 @@ class CardFieldClassifierTest {
     private fun kind(f: FieldFacts, strong: Boolean = false) = CardFieldClassifier.kindOf(f, strong)?.kind
 
     @Test
+    fun portugueseCardholderNameLabelsNameTheCardholderEvenAlone() {
+        val labels = listOf("Nome Descrito no Cartão", "Nome impresso no cartão", "Nome no cartão", "Titular do cartão")
+        for (label in labels) {
+            val f = field(html = mapOf("name" to "person[payment_attributes][owner_account]", "label" to label))
+            assertEquals(label, CardKind.CARDHOLDER_NAME, kind(f))
+            assertEquals(label, FieldRole.UNKNOWN, FieldClassifier.classify(f).role)
+        }
+    }
+
+    @Test
     fun androidHintsAndAutocompleteName() {
         assertEquals(CardKind.NUMBER, kind(field(hints = listOf("creditCardNumber"))))
         assertEquals(CardKind.VERIFICATION_NUMBER, kind(field(hints = listOf("creditCardSecurityCode"))))

@@ -610,7 +610,9 @@
         "titular",
         "cardholder",
         "card holder",
-        "holder name"
+        "holder name",
+        "nome descrito no cartao",
+        "titular do cartao"
       ]
     },
     "CARD_WORDS_NUMBER": {

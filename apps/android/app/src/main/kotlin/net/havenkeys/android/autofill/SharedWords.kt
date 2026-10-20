@@ -28,7 +28,7 @@ internal object SharedWords {
     val IDENTITY_ADDRESS: List<String> = listOf("endereco", "address", "logradouro", "rua", "street", "cep", "zip")
     val IDENTITY_NEGATIVE: List<String> = listOf("search", "busca", "pesquisar", "coupon", "cupom", "promo", "cc", "card", "cartao", "cvv", "cvc", "captcha", "quantity", "quantidade", "order", "pedido", "account", "conta", "tracking", "rastreio", "invoice", "nota fiscal", "price", "preco", "mae", "mother", "titular", "holder", "unit", "estado civil", "marital", "civil status")
     val CARD_WORDS_VERIFICATION_NUMBER: List<String> = listOf("cvv", "cvc", "csc", "cvv2", "cvc2", "cid", "security code", "codigo de seguranca", "cod seguranca", "card code", "card verification")
-    val CARD_WORDS_CARDHOLDER_NAME: List<String> = listOf("name on card", "nome impresso", "nome impresso no cartao", "nome no cartao", "nome do titular", "titular", "cardholder", "card holder", "holder name")
+    val CARD_WORDS_CARDHOLDER_NAME: List<String> = listOf("name on card", "nome impresso", "nome impresso no cartao", "nome no cartao", "nome do titular", "titular", "cardholder", "card holder", "holder name", "nome descrito no cartao", "titular do cartao")
     val CARD_WORDS_NUMBER: List<String> = listOf("card number", "numero do cartao", "numero cartao", "cardnumber", "ccnumber", "cc number", "credit card", "cartao de credito", "card no")
     val CARD_WORDS_EXPIRY_MONTH: List<String> = listOf("exp month", "expiry month", "expiration month", "mes de validade", "mes validade", "mes de vencimento")
     val CARD_WORDS_EXPIRY_YEAR: List<String> = listOf("exp year", "expiry year", "expiration year", "ano de validade", "ano validade", "ano de vencimento")

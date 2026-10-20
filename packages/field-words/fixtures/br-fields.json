@@ -2573,24 +2573,6 @@
   },
   {
    "site": "TETO Brasil doação (checkout substitute)",
-   "id": "person_payment_attributes_owner_account",
-   "label_text": "Nome Descrito no Cartão",
-   "platform": "extension",
-   "classifier": "login",
-   "got": "username",
-   "reason": "spec §4.6"
-  },
-  {
-   "site": "TETO Brasil doação (checkout substitute)",
-   "id": "person_payment_attributes_owner_account",
-   "label_text": "Nome Descrito no Cartão",
-   "platform": "extension",
-   "classifier": "card",
-   "got": "none",
-   "reason": "spec §4.6"
-  },
-  {
-   "site": "TETO Brasil doação (checkout substitute)",
    "id": "person_payment_attributes_bank_account",
    "label_text": "Conta",
    "platform": "extension",
@@ -2669,24 +2651,6 @@
    "classifier": "login",
    "got": "password",
    "reason": "Android decides new vs current password per form (LoginFormFinder), not per field"
-  },
-  {
-   "site": "TETO Brasil doação (checkout substitute)",
-   "id": "person_payment_attributes_owner_account",
-   "label_text": "Nome Descrito no Cartão",
-   "platform": "android",
-   "classifier": "login",
-   "got": "username",
-   "reason": "spec §4.6"
-  },
-  {
-   "site": "TETO Brasil doação (checkout substitute)",
-   "id": "person_payment_attributes_owner_account",
-   "label_text": "Nome Descrito no Cartão",
-   "platform": "android",
-   "classifier": "card",
-   "got": "none",
-   "reason": "spec §4.6"
   },
   {
    "site": "TETO Brasil doação (checkout substitute)",
