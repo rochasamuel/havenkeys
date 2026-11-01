@@ -48,6 +48,10 @@ pub const PAYMENT_FRAME_ORIGINS: &[&str] = &[
     // store ids. Observed on a live Nuvem Pago checkout (2026-10-19); no
     // public documentation names it.
     "https://checkout-security.ms.tiendanube.com",
+    // Shopify Checkout card fields: one frame per field (number, expiry,
+    // security code, name on card) on this origin. Observed on a live
+    // Shopify checkout (2026-10-31).
+    "https://checkout.pci.shopifyinc.com",
 ];
 
 /// Hosts whose subdomains serve card fields too. Stripe: "Adding

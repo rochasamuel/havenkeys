@@ -1190,11 +1190,13 @@ in Rust lists the exact https origins each processor documents for its card
 fields: Stripe `js.stripe.com` (and subdomains, matched on a whole label),
 the Adyen live checkout-shopper regions, Braintree's
 `assets.braintreegateway.com`, and Mercado Pago's `secure-fields` and
-`api-static` origins. One entry is not documented by its processor: Nuvem
-Pago's `checkout-security.ms.tiendanube.com`, the frame Nuvemshop stores
-embed for their card form, taken from a live checkout on 2026-10-19. It is
-Nuvemshop's own domain, matched exactly, so a look-alike or a sibling
-subdomain still gets nothing. No test or sandbox origins; a new entry needs a code
+`api-static` origins. Two entries are not documented by their processor:
+Nuvem Pago's `checkout-security.ms.tiendanube.com`, the frame Nuvemshop
+stores embed for their card form, taken from a live checkout on 2026-10-19,
+and Shopify Checkout's `checkout.pci.shopifyinc.com`, which serves each card
+field (number, expiry, security code, name) in its own frame, taken from a
+live checkout on 2026-10-31. Each is the company's own domain, matched
+exactly, so a look-alike or a sibling subdomain still gets nothing. No test or sandbox origins; a new entry needs a code
 change and a test. Pagar.me, PagSeguro and Cielo are left out because their
 documented integrations keep the card inputs on the merchant's own page,
 which the same-site rule already covers.
