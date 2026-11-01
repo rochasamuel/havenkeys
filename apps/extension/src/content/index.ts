@@ -592,8 +592,10 @@ function start(): void {
         return filled > 0 && m.submit ? withPress(filled, pressAfterFill(group, "login", m.totp)) : { filled, pressing: null };
       }
       case "otp": {
+        const done = (filled: number) =>
+          filled > 0 && m.submit ? withPress(filled, pressAfterFill(group, "otp", m.totp)) : { filled, pressing: null };
         const filled = fillOtp(group, m.fill.code, env);
-        return filled > 0 && m.submit ? withPress(filled, pressAfterFill(group, "otp", m.totp)) : { filled, pressing: null };
+        return filled instanceof Promise ? filled.then(done) : done(filled);
       }
       case "generated": {
         const n = fillNewPassword(group, m.fill.password, env);

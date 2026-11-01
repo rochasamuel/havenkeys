@@ -481,12 +481,20 @@ describe("filling", () => {
     expect([$('[name="a"]').value, $('[name="b"]').value, $('[name="c"]').value]).toEqual(["", "Gen-1!", "Gen-1!"]);
   });
 
-  it("fills OTP codes, including split boxes", () => {
+  it("fills OTP codes, including split boxes", async () => {
     page(`<form><input name="otp" autocomplete="one-time-code"></form>`);
-    expect(fillOtp(groupFor($('[name="otp"]'), env()).group, "123456", env())).toBe(1);
+    expect(await fillOtp(groupFor($('[name="otp"]'), env()).group, "123456", env())).toBe(1);
     expect($('[name="otp"]').value).toBe("123456");
     page(`<div>${[1, 2, 3, 4, 5, 6].map((i) => `<input name="d${i}" maxlength="1">`).join("")}</div>`);
-    expect(fillOtp(groupFor($('[name="d1"]'), env()).group, "987654", env())).toBe(6);
+    expect(await fillOtp(groupFor($('[name="d1"]'), env()).group, "987654", env())).toBe(6);
+    expect(Array.from(document.querySelectorAll("input"), (i) => i.value).join("")).toBe("987654");
+  });
+
+  // MUI OtpInput (CIAL Dun & Bradstreet, 2026-10): six one-time-code boxes, no maxlength.
+  it("fills one digit per box of a split field without maxlength", async () => {
+    const box = (i: number) => `<div><div><input id="d${i}" autocomplete="one-time-code" type="text"><fieldset aria-hidden="true"><legend></legend></fieldset></div></div>`;
+    page(`<form><p>Enter the 6-digit code from your authenticator app:</p><div>${[1, 2, 3, 4, 5, 6].map(box).join("")}</div><button type="submit" disabled>Submit</button></form>`);
+    expect(await fillOtp(groupFor($("#d1"), env()).group, "987654", env())).toBe(6);
     expect(Array.from(document.querySelectorAll("input"), (i) => i.value).join("")).toBe("987654");
   });
 

@@ -240,7 +240,7 @@ Each field gets a score per role. No single heuristic decides.
 | OTP keyword (otp, 2fa, verification code, token, sms code…) / weak (code, código, pin) | | +70 / +30 |
 | Placeholder that is only a code mask (4–8 of `-`, `_`, `•`, `0`: `------`, `000000`) | | +30 (never enough alone) |
 | `maxlength` 4–8, numeric input mode | | +15, +10 |
-| 4–8 adjacent single-character boxes (split code) | | +65 |
+| 4–8 adjacent single-character boxes, or 4–8 adjacent look-alike boxes (same type and class) without a `maxlength` one of which is `maxlength=1` or scores as an OTP field on its own (split code) | | +65 |
 | Last text field before the first password field | +40 | |
 | Username-only step on a form whose intent is login, for a field with any username or document word | +30 | |
 | Negative words (search, buscar, coupon, cupom, newsletter, name…; `address` unless the field also says email) | −80 | 0 for postal/zip/promo/CVV, código postal / de rastreio / de barras / do operador… |
@@ -363,8 +363,20 @@ attributes, never into hidden fields, and never into other forms.
 | Menu kind | Offered when the user clicks | Fills |
 |---|---|---|
 | Login | a username or (current) password field | username and password fields of that group |
-| One-time code | an OTP field | the code, one digit per box for split fields |
+| One-time code | an OTP field | the code, one character per box for split fields (below) |
 | New password | a new-password or confirmation field | a password generated **by the desktop** (Rust CSPRNG, with the policy saved in the desktop's generator tab) into the new + confirmation fields. The switches button inside the row opens a panel showing that policy (`generator_options`), where length (8–128) and character classes can be changed for this password only, and a **Generate and fill** button; the frame slides taller. Panel changes go as `generate_password`'s `options`, which Rust checks again; nothing is stored in the extension |
+
+**Split one-time codes.** Widgets differ in what they accept (MUI OtpInput,
+react-otp-input, ng-otp-input, vue3-otp-input, hand-written ones). React and
+Vue apply an event's state change a microtask later, so a box written before
+the page settles from the last one is lost or lands in the box the widget
+last saw focused. A split fill therefore types one box at a time, focusing
+it and letting the page settle before and after each write. It then reads
+the boxes back; if they do not hold the code it dispatches a `paste` event
+carrying the code on the first box (most widgets distribute a paste), and,
+for boxes without a `maxlength`, writes the whole code into the first box
+(some widgets split a long value there) and types again if that left it
+whole. The page receives only the code it would get from the user's paste.
 
 ## User flow
 

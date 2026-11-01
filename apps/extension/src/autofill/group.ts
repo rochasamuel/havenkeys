@@ -189,17 +189,41 @@ function intentText(root: ParentNode, env: Env): { primary: string; secondary: s
   return { primary: join(primary), secondary: join(secondary) };
 }
 
-/** 4-8 adjacent single-character inputs: a split one-time-code field. */
-function splitOtpRun(inputs: HTMLInputElement[]): Set<HTMLInputElement> {
-  const run: HTMLInputElement[] = [];
-  let best: HTMLInputElement[] = [];
-  for (const i of inputs) {
-    if (i.maxLength === 1 && i.type !== "password") {
+/** The longest run of adjacent inputs passing `box` (and `alike` its first), if 4-8 long and `ok`. */
+function boxRun(
+  inputs: HTMLInputElement[],
+  box: (i: HTMLInputElement) => boolean,
+  alike: (a: HTMLInputElement, b: HTMLInputElement) => boolean,
+  ok: (run: HTMLInputElement[]) => boolean,
+): HTMLInputElement[] {
+  let run: HTMLInputElement[] = [];
+  for (const i of [...inputs, null]) {
+    if (i && box(i) && (!run[0] || alike(run[0], i))) {
       run.push(i);
-      if (run.length > best.length) best = [...run];
-    } else run.length = 0;
+      continue;
+    }
+    if (run.length >= 4 && run.length <= 8 && ok(run)) return run;
+    run = i && box(i) ? [i] : [];
   }
-  return new Set(best.length >= 4 && best.length <= 8 ? best : []);
+  return [];
+}
+
+/**
+ * A split one-time-code field: 4-8 adjacent single-character inputs, or
+ * 4-8 adjacent look-alike boxes (same type and class) without a maxlength,
+ * one of which says one-time code (MUI and ng-otp-input name every box
+ * one-time-code, react-otp-input labels them "OTP character N",
+ * vue3-otp-input gives only the last box a maxlength of 1).
+ */
+function splitOtpRun(inputs: HTMLInputElement[], feats: Map<HTMLInputElement, FieldFeatures>): Set<HTMLInputElement> {
+  const one = (i: HTMLInputElement) => i.maxLength === 1 && i.type !== "password";
+  const strict = boxRun(inputs, one, () => true, () => true);
+  if (strict.length > 0) return new Set(strict);
+  const box = (i: HTMLInputElement) => (i.maxLength === 1 || i.maxLength === -1) && i.type !== "password" && i.value.length <= 1;
+  const alike = (a: HTMLInputElement, b: HTMLInputElement) => a.type === b.type && a.className === b.className;
+  const says = (run: HTMLInputElement[]) =>
+    run.some((i) => i.maxLength === 1 || otpScore(feats.get(i) as FieldFeatures, false) >= OTP_THRESHOLD);
+  return new Set(boxRun(inputs, box, alike, says));
 }
 
 /** Classify every usable input of the group around `root`. */
@@ -223,7 +247,7 @@ export function classifyGroup(root: ParentNode, env: Env): LoginGroup {
     if (fs.some(signupDetailByAutocomplete) || (!saysLogin(primary) && fs.some(signupDetailByWords))) intent = "signup";
   }
   const pwFeats = passwords.map((el) => feats.get(el) as FieldFeatures);
-  const split = splitOtpRun(inputs);
+  const split = splitOtpRun(inputs, feats);
 
   // A password-typed one-time code ("enter the 6-digit code") is an OTP.
   const realPasswords = passwords.filter((_el, i) => otpScore(pwFeats[i] as FieldFeatures, false) < OTP_THRESHOLD + 40);
