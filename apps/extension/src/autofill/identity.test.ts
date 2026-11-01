@@ -267,6 +267,33 @@ describe("identity groups", () => {
     for (const id of ["#d", "#e", "#f", "#g", "#h", "#i"]) expect(role(id), id).toBeNull();
   });
 
+  // Shopify Checkout (2026-10): no <form>, two fields per row.
+  const row = (...inputs: string[]) => `<div>${inputs.map((i) => `<div><div>${i}</div></div>`).join("")}</div>`;
+  const SHOPIFY_DELIVERY = `<div id="delivery"><h2>Delivery</h2><div>
+    ${row(`<select name="countryCode" autocomplete="shipping country-name"><option value="">--</option><option value="BR">Brazil</option></select>`)}
+    ${row(`<input id="fn" name="firstName" autocomplete="shipping given-name">`, `<input name="lastName" autocomplete="shipping family-name">`)}
+    ${row(`<input name="postalCode" role="combobox" autocomplete="shipping postal-code">`)}
+    ${row(`<input id="st" name="streetName" placeholder="Street" autocomplete="off">`, `<input name="streetNumber" placeholder="Building number" autocomplete="off">`)}
+    ${row(`<input name="district" autocomplete="shipping address-level3">`, `<input name="city" autocomplete="shipping address-level2">`)}
+    ${row(`<input name="phone" type="tel" autocomplete="shipping tel-national">`)}
+  </div></div>`;
+
+  it("climb past a formless checkout's rows to the whole address", () => {
+    page(SHOPIFY_DELIVERY);
+    const all = ["country", "firstName", "lastName", "postalCode", "street", "number", "neighborhood", "city", "phone"];
+    expect(rolesOf(identityGroupFor($("#fn"), env)!)).toEqual(all);
+    expect(rolesOf(identityGroupFor($("#st"), env)!)).toEqual(all);
+    expect(rolesOf(findIdentityGroup(document, env)!)).toEqual(all);
+  });
+
+  it("stop climbing at a second address block or a password box", () => {
+    page(`<div>${SHOPIFY_DELIVERY}${SHOPIFY_DELIVERY.replace(/id="\w+"/g, "")}</div>`);
+    expect(identityGroupFor($("#fn"), env)!.root).toBe($("#delivery"));
+    page(`<div>${row(`<input id="fn" name="firstName" autocomplete="given-name">`, `<input name="lastName" autocomplete="family-name">`)}
+      <input name="city" autocomplete="address-level2"><input type="password"></div>`);
+    expect(rolesOf(identityGroupFor($("#fn"), env)!)).toEqual(["firstName", "lastName"]);
+  });
+
   it("refuses fields inside a search landmark", () => {
     page(`<form role="search"><input id="d" name="cidade"><input id="z" name="cep"></form>`);
     expect(identityGroupFor($("#z"), env)).toBeNull();

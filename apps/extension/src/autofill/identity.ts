@@ -7,7 +7,7 @@
 
 import { DOCUMENT_ROLES, MAX_IDENTITY_ROLES, type IdentityRole } from "@havenkeys/protocol";
 import { cardKindOf } from "./card-kind";
-import { groupRoot, MAX_GROUP_INPUTS, type Env } from "./group";
+import { groupRoot, MAX_CLIMB, MAX_FORM_INPUTS, MAX_GROUP_INPUTS, type Env } from "./group";
 import { labelText } from "./labels";
 import { hasAny, MAX_HINT_CHARS, normalize } from "./text";
 import {
@@ -219,7 +219,6 @@ function classify(root: ParentNode, env: Env): IdentityField[] {
   return out;
 }
 
-/** Two identity fields, or one named by autocomplete that is not an email/username box. */
 /**
  * Two identity fields, or one the page names for sure: by autocomplete
  * (not an email or username box: those are a login's first step), or a
@@ -233,10 +232,34 @@ function qualifies(fields: IdentityField[]): boolean {
   return only.byAutocomplete && only.role !== "email" && only.role !== "username";
 }
 
+/**
+ * Outside a <form>, groupRoot stops at the first container holding two
+ * inputs: one row of a checkout's address (Shopify: First name + Last
+ * name). An identity group keeps climbing while the wider container only
+ * adds roles the group does not have yet; a second address block (a
+ * repeated role), a password box or another <form> stops it.
+ */
+function identityRoot(field: HTMLInputElement, env: Env): IdentityGroup {
+  let root = groupRoot(field);
+  let fields = classify(root, env);
+  if (root instanceof HTMLFormElement) return { root, fields };
+  for (let i = 0; i < MAX_CLIMB && root instanceof HTMLElement; i++) {
+    const parent: HTMLElement | null = root.parentElement;
+    if (!parent || parent.querySelectorAll("input").length > MAX_FORM_INPUTS) break;
+    if (parent.querySelector('input[type="password"], form')) break;
+    const wider = classify(parent, env);
+    const roles = new Set(fields.map((f) => f.role));
+    const added = wider.filter((f) => !fields.some((g) => g.el === f.el)).map((f) => f.role);
+    if (added.some((r) => roles.has(r)) || new Set(added).size < added.length) break;
+    root = parent;
+    fields = wider;
+  }
+  return { root, fields };
+}
+
 /** The identity group around a field the user interacted with, if it qualifies. */
 export function identityGroupFor(field: HTMLInputElement, env: Env): IdentityGroup | null {
-  const root = groupRoot(field);
-  const fields = classify(root, env);
+  const { root, fields } = identityRoot(field, env);
   if (!fields.some((f) => f.el === field) || !qualifies(fields)) return null;
   return { root, fields };
 }
@@ -244,12 +267,11 @@ export function identityGroupFor(field: HTMLInputElement, env: Env): IdentityGro
 /** The page's first qualifying group (popup fill), bounded. */
 export function findIdentityGroup(doc: Document, env: Env): IdentityGroup | null {
   const candidates = Array.from(doc.querySelectorAll<HTMLInputElement>("input")).slice(0, MAX_GROUP_INPUTS);
-  const seen = new Set<ParentNode>();
+  const seen: Node[] = [];
   for (const input of candidates) {
-    const root = groupRoot(input);
-    if (seen.has(root)) continue;
-    seen.add(root);
-    const fields = classify(root, env);
+    if (seen.some((r) => r.contains(input))) continue;
+    const { root, fields } = identityRoot(input, env);
+    seen.push(root as Node);
     if (qualifies(fields) && fields.length >= 2) return { root, fields };
   }
   return null;

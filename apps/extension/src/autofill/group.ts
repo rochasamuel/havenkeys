@@ -32,9 +32,9 @@ import { isIdentityVisible } from "./visibility";
 /** Inputs examined per group. */
 export const MAX_GROUP_INPUTS = 60;
 /** Ancestor levels climbed when a field has no <form>. */
-const MAX_CLIMB = 8;
+export const MAX_CLIMB = 8;
 /** A <form> with more inputs than this is a page wrapper (ASP.NET style), not a login form. */
-const MAX_FORM_INPUTS = 40;
+export const MAX_FORM_INPUTS = 40;
 /** Elements read for the group's intent text. */
 const MAX_INTENT_ELEMENTS = 24;
 
