@@ -1,5 +1,5 @@
 {
- "$comment": "Real Brazilian form fields (survey of 35 sites, 2026-10-19). Expectations per classifier: a role, \"none\", or \"skip\" (not asserted: the true role depends on what the page is for). See docs/autofill.md.",
+ "$comment": "Real Brazilian form fields (survey of 35 sites, 2026-10-19). Expectations per classifier (login, identity, card, bank): a role, \"none\", or \"skip\" (not asserted: the true role depends on what the page is for). `context` holds the facts of the field's form a classifier reads: for login, hasPassword, lastBeforePassword and loginIntent; for bank (spec 2026-11-03-bank-account §5.1), groupHasBranch and groupHasAccount (another box of the form is a branch or account box) and prevRole (the bank role of the box just before it). See docs/autofill.md.",
  "records": [
   {
    "site": "Itaú",
@@ -16,7 +16,13 @@
    "label_text": "Opções de acesso",
    "login": "skip",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "none",
+   "context": {
+    "groupHasBranch": true,
+    "groupHasAccount": true,
+    "prevRole": null
+   }
   },
   {
    "site": "Itaú",
@@ -33,7 +39,13 @@
    "label_text": "Agência",
    "login": "none",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "bankBranch",
+   "context": {
+    "groupHasBranch": false,
+    "groupHasAccount": true,
+    "prevRole": null
+   }
   },
   {
    "site": "Itaú",
@@ -50,7 +62,13 @@
    "label_text": "Conta",
    "login": "none",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "bankAccount",
+   "context": {
+    "groupHasBranch": true,
+    "groupHasAccount": false,
+    "prevRole": "bankBranch"
+   }
   },
   {
    "site": "Itaú",
@@ -68,10 +86,14 @@
    "login": "username",
    "identity": "none",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": false,
     "lastBeforePassword": false,
-    "loginIntent": true
+    "loginIntent": true,
+    "groupHasBranch": true,
+    "groupHasAccount": true,
+    "prevRole": "bankAccount"
    }
   },
   {
@@ -90,10 +112,14 @@
    "login": "username",
    "identity": "cpf",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": false,
     "lastBeforePassword": false,
-    "loginIntent": true
+    "loginIntent": true,
+    "groupHasBranch": true,
+    "groupHasAccount": true,
+    "prevRole": null
    }
   },
   {
@@ -111,7 +137,13 @@
    "label_text": "Agência",
    "login": "none",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "bankBranch",
+   "context": {
+    "groupHasBranch": false,
+    "groupHasAccount": true,
+    "prevRole": null
+   }
   },
   {
    "site": "Itaú",
@@ -128,7 +160,13 @@
    "label_text": "Conta",
    "login": "none",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "bankAccount",
+   "context": {
+    "groupHasBranch": true,
+    "groupHasAccount": false,
+    "prevRole": "bankBranch"
+   }
   },
   {
    "site": "Itaú",
@@ -146,10 +184,14 @@
    "login": "username",
    "identity": "none",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": false,
     "lastBeforePassword": false,
-    "loginIntent": true
+    "loginIntent": true,
+    "groupHasBranch": true,
+    "groupHasAccount": true,
+    "prevRole": "bankAccount"
    }
   },
   {
@@ -168,10 +210,14 @@
    "login": "username",
    "identity": "cpf",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": false,
     "lastBeforePassword": false,
-    "loginIntent": true
+    "loginIntent": true,
+    "groupHasBranch": true,
+    "groupHasAccount": true,
+    "prevRole": null
    }
   },
   {
@@ -189,7 +235,13 @@
    "label_text": "Agência",
    "login": "none",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "bankBranch",
+   "context": {
+    "groupHasBranch": false,
+    "groupHasAccount": true,
+    "prevRole": null
+   }
   },
   {
    "site": "Itaú",
@@ -206,7 +258,13 @@
    "label_text": "Conta",
    "login": "none",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "bankAccount",
+   "context": {
+    "groupHasBranch": true,
+    "groupHasAccount": false,
+    "prevRole": "bankBranch"
+   }
   },
   {
    "site": "Bradesco",
@@ -223,7 +281,13 @@
    "label_text": "Agência:",
    "login": "none",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "bankBranch",
+   "context": {
+    "groupHasBranch": false,
+    "groupHasAccount": true,
+    "prevRole": null
+   }
   },
   {
    "site": "Bradesco",
@@ -240,7 +304,13 @@
    "label_text": "Conta:",
    "login": "none",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "bankAccount",
+   "context": {
+    "groupHasBranch": true,
+    "groupHasAccount": false,
+    "prevRole": "bankBranch"
+   }
   },
   {
    "site": "Bradesco",
@@ -257,7 +327,13 @@
    "label_text": "Dígito:",
    "login": "none",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "bankAccountDigit",
+   "context": {
+    "groupHasBranch": true,
+    "groupHasAccount": true,
+    "prevRole": "bankAccount"
+   }
   },
   {
    "site": "Banco do Brasil",
@@ -274,7 +350,13 @@
    "label_text": "Agência",
    "login": "none",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "bankBranch",
+   "context": {
+    "groupHasBranch": false,
+    "groupHasAccount": true,
+    "prevRole": null
+   }
   },
   {
    "site": "Banco do Brasil",
@@ -291,7 +373,13 @@
    "label_text": "Conta",
    "login": "none",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "bankAccount",
+   "context": {
+    "groupHasBranch": true,
+    "groupHasAccount": false,
+    "prevRole": "bankBranch"
+   }
   },
   {
    "site": "Santander (empresas)",
@@ -308,7 +396,13 @@
    "label_text": "Ag",
    "login": "none",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "bankBranch",
+   "context": {
+    "groupHasBranch": false,
+    "groupHasAccount": true,
+    "prevRole": null
+   }
   },
   {
    "site": "Santander (empresas)",
@@ -325,7 +419,13 @@
    "label_text": "Conta",
    "login": "none",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "bankAccount",
+   "context": {
+    "groupHasBranch": true,
+    "groupHasAccount": false,
+    "prevRole": "bankBranch"
+   }
   },
   {
    "site": "Caixa",
@@ -343,6 +443,7 @@
    "login": "username",
    "identity": "skip",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": false,
     "lastBeforePassword": false,
@@ -365,6 +466,7 @@
    "login": "username",
    "identity": "cpf",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": false,
     "lastBeforePassword": false,
@@ -386,7 +488,8 @@
    "label_text": "Digite seu CPF",
    "login": "skip",
    "identity": "cpf",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Inter",
@@ -403,7 +506,8 @@
    "label_text": "Digite seu email",
    "login": "skip",
    "identity": "email",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Sicoob",
@@ -420,7 +524,13 @@
    "label_text": "Digite sua cooperativa",
    "login": "none",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "bankBranch",
+   "context": {
+    "groupHasBranch": false,
+    "groupHasAccount": false,
+    "prevRole": null
+   }
   },
   {
    "site": "Mercado Pago",
@@ -437,7 +547,8 @@
    "label_text": "Insira seu CPF com 11 números ou um CNPJ com 14 caracteres, sem pontos nem traço",
    "login": "skip",
    "identity": "cpf",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "gov.br (sso.acesso.gov.br)",
@@ -455,6 +566,7 @@
    "login": "username",
    "identity": "cpf",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": false,
     "lastBeforePassword": false,
@@ -476,7 +588,8 @@
    "label_text": "CPF:",
    "login": "skip",
    "identity": "cpf",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Receita Federal (consulta CPF)",
@@ -493,7 +606,8 @@
    "label_text": "Data de Nascimento:",
    "login": "none",
    "identity": "birthDate",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Nota Fiscal Paulista (Sefaz-SP)",
@@ -510,7 +624,8 @@
    "label_text": "Perfil:",
    "login": "skip",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Nota Fiscal Paulista (Sefaz-SP)",
@@ -528,6 +643,7 @@
    "login": "username",
    "identity": "cpf",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": true,
     "lastBeforePassword": true,
@@ -549,7 +665,8 @@
    "label_text": "Senha:",
    "login": "password",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Nota Fiscal Paulista (Sefaz-SP)",
@@ -567,6 +684,7 @@
    "login": "username",
    "identity": "cpf",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": true,
     "lastBeforePassword": true,
@@ -588,7 +706,8 @@
    "label_text": "Senha (*):",
    "login": "password",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Nota Fiscal Paulista (Sefaz-SP)",
@@ -605,7 +724,8 @@
    "label_text": "Digite aqui o CPF/CNPJ do Consumidor",
    "login": "skip",
    "identity": "cpf",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Mercado Livre",
@@ -623,6 +743,7 @@
    "login": "username",
    "identity": "skip",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": false,
     "lastBeforePassword": false,
@@ -644,7 +765,8 @@
    "label_text": "E-mail",
    "login": "skip",
    "identity": "email",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Mercado Livre",
@@ -661,7 +783,8 @@
    "label_text": "Telefone",
    "login": "skip",
    "identity": "phone",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Mercado Livre",
@@ -678,7 +801,8 @@
    "label_text": "Nome",
    "login": "none",
    "identity": "firstName",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Mercado Livre",
@@ -695,7 +819,8 @@
    "label_text": "Senha",
    "login": "new-password",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Mercado Livre",
@@ -712,7 +837,8 @@
    "label_text": "Senha",
    "login": "new-password",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Magazine Luiza",
@@ -730,6 +856,7 @@
    "login": "username",
    "identity": "skip",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": true,
     "lastBeforePassword": false,
@@ -752,6 +879,7 @@
    "login": "username",
    "identity": "skip",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": true,
     "lastBeforePassword": true,
@@ -773,7 +901,8 @@
    "label_text": "Senha",
    "login": "password",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Americanas",
@@ -791,6 +920,7 @@
    "login": "username",
    "identity": "email",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": false,
     "lastBeforePassword": false,
@@ -812,7 +942,8 @@
    "label_text": "Receber ofertas (newsletter)",
    "login": "skip",
    "identity": "email",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Casas Bahia",
@@ -829,7 +960,8 @@
    "label_text": "Receber ofertas (newsletter)",
    "login": "skip",
    "identity": "phone",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Shopee BR",
@@ -847,6 +979,7 @@
    "login": "username",
    "identity": "skip",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": true,
     "lastBeforePassword": true,
@@ -868,7 +1001,8 @@
    "label_text": "Insira a senha",
    "login": "password",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Shopee BR",
@@ -885,7 +1019,8 @@
    "label_text": "Número de telefone",
    "login": "skip",
    "identity": "phone",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Shopee BR",
@@ -903,6 +1038,7 @@
    "login": "username",
    "identity": "skip",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": false,
     "lastBeforePassword": false,
@@ -925,6 +1061,7 @@
    "login": "username",
    "identity": "cpf",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": true,
     "lastBeforePassword": true,
@@ -946,7 +1083,8 @@
    "label_text": "Senha Vivo",
    "login": "password",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Claro",
@@ -964,6 +1102,7 @@
    "login": "username",
    "identity": "cpf",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": false,
     "lastBeforePassword": false,
@@ -985,7 +1124,8 @@
    "label_text": "Insira o CPF",
    "login": "skip",
    "identity": "cpf",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "TIM",
@@ -1002,7 +1142,8 @@
    "label_text": "Username",
    "login": "skip",
    "identity": "skip",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "TIM",
@@ -1019,7 +1160,8 @@
    "label_text": "Password",
    "login": "skip",
    "identity": "skip",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "TIM",
@@ -1037,6 +1179,7 @@
    "login": "username",
    "identity": "skip",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": true,
     "lastBeforePassword": true,
@@ -1058,7 +1201,8 @@
    "label_text": "Senha",
    "login": "password",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "TIM",
@@ -1076,6 +1220,7 @@
    "login": "username",
    "identity": "skip",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": true,
     "lastBeforePassword": false,
@@ -1098,6 +1243,7 @@
    "login": "username",
    "identity": "skip",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": true,
     "lastBeforePassword": true,
@@ -1119,7 +1265,8 @@
    "label_text": "Senha Corporativo",
    "login": "password",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "TIM",
@@ -1137,6 +1284,7 @@
    "login": "username",
    "identity": "cpf",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": true,
     "lastBeforePassword": true,
@@ -1158,7 +1306,8 @@
    "label_text": "Senha (TIM Live, CPF/CNPJ)",
    "login": "password",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "TIM",
@@ -1176,6 +1325,7 @@
    "login": "username",
    "identity": "cpf",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": true,
     "lastBeforePassword": true,
@@ -1197,7 +1347,8 @@
    "label_text": "campo-senha-carros-wifi",
    "login": "password",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Enel SP",
@@ -1215,6 +1366,7 @@
    "login": "username",
    "identity": "email",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": true,
     "lastBeforePassword": true,
@@ -1236,7 +1388,8 @@
    "label_text": "Senha Esqueceu sua senha?",
    "login": "password",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Sabesp",
@@ -1254,6 +1407,7 @@
    "login": "username",
    "identity": "cpf",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": true,
     "lastBeforePassword": true,
@@ -1275,7 +1429,8 @@
    "label_text": "Senha",
    "login": "password",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Globo",
@@ -1293,6 +1448,7 @@
    "login": "username",
    "identity": "email",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": true,
     "lastBeforePassword": true,
@@ -1314,7 +1470,8 @@
    "label_text": "Senha",
    "login": "password",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Globo",
@@ -1331,7 +1488,8 @@
    "label_text": "Nome completo",
    "login": "none",
    "identity": "fullName",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Globo",
@@ -1348,7 +1506,8 @@
    "label_text": "E-mail",
    "login": "skip",
    "identity": "email",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Globo",
@@ -1365,7 +1524,8 @@
    "label_text": "Senha · 8 a 15 dígitos",
    "login": "new-password",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Globo",
@@ -1382,7 +1542,8 @@
    "label_text": "Gênero",
    "login": "skip",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Globo",
@@ -1399,7 +1560,8 @@
    "label_text": "Data de nascimento",
    "login": "none",
    "identity": "birthDate",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Globo",
@@ -1416,7 +1578,8 @@
    "label_text": "País",
    "login": "skip",
    "identity": "country",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Globo",
@@ -1433,7 +1596,8 @@
    "label_text": "Cidade (Informe a sua cidade e selecione uma das opções da lista apresentada)",
    "login": "none",
    "identity": "city",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Globo",
@@ -1450,7 +1614,8 @@
    "label_text": "Estado",
    "login": "none",
    "identity": "state",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Globo",
@@ -1468,6 +1633,7 @@
    "login": "username",
    "identity": "skip",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": false,
     "lastBeforePassword": false,
@@ -1490,6 +1656,7 @@
    "login": "username",
    "identity": "skip",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": false,
     "lastBeforePassword": false,
@@ -1512,6 +1679,7 @@
    "login": "username",
    "identity": "email",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": true,
     "lastBeforePassword": true,
@@ -1533,7 +1701,8 @@
    "label_text": "Senha",
    "login": "password",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Localiza",
@@ -1551,6 +1720,7 @@
    "login": "username",
    "identity": "skip",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": true,
     "lastBeforePassword": true,
@@ -1572,7 +1742,8 @@
    "label_text": "Senha",
    "login": "password",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Netshoes",
@@ -1590,6 +1761,7 @@
    "login": "username",
    "identity": "skip",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": true,
     "lastBeforePassword": true,
@@ -1611,7 +1783,8 @@
    "label_text": "Digite sua senha",
    "login": "password",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Netshoes",
@@ -1628,7 +1801,8 @@
    "label_text": "Digite seu e-mail",
    "login": "skip",
    "identity": "email",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "KaBuM!",
@@ -1645,7 +1819,8 @@
    "label_text": "Newsletter: Digite seu nome",
    "login": "none",
    "identity": "fullName",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "KaBuM!",
@@ -1662,7 +1837,8 @@
    "label_text": "Newsletter: Digite seu e-mail",
    "login": "skip",
    "identity": "email",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Serasa",
@@ -1680,6 +1856,7 @@
    "login": "username",
    "identity": "cpf",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": false,
     "lastBeforePassword": false,
@@ -1702,6 +1879,7 @@
    "login": "username",
    "identity": "skip",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": true,
     "lastBeforePassword": true,
@@ -1723,7 +1901,8 @@
    "label_text": "Senha",
    "login": "password",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Netflix BR (substitute)",
@@ -1741,6 +1920,7 @@
    "login": "username",
    "identity": "skip",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": true,
     "lastBeforePassword": true,
@@ -1762,7 +1942,8 @@
    "label_text": "Senha",
    "login": "password",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Netflix BR (substitute)",
@@ -1780,6 +1961,7 @@
    "login": "username",
    "identity": "email",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": false,
     "lastBeforePassword": false,
@@ -1802,6 +1984,7 @@
    "login": "username",
    "identity": "email",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": true,
     "lastBeforePassword": true,
@@ -1823,7 +2006,8 @@
    "label_text": "Senha",
    "login": "password",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Ticketmaster BR (substitute)",
@@ -1840,7 +2024,8 @@
    "label_text": "E-Mail",
    "login": "skip",
    "identity": "email",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Ticketmaster BR (substitute)",
@@ -1857,7 +2042,8 @@
    "label_text": "Senha",
    "login": "new-password",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Ticketmaster BR (substitute)",
@@ -1874,7 +2060,8 @@
    "label_text": "Confirmar Senha",
    "login": "confirmation-password",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Ticketmaster BR (substitute)",
@@ -1891,7 +2078,8 @@
    "label_text": "Nome",
    "login": "none",
    "identity": "firstName",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Ticketmaster BR (substitute)",
@@ -1908,7 +2096,8 @@
    "label_text": "Sobrenome",
    "login": "none",
    "identity": "lastName",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Ticketmaster BR (substitute)",
@@ -1925,7 +2114,8 @@
    "label_text": "País de Residência",
    "login": "skip",
    "identity": "country",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Ticketmaster BR (substitute)",
@@ -1942,7 +2132,8 @@
    "label_text": "Telefone",
    "login": "skip",
    "identity": "phone",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Ticketmaster BR (substitute)",
@@ -1959,7 +2150,8 @@
    "label_text": "Tipo de documento",
    "login": "skip",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Ticketmaster BR (substitute)",
@@ -1976,7 +2168,8 @@
    "label_text": "CPF",
    "login": "skip",
    "identity": "cpf",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Ticketmaster BR (substitute)",
@@ -1993,7 +2186,8 @@
    "label_text": "Data de nascimento",
    "login": "none",
    "identity": "birthDate",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Ticketmaster BR (substitute)",
@@ -2010,7 +2204,8 @@
    "label_text": "Gênero",
    "login": "skip",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Ticketmaster BR (substitute)",
@@ -2027,7 +2222,8 @@
    "label_text": "E-Mail",
    "login": "skip",
    "identity": "email",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Ticketmaster BR (substitute)",
@@ -2045,6 +2241,7 @@
    "login": "otp",
    "identity": "none",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": false,
     "lastBeforePassword": false,
@@ -2067,6 +2264,7 @@
    "login": "username",
    "identity": "email",
    "card": "none",
+   "bank": "none",
    "context": {
     "hasPassword": false,
     "lastBeforePassword": false,
@@ -2088,7 +2286,8 @@
    "label_text": "Nome",
    "login": "none",
    "identity": "firstName",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Wikimedia doação BR (checkout substitute)",
@@ -2105,7 +2304,8 @@
    "label_text": "Sobrenome",
    "login": "none",
    "identity": "lastName",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Wikimedia doação BR (checkout substitute)",
@@ -2122,7 +2322,8 @@
    "label_text": "CPF/CNPJ",
    "login": "skip",
    "identity": "cpf",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Wikimedia doação BR (checkout substitute)",
@@ -2139,7 +2340,8 @@
    "label_text": "E-mail",
    "login": "skip",
    "identity": "email",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Wikimedia doação BR (checkout substitute)",
@@ -2156,7 +2358,8 @@
    "label_text": "Número do cartão",
    "login": "none",
    "identity": "none",
-   "card": "number"
+   "card": "number",
+   "bank": "none"
   },
   {
    "site": "Wikimedia doação BR (checkout substitute)",
@@ -2173,7 +2376,8 @@
    "label_text": "Data de validade",
    "login": "none",
    "identity": "none",
-   "card": "expiry"
+   "card": "expiry",
+   "bank": "none"
   },
   {
    "site": "Wikimedia doação BR (checkout substitute)",
@@ -2190,7 +2394,8 @@
    "label_text": "Código de segurança",
    "login": "none",
    "identity": "none",
-   "card": "verificationNumber"
+   "card": "verificationNumber",
+   "bank": "none"
   },
   {
    "site": "TETO Brasil doação (checkout substitute)",
@@ -2207,7 +2412,13 @@
    "label_text": "Nome",
    "login": "none",
    "identity": "fullName",
-   "card": "none"
+   "card": "none",
+   "bank": "none",
+   "context": {
+    "groupHasBranch": true,
+    "groupHasAccount": true,
+    "prevRole": null
+   }
   },
   {
    "site": "TETO Brasil doação (checkout substitute)",
@@ -2224,7 +2435,13 @@
    "label_text": "Email",
    "login": "skip",
    "identity": "email",
-   "card": "none"
+   "card": "none",
+   "bank": "none",
+   "context": {
+    "groupHasBranch": true,
+    "groupHasAccount": true,
+    "prevRole": null
+   }
   },
   {
    "site": "TETO Brasil doação (checkout substitute)",
@@ -2241,7 +2458,13 @@
    "label_text": "Número de Telefone",
    "login": "skip",
    "identity": "phone",
-   "card": "none"
+   "card": "none",
+   "bank": "none",
+   "context": {
+    "groupHasBranch": true,
+    "groupHasAccount": true,
+    "prevRole": null
+   }
   },
   {
    "site": "TETO Brasil doação (checkout substitute)",
@@ -2258,7 +2481,13 @@
    "label_text": "Data de Nascimento",
    "login": "none",
    "identity": "birthDate",
-   "card": "none"
+   "card": "none",
+   "bank": "none",
+   "context": {
+    "groupHasBranch": true,
+    "groupHasAccount": true,
+    "prevRole": null
+   }
   },
   {
    "site": "TETO Brasil doação (checkout substitute)",
@@ -2275,7 +2504,13 @@
    "label_text": "CPF",
    "login": "skip",
    "identity": "cpf",
-   "card": "none"
+   "card": "none",
+   "bank": "none",
+   "context": {
+    "groupHasBranch": true,
+    "groupHasAccount": true,
+    "prevRole": null
+   }
   },
   {
    "site": "TETO Brasil doação (checkout substitute)",
@@ -2292,7 +2527,13 @@
    "label_text": "Número do Cartão",
    "login": "none",
    "identity": "none",
-   "card": "number"
+   "card": "number",
+   "bank": "none",
+   "context": {
+    "groupHasBranch": true,
+    "groupHasAccount": true,
+    "prevRole": null
+   }
   },
   {
    "site": "TETO Brasil doação (checkout substitute)",
@@ -2309,7 +2550,13 @@
    "label_text": "CVV",
    "login": "none",
    "identity": "none",
-   "card": "verificationNumber"
+   "card": "verificationNumber",
+   "bank": "none",
+   "context": {
+    "groupHasBranch": true,
+    "groupHasAccount": true,
+    "prevRole": null
+   }
   },
   {
    "site": "TETO Brasil doação (checkout substitute)",
@@ -2326,7 +2573,13 @@
    "label_text": "Nome Descrito no Cartão",
    "login": "none",
    "identity": "none",
-   "card": "cardholderName"
+   "card": "cardholderName",
+   "bank": "none",
+   "context": {
+    "groupHasBranch": true,
+    "groupHasAccount": true,
+    "prevRole": null
+   }
   },
   {
    "site": "TETO Brasil doação (checkout substitute)",
@@ -2343,7 +2596,13 @@
    "label_text": "Validade do Cartão",
    "login": "none",
    "identity": "none",
-   "card": "expiry"
+   "card": "expiry",
+   "bank": "none",
+   "context": {
+    "groupHasBranch": true,
+    "groupHasAccount": true,
+    "prevRole": null
+   }
   },
   {
    "site": "TETO Brasil doação (checkout substitute)",
@@ -2360,7 +2619,13 @@
    "label_text": "Agência",
    "login": "none",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "bankBranch",
+   "context": {
+    "groupHasBranch": false,
+    "groupHasAccount": true,
+    "prevRole": null
+   }
   },
   {
    "site": "TETO Brasil doação (checkout substitute)",
@@ -2377,7 +2642,13 @@
    "label_text": "Conta",
    "login": "none",
    "identity": "none",
-   "card": "none"
+   "card": "none",
+   "bank": "bankAccount",
+   "context": {
+    "groupHasBranch": true,
+    "groupHasAccount": false,
+    "prevRole": "bankBranch"
+   }
   },
   {
    "site": "TETO Brasil doação (checkout substitute)",
@@ -2394,7 +2665,13 @@
    "label_text": "Número do telefone para cobrança",
    "login": "skip",
    "identity": "phone",
-   "card": "none"
+   "card": "none",
+   "bank": "none",
+   "context": {
+    "groupHasBranch": true,
+    "groupHasAccount": true,
+    "prevRole": "bankAccount"
+   }
   },
   {
    "site": "TETO Brasil doação (checkout substitute)",
@@ -2411,7 +2688,13 @@
    "label_text": "CEP",
    "login": "none",
    "identity": "postalCode",
-   "card": "none"
+   "card": "none",
+   "bank": "none",
+   "context": {
+    "groupHasBranch": true,
+    "groupHasAccount": true,
+    "prevRole": null
+   }
   },
   {
    "site": "TETO Brasil doação (checkout substitute)",
@@ -2428,7 +2711,13 @@
    "label_text": "Número",
    "login": "none",
    "identity": "number",
-   "card": "none"
+   "card": "none",
+   "bank": "none",
+   "context": {
+    "groupHasBranch": true,
+    "groupHasAccount": true,
+    "prevRole": null
+   }
   },
   {
    "site": "TETO Brasil doação (checkout substitute)",
@@ -2445,7 +2734,13 @@
    "label_text": "Rua",
    "login": "none",
    "identity": "street",
-   "card": "none"
+   "card": "none",
+   "bank": "none",
+   "context": {
+    "groupHasBranch": true,
+    "groupHasAccount": true,
+    "prevRole": null
+   }
   },
   {
    "site": "TETO Brasil doação (checkout substitute)",
@@ -2462,7 +2757,13 @@
    "label_text": "Complemento",
    "login": "none",
    "identity": "complement",
-   "card": "none"
+   "card": "none",
+   "bank": "none",
+   "context": {
+    "groupHasBranch": true,
+    "groupHasAccount": true,
+    "prevRole": null
+   }
   },
   {
    "site": "TETO Brasil doação (checkout substitute)",
@@ -2479,7 +2780,13 @@
    "label_text": "Bairro",
    "login": "none",
    "identity": "neighborhood",
-   "card": "none"
+   "card": "none",
+   "bank": "none",
+   "context": {
+    "groupHasBranch": true,
+    "groupHasAccount": true,
+    "prevRole": null
+   }
   },
   {
    "site": "TETO Brasil doação (checkout substitute)",
@@ -2496,7 +2803,13 @@
    "label_text": "Cidade",
    "login": "none",
    "identity": "city",
-   "card": "none"
+   "card": "none",
+   "bank": "none",
+   "context": {
+    "groupHasBranch": true,
+    "groupHasAccount": true,
+    "prevRole": null
+   }
   },
   {
    "site": "TETO Brasil doação (checkout substitute)",
@@ -2513,7 +2826,13 @@
    "label_text": "Estado",
    "login": "skip",
    "identity": "state",
-   "card": "none"
+   "card": "none",
+   "bank": "none",
+   "context": {
+    "groupHasBranch": true,
+    "groupHasAccount": true,
+    "prevRole": null
+   }
   },
   {
    "site": "Nuvem Pago checkout (Nuvemshop)",
@@ -2530,7 +2849,8 @@
    "label_text": "Número do cartão",
    "login": "none",
    "identity": "none",
-   "card": "number"
+   "card": "number",
+   "bank": "none"
   },
   {
    "site": "Nuvem Pago checkout (Nuvemshop)",
@@ -2547,7 +2867,8 @@
    "label_text": "Nome impresso no cartão",
    "login": "none",
    "identity": "none",
-   "card": "cardholderName"
+   "card": "cardholderName",
+   "bank": "none"
   },
   {
    "site": "Nuvem Pago checkout (Nuvemshop)",
@@ -2564,7 +2885,8 @@
    "label_text": "Vencimento (MM/AA)",
    "login": "none",
    "identity": "none",
-   "card": "expiry"
+   "card": "expiry",
+   "bank": "none"
   },
   {
    "site": "Nuvem Pago checkout (Nuvemshop)",
@@ -2581,7 +2903,8 @@
    "label_text": "CVV",
    "login": "none",
    "identity": "none",
-   "card": "verificationNumber"
+   "card": "verificationNumber",
+   "bank": "none"
   },
   {
    "site": "Nuvem Pago checkout (Nuvemshop)",
@@ -2598,7 +2921,8 @@
    "label_text": "CPF ou CNPJ do portador do cartão",
    "login": "skip",
    "identity": "cpf",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   },
   {
    "site": "Nuvem Pago checkout (Nuvemshop)",
@@ -2615,46 +2939,11 @@
    "label_text": "Telefone",
    "login": "skip",
    "identity": "phone",
-   "card": "none"
+   "card": "none",
+   "bank": "none"
   }
  ],
  "known_gaps": [
-  {
-   "site": "Itaú",
-   "id": "idl-more-access-input-account",
-   "label_text": "Conta",
-   "platform": "extension",
-   "classifier": "login",
-   "got": "username",
-   "reason": "bank field: B6 (Bank Account item)"
-  },
-  {
-   "site": "Itaú",
-   "id": "idl-login-sensibility-input-agency",
-   "label_text": "Agência",
-   "platform": "extension",
-   "classifier": "login",
-   "got": "username",
-   "reason": "bank field: B6 (Bank Account item)"
-  },
-  {
-   "site": "Itaú",
-   "id": "idl-login-sensibility-input-account",
-   "label_text": "Conta",
-   "platform": "extension",
-   "classifier": "login",
-   "got": "username",
-   "reason": "bank field: B6 (Bank Account item)"
-  },
-  {
-   "site": "Itaú",
-   "id": "idl-menu-account",
-   "label_text": "Conta",
-   "platform": "extension",
-   "classifier": "login",
-   "got": "username",
-   "reason": "bank field: B6 (Bank Account item)"
-  },
   {
    "site": "Nubank",
    "id": "inputtext_cpf",
@@ -2672,15 +2961,6 @@
    "classifier": "identity",
    "got": "none",
    "reason": "the label also says \"conta\" (an identity negative word); outside B5"
-  },
-  {
-   "site": "TETO Brasil doação (checkout substitute)",
-   "id": "person_payment_attributes_bank_account",
-   "label_text": "Conta",
-   "platform": "extension",
-   "classifier": "login",
-   "got": "username",
-   "reason": "bank field: B6 (Bank Account item)"
   },
   {
    "site": "Itaú",

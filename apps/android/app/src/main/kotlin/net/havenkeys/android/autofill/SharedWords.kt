@@ -86,6 +86,10 @@ internal object SharedWords {
     val PHONE_HINTS: List<String> = listOf("phone", "phonenumber", "tel")
     val PASSWORD_HINTS: List<String> = listOf("password", "current-password")
     val IDENTITY_SPECIFIC_ADDRESS_ROLES: List<String> = listOf("city", "state", "neighborhood", "complement", "postalCode", "number", "country")
+    val BANK_BRANCH: List<String> = listOf("agencia", "ag", "cod agencia", "numero da agencia", "branch", "cooperativa", "dependencia")
+    val BANK_ACCOUNT: List<String> = listOf("conta", "conta corrente", "numero da conta", "conta poupanca", "account number", "bank account")
+    val BANK_DIGIT: List<String> = listOf("digito", "dv", "dig", "digito da conta", "digito da agencia")
+    val BANK_NEGATIVE: List<String> = listOf("criar conta", "minha conta", "sua conta", "nova conta", "entrar na conta", "email", "e mail", "senha", "usuario", "cpf", "cnpj", "agencia de viagem", "agencia de turismo", "travel agency", "agency name")
     const val USERNAME_THRESHOLD = 40
     const val OTP_THRESHOLD = 60
     const val USERNAME_AC_TEL = 30

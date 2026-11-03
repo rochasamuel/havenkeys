@@ -1131,6 +1131,59 @@
         "number",
         "country"
       ]
+    },
+    "BANK_BRANCH": {
+      "comment": "A bank branch (agência) box, spec 2026-11-03-bank-account §5.1 rule 1. Short tokens match as whole words only.",
+      "words": [
+        "agencia",
+        "ag",
+        "cod agencia",
+        "numero da agencia",
+        "branch",
+        "cooperativa",
+        "dependencia"
+      ]
+    },
+    "BANK_ACCOUNT": {
+      "comment": "A bank account (conta) box; counts only beside a branch box (rule 2).",
+      "words": [
+        "conta",
+        "conta corrente",
+        "numero da conta",
+        "conta poupanca",
+        "account number",
+        "bank account"
+      ]
+    },
+    "BANK_DIGIT": {
+      "comment": "A check digit (dígito) box right after a branch or account box (rule 3).",
+      "words": [
+        "digito",
+        "dv",
+        "dig",
+        "digito da conta",
+        "digito da agencia"
+      ]
+    },
+    "BANK_NEGATIVE": {
+      "comment": "Never a bank box: sign-up and sign-in wording, other login and identity fields, travel agencies.",
+      "words": [
+        "criar conta",
+        "minha conta",
+        "sua conta",
+        "nova conta",
+        "entrar na conta",
+        "email",
+        "e mail",
+        "senha",
+        "usuario",
+        "cpf",
+        "cnpj",
+        "agencia de viagem",
+        "agencia de turismo",
+        "travel agency",
+        "agency name"
+      ]
     }
   },
   "numbers": {

@@ -7,14 +7,15 @@
 
 import { describe, expect, test } from "vitest";
 import fixture from "../../../../packages/field-words/fixtures/br-fields.json";
+import { bankRoleOf, type BankGroupFacts, type BankRole } from "./bank";
 import { cardKindOf } from "./card-kind";
 import { classifyPasswords, OTP_THRESHOLD, otpScore, USERNAME_ALONE_THRESHOLD, USERNAME_THRESHOLD, usernameScore, type GroupIntent } from "./classify";
 import { features } from "./group";
 import { identityRoleOf } from "./identity";
 
-type Classifier = "login" | "identity" | "card";
+type Classifier = "login" | "identity" | "card" | "bank";
 type Rec = (typeof fixture.records)[number] & {
-  context?: { hasPassword: boolean; lastBeforePassword: boolean; loginIntent: boolean };
+  context?: Partial<{ hasPassword: boolean; lastBeforePassword: boolean; loginIntent: boolean } & BankGroupFacts>;
 };
 
 const ATTRS = ["type", "name", "id", "placeholder", "autocomplete", "inputmode", "maxlength"] as const;
@@ -34,14 +35,20 @@ function build(r: Rec): HTMLInputElement | HTMLSelectElement {
 
 const PASSWORD_INTENT: Record<string, GroupIntent> = { signup: "signup", reset: "change" };
 
+/** The bank group facts the record's page has (none, by default). */
+function bankFacts(r: Rec): BankGroupFacts {
+  const c = r.context;
+  return { groupHasBranch: c?.groupHasBranch ?? false, groupHasAccount: c?.groupHasAccount ?? false, prevRole: (c?.prevRole as BankRole | null) ?? null };
+}
+
 function loginRole(r: Rec, el: HTMLInputElement): string {
-  if (cardKindOf(el, false)) return "none";
+  if (cardKindOf(el, false) || bankRoleOf(el, bankFacts(r))) return "none";
   const f = features(el);
   if (f.type === "password") {
     const kind = classifyPasswords([f], PASSWORD_INTENT[r.page_kind] ?? "login")[0]?.kind ?? "unknown";
     return kind === "current-password" ? "password" : kind === "unknown" ? "none" : kind;
   }
-  const ctx = r.context ?? { hasPassword: true, lastBeforePassword: false, loginIntent: false };
+  const ctx = { hasPassword: true, lastBeforePassword: false, loginIntent: false, ...r.context };
   if (usernameScore(f, ctx) >= (ctx.hasPassword ? USERNAME_THRESHOLD : USERNAME_ALONE_THRESHOLD)) return "username";
   if (otpScore(f, false) >= OTP_THRESHOLD) return "otp";
   return "none";
@@ -51,6 +58,7 @@ function actual(r: Rec, c: Classifier): string {
   const el = build(r);
   if (c === "card") return cardKindOf(el, false)?.kind ?? "none";
   if (c === "identity") return identityRoleOf(el)?.role ?? "none";
+  if (c === "bank") return (el instanceof HTMLInputElement && bankRoleOf(el, bankFacts(r))) || "none";
   return loginRole(r, el as HTMLInputElement);
 }
 
@@ -61,12 +69,16 @@ const gaps = new Set(
 );
 
 const cases = (fixture.records as Rec[]).flatMap((r) =>
-  (["login", "identity", "card"] as const)
+  (["login", "identity", "card", "bank"] as const)
     .filter((c) => r[c] !== "skip")
     .map((c) => ({ r, c, name: `${r.site} · ${r.label_text || r.name || r.id} · ${c}` })),
 );
 
 describe("Brazilian field fixture", () => {
+  test("every record names a bank expectation", () => {
+    expect((fixture.records as Rec[]).filter((r) => typeof r.bank !== "string")).toEqual([]);
+  });
+
   test.each(cases)("$name", ({ r, c }) => {
     const got = actual(r, c);
     // A known gap must still fail, so a fix forces removing its entry.
