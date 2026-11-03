@@ -11,6 +11,7 @@
 //!   every other non-empty field is appended to the notes so nothing is lost.
 //! * Secure Note (003) → secure note.
 //! * Credit Card (002) → card; fields with no place on a card go to its notes.
+//! * Bank Account (101) → bank account; values a bank account cannot hold go to its notes.
 //! * Every other category (identity, SSH key, API credential, …)
 //!   → secure note with all fields written out as text.
 //! * Archived/deleted items, attachments and password history are skipped
@@ -21,6 +22,10 @@ use super::common::{
     ItemSections,
 };
 use super::{split_tags, ImportReport, ImportedItem, Parsed, MAX_ITEMS};
+use crate::bank::{
+    self, BankAccountInput, BankAccountType, MAX_ACCOUNT_DIGITS, MAX_ACCOUNT_DIGIT_CHARS,
+    MAX_BANK_CHARS, MAX_BRANCH_DIGITS, MAX_HOLDER_CHARS,
+};
 use crate::card::{self, CardBrand, CardExpiry, CardInput, MAX_CARDHOLDER_CHARS};
 use crate::custom_field::{AddressValue, FieldValueInput};
 use crate::error::{Error, Result};
@@ -372,6 +377,72 @@ impl CardParts {
     }
 }
 
+/// The values of a 1Password bank account that a Bank Account holds. A field
+/// is taken only when it passes the bank account's own checks; anything else
+/// stays in the item's notes.
+#[derive(Default)]
+struct BankParts {
+    bank: Option<String>,
+    holder: Option<SecretString>,
+    account_type: Option<BankAccountType>,
+    branch: Option<String>,
+    branch_digit: Option<String>,
+    account: Option<SecretString>,
+    account_digit: Option<SecretString>,
+}
+
+impl BankParts {
+    fn take(&mut self, field: &Value, value: &Value) -> bool {
+        let id = str_at(field, &["id"]).unwrap_or("");
+        let text = ["string", "concealed", "menu"]
+            .iter()
+            .find_map(|k| non_empty(str_at(value, &[k])));
+        let Some(text) = text else { return false };
+        let short = |max: usize| {
+            let t = clean_line(text, max + 1);
+            (!t.is_empty() && t.chars().count() <= max && t == text.trim()).then_some(t)
+        };
+        match id {
+            "bankName" if self.bank.is_none() => fill(&mut self.bank, short(MAX_BANK_CHARS)),
+            "owner" if self.holder.is_none() => fill(
+                &mut self.holder,
+                short(MAX_HOLDER_CHARS).map(SecretString::new),
+            ),
+            "accountType" if self.account_type.is_none() => {
+                self.account_type = Some(match text.to_lowercase().as_str() {
+                    "checking" => BankAccountType::Checking,
+                    "savings" => BankAccountType::Savings,
+                    "payment" => BankAccountType::Payment,
+                    _ => BankAccountType::Other,
+                });
+                true
+            }
+            // The routing number stands in for the branch only when it fits one.
+            "branchCode" | "routingNo" if self.branch.is_none() => {
+                match bank::clean_number(text, MAX_BRANCH_DIGITS, 1) {
+                    Ok((Some(branch), digit)) => {
+                        self.branch = Some(branch);
+                        self.branch_digit = digit;
+                        true
+                    }
+                    _ => false,
+                }
+            }
+            "accountNo" if self.account.is_none() => {
+                match bank::clean_number(text, MAX_ACCOUNT_DIGITS, MAX_ACCOUNT_DIGIT_CHARS) {
+                    Ok((Some(account), digit)) => {
+                        self.account = Some(SecretString::new(account));
+                        self.account_digit = digit.map(SecretString::new);
+                        true
+                    }
+                    _ => false,
+                }
+            }
+            _ => false,
+        }
+    }
+}
+
 /// A login's username and password from `loginFields`: the fields
 /// designated as such first, then the first text/email and password
 /// fields. Any other field with a value goes to `extras`, except
@@ -453,10 +524,11 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
     // (logins only); everything else is rendered into the notes.
     let is_login = matches!(category, "001" | "005");
     let is_card = category == "002";
+    let is_bank = category == "101";
     // Logins, secure notes and the categories turned into notes keep typed
     // fields; a card's leftovers stay in its notes.
-    let takes_fields = !is_card;
-    let is_converted = !matches!(category, "001" | "005" | "002" | "003");
+    let takes_fields = !is_card && !is_bank;
+    let is_converted = !matches!(category, "001" | "005" | "002" | "003" | "101");
     // A converted item's websites come first, as URL fields.
     let mut early_urls = Vec::new();
     if is_converted {
@@ -470,6 +542,7 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
         }
     }
     let mut card_parts = CardParts::default();
+    let mut bank_parts = BankParts::default();
     if let Some(sections) = details.get("sections").and_then(Value::as_array) {
         for section in sections {
             extras.section(str_at(section, &["title"]));
@@ -482,7 +555,9 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
             for field in section_fields {
                 let label = str_at(field, &["title"]);
                 let value = field.get("value").unwrap_or(&Value::Null);
-                if is_card && card_parts.take(field, value) {
+                if (is_card && card_parts.take(field, value))
+                    || (is_bank && bank_parts.take(field, value))
+                {
                     continue;
                 }
                 if is_login && totp.is_none() {
@@ -629,6 +704,23 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
                 ..ItemInput::blank(ItemType::Card, title)
             }
         }
+        "101" => {
+            report.bank_accounts += 1;
+            ItemInput {
+                urls: collect_urls(overview, report, &mut extras),
+                notes: set_or_keep(join_notes(extras.render())),
+                bank: Some(BankAccountInput {
+                    bank: bank_parts.bank,
+                    holder_name: bank_parts.holder,
+                    account_type: bank_parts.account_type,
+                    branch: bank_parts.branch,
+                    branch_digit: bank_parts.branch_digit,
+                    account: set_or_keep(bank_parts.account),
+                    account_digit: set_or_keep(bank_parts.account_digit),
+                }),
+                ..ItemInput::blank(ItemType::BankAccount, title)
+            }
+        }
         other => {
             // No native type yet: keep every field as text in a secure note.
             report.converted_to_notes += 1;
@@ -667,6 +759,7 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::bank::BankAccountType;
     use crate::custom_field::{FieldKind, FieldValueInput, MAX_FIELDS};
     use serde_json::json;
     use std::io::Write;
@@ -956,6 +1049,90 @@ mod tests {
         assert!(notes.contains("type: laser"));
         assert!(notes.contains("number: 41111111111111111111"));
         assert!(notes.contains("verification number: 123456789"));
+    }
+
+    fn bank_item(fields: Value) -> Value {
+        json!({"accounts": [{"vaults": [{"items": [{
+            "uuid": "b", "categoryUuid": "101", "state": "active",
+            "overview": {"title": "Itaú", "url": "https://www.itau.com.br"},
+            "details": {"notesPlain": "old", "sections": [{"title": "", "fields": fields}]}
+        }]}]}]})
+    }
+
+    fn text(title: &str, v: &str) -> Value {
+        json!({"title": title, "id": title, "value": {"string": v}})
+    }
+
+    #[test]
+    fn onepux_bank_account_imports() {
+        let data = bank_item(json!([
+            text("bankName", "Itaú"),
+            text("owner", "Maria Souza"),
+            json!({"title": "accountType", "id": "accountType", "value": {"menu": "checking"}}),
+            text("accountNo", "12345-6"),
+            text("branchCode", "1234"),
+            text("routingNo", "021000021"),
+            text("swift", "ITAUBRSP"),
+            text("iban", "BR1500000000000010932840814P2"),
+            json!({"title": "telephonePin", "id": "telephonePin", "value": {"concealed": "9876"}})
+        ]));
+        let parsed = parse(&make_1pux(&data, 0)).unwrap();
+        assert_eq!(parsed.report.bank_accounts, 1);
+        let item = &parsed.items[0].input;
+        assert_eq!(item.item_type, ItemType::BankAccount);
+        assert_eq!(item.urls[0].url, "https://www.itau.com.br/");
+        let b = item.bank.as_ref().unwrap();
+        assert_eq!(b.bank.as_deref(), Some("Itaú"));
+        assert_eq!(b.holder_name.as_ref().unwrap().expose(), "Maria Souza");
+        assert_eq!(b.account_type, Some(BankAccountType::Checking));
+        assert_eq!(b.branch.as_deref(), Some("1234"));
+        assert_eq!(set_value(&b.account), Some("12345"));
+        assert_eq!(set_value(&b.account_digit), Some("6"));
+        let notes = set_value(&item.notes).unwrap();
+        assert!(notes.starts_with("old"));
+        for line in [
+            "routingNo: 021000021",
+            "swift: ITAUBRSP",
+            "iban: BR1500000000000010932840814P2",
+            "telephonePin: 9876",
+        ] {
+            assert!(notes.contains(line), "{line}");
+        }
+        assert!(!notes.contains("accountNo"));
+    }
+
+    #[test]
+    fn onepux_short_routing_number_is_the_branch_when_there_is_no_branch_code() {
+        let data = bank_item(json!([text("routingNo", "0001"), text("accountNo", "55")]));
+        let b = parse(&make_1pux(&data, 0))
+            .unwrap()
+            .items
+            .remove(0)
+            .input
+            .bank
+            .unwrap();
+        assert_eq!(b.branch.as_deref(), Some("0001"));
+        assert_eq!(set_value(&b.account), Some("55"));
+    }
+
+    #[test]
+    fn onepux_bad_bank_value_goes_to_notes() {
+        let data = bank_item(json!([
+            text("bankName", "Itaú"),
+            text("accountNo", "12ab"),
+            text("branchCode", "123456789"),
+            json!({"title": "accountType", "id": "accountType", "value": {"menu": "brokerage"}})
+        ]));
+        let parsed = parse(&make_1pux(&data, 0)).unwrap();
+        assert_eq!(parsed.report.bank_accounts, 1);
+        let item = &parsed.items[0].input;
+        let b = item.bank.as_ref().unwrap();
+        assert!(matches!(b.account, SecretUpdate::Keep));
+        assert_eq!(b.branch, None);
+        assert_eq!(b.account_type, Some(BankAccountType::Other));
+        let notes = set_value(&item.notes).unwrap();
+        assert!(notes.contains("accountNo: 12ab"));
+        assert!(notes.contains("branchCode: 123456789"));
     }
 
     #[test]

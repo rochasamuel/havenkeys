@@ -418,3 +418,63 @@ fn lookalike_names_a_bank_accounts_site() {
     );
     assert_eq!(v.lookalike_for_page(ITAU, None).unwrap(), None);
 }
+
+fn exported(
+    format: havenkeys_core::export::ExportFormat,
+) -> (String, havenkeys_core::export::ExportSummary) {
+    let (mut v, _) = activated_vault();
+    create(&mut v, itau_bank("bank-pw"));
+    let r = havenkeys_core::export::render(&v, format, NOW).unwrap();
+    (String::from_utf8(r.bytes.to_vec()).unwrap(), r.summary)
+}
+
+#[test]
+fn bitwarden_export_writes_a_bank_account_as_a_login() {
+    use havenkeys_core::export::ExportFormat;
+    let (json, summary) = exported(ExportFormat::BitwardenJson);
+    let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+    let item = &v["items"][0];
+    assert_eq!(item["type"], 1);
+    assert_eq!(item["login"]["password"], "bank-pw");
+    assert_eq!(item["login"]["uris"][0]["uri"], "https://www.itau.com.br/");
+    assert!(item["login"]["totp"].is_null());
+    let field = |name: &str| {
+        item["fields"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|f| f["name"] == name)
+            .unwrap_or_else(|| panic!("{name}"))
+    };
+    assert_eq!(
+        (
+            field("Bank")["value"].as_str(),
+            field("Bank")["type"].as_u64()
+        ),
+        (Some("Itaú"), Some(0))
+    );
+    assert_eq!(field("Agência")["value"], "1234");
+    assert_eq!(field("Conta")["value"], "12345-6");
+    assert_eq!(field("Conta")["type"], 1);
+    assert_eq!(field("PIN")["value"], "4321");
+    assert_eq!(summary.bank_accounts, 1);
+}
+
+#[test]
+fn csv_export_writes_a_bank_account_as_a_login_row() {
+    use havenkeys_core::export::ExportFormat;
+    let (csv, summary) = exported(ExportFormat::Csv);
+    let mut r = ::csv::Reader::from_reader(csv.as_bytes());
+    let row = r.records().next().unwrap().unwrap();
+    assert_eq!(&row[0], "Itaú PF");
+    assert_eq!(&row[1], "https://www.itau.com.br/");
+    assert_eq!(&row[2], "");
+    assert_eq!(&row[3], "bank-pw");
+    assert_eq!(
+        &row[4],
+        "agency note\nBank: Itaú\nAgência: 1234\nConta: 12345-6"
+    );
+    assert_eq!(summary.bank_accounts, 1);
+    assert_eq!(summary.items_left_out, 0);
+    assert_eq!(summary.custom_fields_left_out, 1);
+}

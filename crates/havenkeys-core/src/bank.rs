@@ -178,6 +178,10 @@ pub(crate) fn clean_number(
     Ok((Some(number.to_owned()), digit))
 }
 
+fn join_digit(number: &str, digit: Option<&str>) -> String {
+    digit.map_or_else(|| number.to_owned(), |d| format!("{number}-{d}"))
+}
+
 /// Trimmed text up to `max` characters, no control characters; blank is absent.
 fn clean_text(raw: &str, max: usize) -> Result<Option<String>> {
     let t = raw.trim();
@@ -268,6 +272,23 @@ impl BankAccountFields {
             branch: self.branch.clone(),
             account_last3,
         }
+    }
+
+    /// The branch with its digit, `1234-5`, as the plaintext exports write it.
+    pub(crate) fn branch_joined(&self) -> Option<String> {
+        Some(join_digit(
+            self.branch.as_deref()?,
+            self.branch_digit.as_deref(),
+        ))
+    }
+
+    /// The account with its digit, `12345-6`.
+    pub(crate) fn account_joined(&self) -> Option<SecretString> {
+        let digit = self.account_digit.as_ref().map(SecretString::expose);
+        Some(SecretString::new(join_digit(
+            self.account.as_ref()?.expose(),
+            digit,
+        )))
     }
 
     /// `None` without a branch or an account.

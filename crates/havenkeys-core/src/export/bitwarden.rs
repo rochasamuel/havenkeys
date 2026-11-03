@@ -6,7 +6,7 @@ use super::{count, for_each_item, ExportFormat, ExportSummary, Rendered};
 use crate::custom_field::{FieldSection, FieldValue};
 use crate::error::{Error, Result};
 use crate::import::common::format_utc_timestamp_ms;
-use crate::model::{ItemDetails, ItemOverview, MatchType};
+use crate::model::{AppBinding, ItemDetails, ItemOverview, MatchType};
 use crate::secret::SecretString;
 use crate::vault::VaultService;
 use serde::Serialize;
@@ -165,6 +165,30 @@ struct Folder<'a> {
     name: &'a str,
 }
 
+fn login_uris(ov: &ItemOverview) -> Vec<Uri> {
+    ov.urls
+        .iter()
+        .map(|r| Uri {
+            r#match: match r.match_type {
+                MatchType::Domain => None,
+                MatchType::Origin => Some(1),
+                MatchType::Exact => Some(3),
+            },
+            uri: r.url.clone(),
+        })
+        .collect()
+}
+
+fn android_uris(bindings: &[AppBinding]) -> impl Iterator<Item = Uri> + use<'_> {
+    let mut packages: Vec<&str> = bindings.iter().map(|b| b.package.as_str()).collect();
+    packages.sort_unstable();
+    packages.dedup();
+    packages.into_iter().map(|p| Uri {
+        r#match: None,
+        uri: format!("androidapp://{p}"),
+    })
+}
+
 fn item(ov: &ItemOverview, details: ItemDetails) -> Item {
     let mut it = Item {
         id: ov.id,
@@ -195,25 +219,8 @@ fn item(ov: &ItemOverview, details: ItemDetails) -> Item {
             app_bindings,
             ..
         } => {
-            let mut uris: Vec<Uri> = ov
-                .urls
-                .iter()
-                .map(|r| Uri {
-                    r#match: match r.match_type {
-                        MatchType::Domain => None,
-                        MatchType::Origin => Some(1),
-                        MatchType::Exact => Some(3),
-                    },
-                    uri: r.url.clone(),
-                })
-                .collect();
-            let mut packages: Vec<&str> = app_bindings.iter().map(|b| b.package.as_str()).collect();
-            packages.sort_unstable();
-            packages.dedup();
-            uris.extend(packages.into_iter().map(|p| Uri {
-                r#match: None,
-                uri: format!("androidapp://{p}"),
-            }));
+            let mut uris = login_uris(ov);
+            uris.extend(android_uris(&app_bindings));
             push_custom_fields(&mut it, sections);
             it.password_history = password_history
                 .into_iter()
@@ -250,8 +257,31 @@ fn item(ov: &ItemOverview, details: ItemDetails) -> Item {
                 code: f.verification_number,
             });
         }
-        // Written by the import/export task (spec 2026-11-03-bank-account §6.3).
-        ItemDetails::BankAccount(_) => {}
+        // A login with the bank values as custom fields (spec 2026-11-03-bank-account §6.3).
+        ItemDetails::BankAccount(f) => {
+            let f = *f;
+            if let Some(bank) = &f.bank {
+                it.fields.push(field("Bank", bank.as_str().into(), false));
+            }
+            if let Some(branch) = f.branch_joined() {
+                it.fields
+                    .push(field("Agência", SecretString::new(branch), false));
+            }
+            if let Some(account) = f.account_joined() {
+                it.fields.push(field("Conta", account, true));
+            }
+            let mut uris = login_uris(ov);
+            uris.extend(android_uris(&f.app_bindings));
+            push_custom_fields(&mut it, f.sections);
+            it.notes = f.notes;
+            it.login = Some(Login {
+                uris,
+                username: None,
+                password: f.password,
+                totp: None,
+                fido2_credentials: [],
+            });
+        }
         ItemDetails::Identity(f) => {
             let f = *f;
             it.r#type = 4;

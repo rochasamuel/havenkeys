@@ -150,6 +150,9 @@ fn count(s: &mut ExportSummary, format: ExportFormat, ov: &ItemOverview, d: &Ite
                 s.custom_fields_left_out += sections.iter().map(|x| x.fields.len()).sum::<usize>();
             }
         }
+        ItemDetails::BankAccount(f) if format == ExportFormat::Csv => {
+            s.custom_fields_left_out += f.sections.iter().map(|x| x.fields.len()).sum::<usize>();
+        }
         _ if format == ExportFormat::Csv => {
             s.items_left_out += 1;
             if let ItemDetails::SecureNote { sections, .. } = d {

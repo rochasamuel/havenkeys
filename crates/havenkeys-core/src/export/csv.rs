@@ -6,6 +6,7 @@
 use super::{count, for_each_item, ExportFormat, ExportSummary, Rendered};
 use crate::error::{Error, Result};
 use crate::model::ItemDetails;
+use crate::secret::SecretString;
 use crate::vault::VaultService;
 use zeroize::Zeroizing;
 
@@ -24,25 +25,41 @@ pub(super) fn render(vault: &VaultService) -> Result<Rendered> {
                 return Ok(());
             };
             count(&mut summary, ExportFormat::Csv, ov, &d);
-            let ItemDetails::Login {
-                password,
-                totp,
-                notes,
-                ..
-            } = d
-            else {
-                return Ok(());
+            // A bank account's values end the notes as `label: value` lines.
+            let (password, totp, notes, bank) = match d {
+                ItemDetails::Login {
+                    password,
+                    totp,
+                    notes,
+                    ..
+                } => (password, totp.map(|c| c.to_otpauth_uri()), notes, vec![]),
+                ItemDetails::BankAccount(f) => {
+                    let f = *f;
+                    let bank = [
+                        ("Bank", f.bank.clone().map(SecretString::new)),
+                        ("Agência", f.branch_joined().map(SecretString::new)),
+                        ("Conta", f.account_joined()),
+                    ];
+                    (f.password, None, f.notes, bank.into())
+                }
+                _ => return Ok(()),
             };
             let mut note = notes.map(|n| n.expose().to_owned()).unwrap_or_default();
-            for rule in ov.urls.iter().skip(1) {
+            let websites = ov
+                .urls
+                .iter()
+                .skip(1)
+                .map(|r| format!("Website: {}", r.url));
+            let bank = bank
+                .iter()
+                .filter_map(|(l, v)| Some(format!("{l}: {}", v.as_ref()?.expose())));
+            for line in websites.chain(bank) {
                 if !note.is_empty() {
                     note.push('\n');
                 }
-                note.push_str("Website: ");
-                note.push_str(&rule.url);
+                note.push_str(&line);
             }
             let note = Zeroizing::new(note);
-            let totp = totp.map(|c| c.to_otpauth_uri());
             w.write_record([
                 ov.title.as_str(),
                 ov.urls.first().map_or("", |r| r.url.as_str()),
