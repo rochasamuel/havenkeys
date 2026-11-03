@@ -17,6 +17,8 @@ import { ItemDetail } from "./ItemDetail";
 import { AccountItemDetail } from "./AccountItemDetail";
 import { CardDetail } from "./CardDetail";
 import { CardEditor } from "./CardEditor";
+import { BankDetail } from "./BankDetail";
+import { BankEditor } from "./BankEditor";
 import { IdentityDetail } from "./IdentityDetail";
 import { IdentityEditor } from "./IdentityEditor";
 import { ItemEditor } from "./ItemEditor";
@@ -28,7 +30,7 @@ import { useI18n } from "../i18n/context";
 import { errorMessage } from "../i18n/errors";
 import type { Messages } from "../i18n/en";
 
-export type Section = "all" | "login" | "secure_note" | "card" | "health" | "generator" | "settings" | "trash";
+export type Section = "all" | "login" | "secure_note" | "card" | "bank_account" | "health" | "generator" | "settings" | "trash";
 
 type Pane =
   | { kind: "empty" }
@@ -55,6 +57,7 @@ const sections: Array<{ id: Section; label: (t: Messages) => string; icon: IconN
   { id: "login", label: (t) => t.vault.logins, icon: "key" },
   { id: "secure_note", label: (t) => t.vault.secureNotes, icon: "note" },
   { id: "card", label: (t) => t.card.nav, icon: "card" },
+  { id: "bank_account", label: (t) => t.bank.nav, icon: "bank" },
 ];
 
 export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, readOnly, frozen, offline: offlineProp, onLock }: Props) {
@@ -192,9 +195,11 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
     return () => void unlisten.then((f) => f());
   }, [itemsChanged]);
 
-  // The list that shows `id`: a login from the extension, a secure note from Quick Access.
-  const sectionOf = (id: string): Section =>
-    allItemsRef.current.find((i) => i.id === id)?.itemType === "secure_note" ? "secure_note" : "login";
+  // The list that shows `id`: a login or bank account from the extension, a secure note from Quick Access.
+  const sectionOf = (id: string): Section => {
+    const type = allItemsRef.current.find((i) => i.id === id)?.itemType;
+    return type === "secure_note" || type === "bank_account" ? type : "login";
+  };
 
   const openFromExtension = useCallback((id: string) => {
     setPendingOpen(null);
@@ -305,7 +310,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
 
   const visible = useMemo(() => {
     if (tag !== null) return items.filter((i) => hasTag(i.tags, tag));
-    return section === "login" || section === "secure_note" || section === "card"
+    return section === "login" || section === "secure_note" || section === "card" || section === "bank_account"
       ? items.filter((i) => i.itemType === section)
       : items;
   }, [items, section, tag]);
@@ -315,6 +320,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
       login: items.filter((i) => i.itemType === "login").length,
       secure_note: items.filter((i) => i.itemType === "secure_note").length,
       card: items.filter((i) => i.itemType === "card").length,
+      bank_account: items.filter((i) => i.itemType === "bank_account").length,
     }),
     [items],
   );
@@ -456,7 +462,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
               >
                 <Icon name={s.icon} size={17} />
                 <span>{s.label(t)}</span>
-                <span className="nav-count">{counts[s.id as "all" | "login" | "secure_note" | "card"]}</span>
+                <span className="nav-count">{counts[s.id as keyof typeof counts]}</span>
               </button>
             ))}
             <button
@@ -696,7 +702,27 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
                   onDirtyChange={setEditorDirty}
                 />
               )}
-              {pane.kind === "view" && selected && selected.itemType !== "identity" && selected.itemType !== "card" && (
+              {pane.kind === "view" && selected?.itemType === "bank_account" && (
+                <BankDetail
+                  key={selected.id + selected.updatedAt}
+                  item={selected}
+                  readOnly={readOnly}
+                  onTag={openTag}
+                  onEdit={() => setPane({ kind: "edit", id: selected.id })}
+                  onDelete={() => void onDelete(selected)}
+                />
+              )}
+              {pane.kind === "edit" && selected?.itemType === "bank_account" && (
+                <BankEditor
+                  key={"edit" + selected.id}
+                  existing={selected}
+                  readOnly={readOnly}
+                  onCancel={() => setPane({ kind: "view", id: selected.id })}
+                  onSaved={onSaved}
+                  onDirtyChange={setEditorDirty}
+                />
+              )}
+              {pane.kind === "view" && selected && (selected.itemType === "login" || selected.itemType === "secure_note") && (
                 <ItemDetail
                   key={selected.id + selected.updatedAt}
                   item={selected}
@@ -709,7 +735,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
                   onOpen={(id) => setPane({ kind: "view", id })}
                 />
               )}
-              {pane.kind === "edit" && selected && selected.itemType !== "identity" && selected.itemType !== "card" && (
+              {pane.kind === "edit" && selected && (selected.itemType === "login" || selected.itemType === "secure_note") && (
                 <ItemEditor
                   key={"edit" + selected.id}
                   existing={selected}
@@ -720,7 +746,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
                   onDirtyChange={setEditorDirty}
                 />
               )}
-              {pane.kind === "new" && pane.itemType !== "card" && (
+              {pane.kind === "new" && (pane.itemType === "login" || pane.itemType === "secure_note") && (
                 <ItemEditor
                   key={"new" + pane.itemType}
                   itemType={pane.itemType}
@@ -733,6 +759,15 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
               {pane.kind === "new" && pane.itemType === "card" && (
                 <CardEditor
                   key="new-card"
+                  readOnly={readOnly}
+                  onCancel={() => setPane({ kind: "empty" })}
+                  onSaved={onSaved}
+                  onDirtyChange={setEditorDirty}
+                />
+              )}
+              {pane.kind === "new" && pane.itemType === "bank_account" && (
+                <BankEditor
+                  key="new-bank"
                   readOnly={readOnly}
                   onCancel={() => setPane({ kind: "empty" })}
                   onSaved={onSaved}

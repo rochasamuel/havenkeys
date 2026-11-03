@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import type { TrashEntry } from "../lib/types";
 import { cardSubtitle } from "../lib/card";
+import { bankSubtitle } from "../lib/bank";
 import { syncAfterConflict } from "../lib/conflict";
 import { Field } from "../components/Field";
 import { Icon } from "../components/Icon";
@@ -10,7 +11,7 @@ import { useToast } from "../components/Toast";
 import { useI18n } from "../i18n/context";
 import { errorMessage } from "../i18n/errors";
 import type { Messages } from "../i18n/en";
-import { ItemAvatar } from "./ItemList";
+import { ItemAvatar, kindLabel } from "./ItemList";
 
 interface Props {
   /** Offline: restoring and deleting would fail, so those controls are disabled up front. */
@@ -35,7 +36,9 @@ function subtitle(entry: TrashEntry, t: Messages): string {
   if (entry.username) return entry.username;
   const card = entry.itemType === "card" ? cardSubtitle(entry.card) : null;
   if (card) return card;
-  return entry.itemType === "card" ? t.card.kind : entry.itemType === "secure_note" ? t.common.secureNote : t.common.login;
+  const bank = entry.itemType === "bank_account" && entry.bank ? bankSubtitle(entry.bank, { ag: t.bank.ag, account: t.bank.fields.account }) : null;
+  if (bank) return bank;
+  return kindLabel(entry.itemType, t);
 }
 
 /**

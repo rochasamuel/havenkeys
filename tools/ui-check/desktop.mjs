@@ -103,6 +103,21 @@ const items = [
     updatedAt: NOW - 20 * DAY,
   },
   {
+    id: "55555555-6666-4777-8888-999999999999",
+    itemType: "bank_account",
+    title: "Itaú — conta da família",
+    username: null,
+    urls: [{ url: "https://www.itau.com.br", matchType: "domain" }],
+    hasPassword: true,
+    hasTotp: false,
+    hasNotes: false,
+    hasPasskey: false,
+    autoSignIn: false,
+    bank: { bank: "Itaú Unibanco", branch: "0742", accountLast3: "45-6" },
+    createdAt: NOW - 15 * DAY,
+    updatedAt: NOW - 15 * DAY,
+  },
+  {
     id: "00f03a59-33cc-8082-a649-ca545b3b372d",
     itemType: "identity",
     title: "Samuel Rocha",
@@ -278,6 +293,19 @@ function baseResponses() {
     reveal_card_field: "5200828282827609",
     copy_card_field: { clearAfterSeconds: 30 },
     check_card_number: { brand: "mastercard", checkDigitOk: false },
+    reveal_bank: {
+      bank: "Itaú Unibanco",
+      holderName: "Samuel S Rocha",
+      accountType: "checking",
+      branch: "0742",
+      branchDigit: "1",
+      notes: "Joint account; the card PIN is in the safe.",
+      sections: [],
+      hasAccount: true,
+      hasPassword: true,
+    },
+    reveal_bank_field: { byField: { account: "12345", accountDigit: "6", password: "s3nh4-d0-b4nc0" } },
+    copy_bank_field: { clearAfterSeconds: 30 },
     item_fields: [],
     sso_accounts: [],
     provider_login: { kind: "none" },
@@ -574,8 +602,8 @@ export const desktopScenarios = [
     name: "vault-tag-selected",
     respond: {},
     async act(page) {
-      // After the four categories and the Identity row: Development, Production, Work.
-      await page.click(nav(8));
+      // After the five categories and the Identity row: Development, Production, Work.
+      await page.click(nav(9));
       await page.waitForTimeout(200);
     },
   },
@@ -744,14 +772,14 @@ export const desktopScenarios = [
     name: "identity",
     respond: {},
     act: async (page) => {
-      await page.click(nav(5));
+      await page.click(nav(6));
     },
   },
   {
     name: "identity-revealed",
     respond: {},
     act: async (page) => {
-      await page.click(nav(5));
+      await page.click(nav(6));
       await page.click(".item section:nth-of-type(2) .icon-btn >> nth=0");
       await page.click(".item .copy-btn >> nth=0");
     },
@@ -763,14 +791,14 @@ export const desktopScenarios = [
       reveal_identity: { fields: {}, address: null },
     },
     act: async (page) => {
-      await page.click(nav(5));
+      await page.click(nav(6));
     },
   },
   {
     name: "identity-editor",
     respond: {},
     act: async (page) => {
-      await page.click(nav(5));
+      await page.click(nav(6));
       await page.click(".item-head-actions .btn");
     },
   },
@@ -818,6 +846,38 @@ export const desktopScenarios = [
       await page.click(".item-head-actions .btn");
       await page.fill(".card-number-input input", "5200 8282 8282 7600");
       await page.waitForTimeout(400);
+    },
+  },
+  {
+    name: "bank-accounts",
+    respond: {},
+    act: async (page) => {
+      await page.click(nav(5));
+    },
+  },
+  {
+    name: "bank-detail-revealed",
+    respond: {},
+    act: async (page) => {
+      await page.click(".list-item:has(.avatar-bank_account)");
+      await page.click(".item .icon-btn:not(.copy-btn) >> nth=0");
+    },
+  },
+  {
+    name: "bank-editor",
+    respond: {},
+    act: async (page) => {
+      await page.click(".list-item:has(.avatar-bank_account)");
+      await page.click(".item-head-actions .btn");
+      // The saved account is kept: its boxes stay empty, with the keep hint.
+    },
+  },
+  {
+    name: "bank-new",
+    respond: {},
+    act: async (page) => {
+      await page.click(".new-menu .icon-btn");
+      await page.click(".menu [role=menuitem] >> nth=3");
     },
   },
   {
@@ -1495,6 +1555,8 @@ export function tauriStub(setup) {
       if (r === undefined) throw { code: "internal", message: `ui-check: no canned answer for ${cmd}` };
       // `{ byProvider: { google: [...] } }` answers per `provider` argument.
       if (r && typeof r === "object" && "byProvider" in r) return JSON.parse(JSON.stringify(r.byProvider[args.provider] ?? []));
+      // `{ byField: { account: "…" } }` answers per `field` argument.
+      if (r && typeof r === "object" && "byField" in r) return r.byField[args.field];
       // `{ bytesBase64 }` answers raw bytes, as a Tauri ipc::Response does.
       if (r && typeof r === "object" && "bytesBase64" in r) return Uint8Array.from(atob(r.bytesBase64), (c) => c.charCodeAt(0)).buffer;
       return JSON.parse(JSON.stringify(r));

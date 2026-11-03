@@ -59,6 +59,7 @@ function identityRow(over) {
   return { title: "Samuel Rocha", fills: 5, documents: [], documentsAllowed: true, empty: false, missing: false, ...over };
 }
 
+const bankItem = { id: ID3, title: "Itaú — conta da família", username: null, tags: [], bank: { bank: "Itaú Unibanco", branch: "0742", accountLast3: "45-6" } };
 const visaCard = { id: ID1, title: "Visa personal", brand: "visa", last4: "4242", expiry: "11/33", expired: false };
 const eloCard = { id: ID2, title: "Elo Nubank", brand: "elo", last4: "7609", expiry: "03/32", expired: false };
 const discoverCard = { id: ID3, title: "Discover", brand: "discover", last4: "1117", expiry: "06/34", expired: false };
@@ -178,6 +179,13 @@ export const extensionScenarios = [
   },
 
   {
+    name: "popup-bank",
+    page: "popup.html",
+    frame: { kind: "popup" },
+    granted: true,
+    replies: () => ({ popup_state: ok({ kind: "unlocked", site: "itau.com.br", matches: [matches[0], { ...bankItem, hasTotp: false, strength: "same_host", provider: null, kind: "bankAccount" }], identity: null }) }),
+  },
+  {
     name: "popup-identity",
     page: "popup.html",
     frame: { kind: "popup" },
@@ -249,6 +257,12 @@ export const extensionScenarios = [
       page: "menu.html",
       frame: { kind: "menu", width, rows: 2 },
       replies: () => ({ menu_state: ok(menuView({ items: menuItems.slice(0, 1), hint: { kind: "add_passkey", name: "GitHub" } })) }),
+    },
+    {
+      name: `menu-bank-${width}`,
+      page: "menu.html",
+      frame: { kind: "menu", width, rows: 2 },
+      replies: () => ({ menu_state: ok(menuView({ kind: "bank", items: [bankItem, { ...bankItem, id: ID2, title: "Nubank", bank: { bank: "Nubank", branch: "0001", accountLast3: null } }] })) }),
     },
     {
       name: `menu-otp-${width}`,

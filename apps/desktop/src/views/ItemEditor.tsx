@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { api } from "../lib/api";
-import type { ItemInput, ItemOverview, ItemType, MatchType, SecretUpdate, SignInWith, UrlRule } from "../lib/types";
+import type { ItemInput, ItemOverview, ItemType, SecretUpdate, SignInWith, UrlRule } from "../lib/types";
 import { EMPTY, KEEP, toUpdate, type SecretEdit } from "../lib/secretEdit";
 import { fromViews, sectionsInput, type EditSection } from "../lib/customFields";
 import { isDirty, type EditorSnapshot } from "../lib/openItem";
@@ -15,6 +15,7 @@ import { useToast } from "../components/Toast";
 import { useI18n } from "../i18n/context";
 import { errorMessage } from "../i18n/errors";
 import { CustomFieldsEditor } from "./CustomFieldsEditor";
+import { PasswordEdit, WebsitesEdit } from "./LoginParts";
 
 interface Props {
   itemType: ItemType;
@@ -26,15 +27,8 @@ interface Props {
   onDirtyChange?: (dirty: boolean) => void;
 }
 
-const matchTypes: MatchType[] = ["domain", "origin", "exact"];
-
 export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, onDirtyChange }: Props) {
   const { t } = useI18n();
-  const matchLabels: Record<MatchType, string> = {
-    domain: t.editor.matchDomain,
-    origin: t.editor.matchOrigin,
-    exact: t.editor.matchExact,
-  };
   const isNew = !existing;
   const [title, setTitle] = useState(existing?.title ?? "");
   const [username, setUsername] = useState(existing?.username ?? "");
@@ -42,7 +36,6 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
     existing?.urls.length ? existing.urls.map((u) => ({ ...u })) : [{ url: "", matchType: "domain" }],
   );
   const [password, setPassword] = useState<SecretEdit>(isNew || !existing.hasPassword ? EMPTY : KEEP);
-  const [showPassword, setShowPassword] = useState(false);
   const [totp, setTotp] = useState<SecretEdit>(isNew || !existing.hasTotp ? EMPTY : KEEP);
   // A login's or note's custom fields. `null` while an existing item's are
   // loading or failed to load: nothing renders and the save sends no
@@ -132,23 +125,6 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
     };
     // `t` is left out, as for the notes: a language change must not reload.
   }, [existingId, itemType]);
-
-  async function generate() {
-    try {
-      const g = await api.generate({
-        length: 24,
-        uppercase: true,
-        lowercase: true,
-        digits: true,
-        symbols: true,
-        avoidAmbiguous: false,
-      });
-      setPassword({ mode: "set", value: g.password });
-      setShowPassword(true);
-    } catch (e) {
-      sideError(errorMessage(e, t, t.editor.generateFailed));
-    }
-  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -281,67 +257,7 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
                   />
                 </label>
 
-                <div className="row edit-row">
-                  <span className="edit-label">{t.common.password}</span>
-                  {password.mode === "keep" ? (
-                    <div className="edit-secret">
-                      {/* Stands in for the password: may be cut short in a narrow pane. */}
-                      <span className="mono masked" data-truncate="">
-                        ••••••••••••
-                      </span>
-                      <span className="edit-secret-actions">
-                        <button type="button" className="btn btn-small" onClick={() => setPassword({ mode: "set", value: "" })}>
-                          {t.editor.change}
-                        </button>
-                        <button type="button" className="btn btn-small btn-quiet-danger" onClick={() => setPassword({ mode: "clear" })}>
-                          {t.common.remove}
-                        </button>
-                      </span>
-                    </div>
-                  ) : password.mode === "clear" ? (
-                    <div className="edit-secret">
-                      <span className="muted">{t.editor.passwordRemoved}</span>
-                      <span className="edit-secret-actions">
-                        <button type="button" className="btn btn-small" onClick={() => setPassword(KEEP)}>
-                          {t.common.undo}
-                        </button>
-                      </span>
-                    </div>
-                  ) : password.mode === "set" ? (
-                    <div className="edit-secret">
-                      <input
-                        className="edit-input mono"
-                        type={showPassword ? "text" : "password"}
-                        value={password.value}
-                        onChange={(e) => setPassword({ mode: "set", value: e.target.value })}
-                        placeholder={t.common.password}
-                        autoComplete="new-password"
-                        spellCheck={false}
-                        autoCapitalize="off"
-                        aria-label={t.common.password}
-                      />
-                      <span className="edit-secret-actions">
-                        <button
-                          type="button"
-                          className="icon-btn"
-                          onClick={() => setShowPassword((s) => !s)}
-                          aria-label={showPassword ? t.common.hidePassword : t.common.showPassword}
-                          title={showPassword ? t.common.hidePassword : t.common.showPassword}
-                        >
-                          <Icon name={showPassword ? "eyeOff" : "eye"} size={16} />
-                        </button>
-                        <button type="button" className="btn btn-small" onClick={() => void generate()}>
-                          <Icon name="dice" size={15} /> {t.editor.generate}
-                        </button>
-                        {!isNew && existing.hasPassword && (
-                          <button type="button" className="btn btn-small btn-quiet" onClick={() => setPassword(KEEP)}>
-                            {t.common.cancel}
-                          </button>
-                        )}
-                      </span>
-                    </div>
-                  ) : null}
-                </div>
+                <PasswordEdit value={password} onChange={setPassword} saved={!isNew && existing.hasPassword} label={t.common.password} />
               </>
             ) : (
               <button type="button" className="row row-button add-row" onClick={() => setPasswordOpen(true)}>
@@ -358,62 +274,7 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
 
       {itemType === "login" && (
         <>
-          <h3 className="group-title">{t.editor.websites}</h3>
-          <div className="group">
-            {urls.map((rule, i) => (
-              <div className="row edit-row url-edit" key={i}>
-                <input
-                  className="edit-input"
-                  value={rule.url}
-                  onChange={(e) =>
-                    setUrls((list) => list.map((r, j) => (j === i ? { ...r, url: e.target.value } : r)))
-                  }
-                  placeholder="github.com"
-                  spellCheck={false}
-                  autoCapitalize="off"
-                  inputMode="url"
-                  aria-label={t.editor.websiteN(i + 1)}
-                />
-                <span className="url-edit-controls">
-                  <span className="select-wrap">
-                    <select
-                      value={rule.matchType}
-                      onChange={(e) =>
-                        setUrls((list) =>
-                          list.map((r, j) => (j === i ? { ...r, matchType: e.target.value as MatchType } : r)),
-                        )
-                      }
-                      aria-label={t.editor.matchHow(i + 1)}
-                    >
-                      {matchTypes.map((m) => (
-                        <option key={m} value={m}>
-                          {matchLabels[m]}
-                        </option>
-                      ))}
-                    </select>
-                    <Icon name="chevronDown" size={14} className="select-chevron" />
-                  </span>
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    onClick={() => setUrls((list) => list.filter((_, j) => j !== i))}
-                    aria-label={t.editor.removeWebsiteN(i + 1)}
-                    title={t.editor.removeWebsite}
-                  >
-                    <Icon name="x" size={16} />
-                  </button>
-                </span>
-              </div>
-            ))}
-            <button
-              type="button"
-              className="row row-button add-row"
-              onClick={() => setUrls((list) => [...list, { url: "", matchType: "domain" }])}
-              disabled={urls.length >= 32}
-            >
-              <Icon name="plus" size={15} /> {t.editor.addWebsite}
-            </button>
-          </div>
+          <WebsitesEdit urls={urls} onChange={setUrls} />
 
           <h3 className="group-title">{t.editor.oneTimeCodes}</h3>
           <div className="group">

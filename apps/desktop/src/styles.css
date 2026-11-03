@@ -4214,3 +4214,46 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   text-align: center;
   color: var(--muted);
 }
+
+/* ------------------------------------------------------- bank accounts */
+
+.avatar-bank_account {
+  background: var(--brass-soft);
+  color: var(--brass-ink);
+}
+
+/* A number and its check digit, two boxes in one row read as one value:
+   `12345 – 6`. The number box is sized to its longest value so the digit
+   sits beside it, not at the row's far end. */
+.bank-number {
+  flex: 1 1 100px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  min-width: 0;
+}
+
+.bank-number .edit-input {
+  flex: 1 1 0;
+  max-width: 12em;
+  min-width: 3em;
+}
+
+.bank-number .edit-input.bank-digit {
+  flex: 0 0 3.5em;
+}
+
+/* Placeholders are our words, not literal strings: not mono. */
+.bank-number .edit-input::placeholder {
+  font-family: var(--font);
+}
+
+.bank-number .btn {
+  margin-left: auto;
+}
+
+.bank-dash {
+  flex: none;
+  color: var(--muted);
+}

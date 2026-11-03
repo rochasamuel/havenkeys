@@ -14,6 +14,7 @@ import { useToast } from "../components/Toast";
 import { useI18n } from "../i18n/context";
 import { errorMessage } from "../i18n/errors";
 import { CustomSections } from "./CustomSections";
+import { Websites } from "./LoginParts";
 
 interface Props {
   item: ItemOverview;
@@ -294,38 +295,7 @@ export function ItemDetail({ item, revision, health, readOnly, onTag, onEdit, on
             </div>
           )}
 
-          {item.urls.length > 0 && (
-            <div className="group">
-              {item.urls.map((u) => (
-                <div className="row" key={u.url}>
-                  <div className="row-main">
-                    <div className="row-label">{t.detail.website}</div>
-                    <div className="row-value url-value">
-                      <button
-                        type="button"
-                        className="url-link"
-                        title={t.detail.openWebsite}
-                        onClick={() =>
-                          void api
-                            .openWebsite(item.id, u.url)
-                            .catch((e) => toast(errorMessage(e, t, t.detail.openWebsiteFailed), "error"))
-                        }
-                      >
-                        {u.url}
-                      </button>
-                    </div>
-                  </div>
-                  <span className="url-match">
-                    {u.matchType === "domain"
-                      ? t.detail.matchDomain
-                      : u.matchType === "origin"
-                        ? t.detail.matchOrigin
-                        : t.detail.matchExact}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
+          <Websites item={item} />
 
           <CustomSections itemId={item.id} updatedAt={item.updatedAt} />
           <Attachments item={item} />

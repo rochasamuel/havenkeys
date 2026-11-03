@@ -4,11 +4,13 @@ import { monogram, primaryHost } from "../lib/format";
 import { ssoSubtitle } from "../lib/sso";
 import { identityTitle } from "../lib/identity";
 import { cardSubtitle } from "../lib/card";
+import { bankSubtitle } from "../lib/bank";
 import { CardBrandLogo } from "../components/CardBrandLogo";
 import { Icon } from "../components/Icon";
 import { Seal } from "../components/Seal";
 import type { Section } from "./VaultScreen";
 import { useI18n } from "../i18n/context";
+import type { Messages } from "../i18n/en";
 
 interface Props {
   items: ItemOverview[];
@@ -37,11 +39,24 @@ export function ItemAvatar({ item, large = false }: { item: ItemOverview; large?
         <Icon name="idCard" size={large ? 26 : 16} />
       ) : item.itemType === "card" ? (
         <CardBrandLogo brand={item.card?.brand ?? "other"} width={large ? 46 : 26} />
+      ) : item.itemType === "bank_account" ? (
+        <Icon name="bank" size={large ? 26 : 16} />
       ) : (
         monogram(item.title)
       )}
     </span>
   );
+}
+
+/** An item type's name, for a row with nothing more specific to show. */
+export function kindLabel(type: ItemType, t: Messages): string {
+  return {
+    login: t.common.login,
+    secure_note: t.common.secureNote,
+    identity: t.identity.kind,
+    card: t.card.kind,
+    bank_account: t.bank.kind,
+  }[type];
 }
 
 export function ItemList({
@@ -64,6 +79,7 @@ export function ItemList({
     login: t.vault.logins,
     secure_note: t.vault.secureNotes,
     card: t.card.nav,
+    bank_account: t.bank.nav,
   };
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -131,6 +147,15 @@ export function ItemList({
               >
                 <Icon name="card" size={16} /> {t.card.kind}
               </button>
+              <button
+                role="menuitem"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onNew("bank_account");
+                }}
+              >
+                <Icon name="bank" size={16} /> {t.bank.kind}
+              </button>
             </div>
           )}
         </div>
@@ -176,9 +201,11 @@ export function ItemList({
                   ? item.username
                   : item.itemType === "card"
                     ? cardSubtitle(item.card)
-                    : null;
+                    : item.itemType === "bank_account" && item.bank
+                      ? bankSubtitle(item.bank, { ag: t.bank.ag, account: t.bank.fields.account }) || null
+                      : null;
             const sub =
-              data ?? (item.itemType === "login" ? t.common.login : item.itemType === "identity" ? t.identity.kind : item.itemType === "card" ? t.card.kind : t.common.secureNote);
+              data ?? kindLabel(item.itemType, t);
             const title = item.itemType === "identity" ? identityTitle(item.title, t.identity.title) : item.title;
             const hasFiles = (item.attachments?.length ?? 0) > 0;
             return (
