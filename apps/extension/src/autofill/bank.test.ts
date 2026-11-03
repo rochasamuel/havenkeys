@@ -99,4 +99,52 @@ describe("bank classifier", () => {
     expect(classifyBank(form, env)).toEqual([]);
     expect(classifyGroup(form, env).fields.find((f) => f.el.id === "u")?.kind).toBe("username");
   });
+
+  it("junk autocomplete tokens are neutral; real field names refuse", () => {
+    for (const t of ["nope", "false", "none", "chrome-off"]) {
+      expect(bankRoleOf(box("Conta", `autocomplete="${t}" maxlength="7"`), facts({ groupHasBranch: true })), t).toBe("bankAccount");
+    }
+    expect(bankRoleOf(box("Conta", 'autocomplete="tel-national" maxlength="7"'), facts({ groupHasBranch: true }))).toBeNull();
+    expect(bankRoleOf(box("Conta", 'autocomplete="one-time-code"'), facts({ groupHasBranch: true }))).toBeNull();
+    page(`<form>
+      <label for="ag">Agência</label><input id="ag" type="text" maxlength="4" autocomplete="nope">
+      <label for="ct">Conta</label><input id="ct" type="text" maxlength="7" autocomplete="nope">
+    </form>`);
+    expect(classifyBank(document, env).map((b) => b.role)).toEqual(["bankBranch", "bankAccount"]);
+  });
+
+  it("a checkbox between conta and dígito breaks neither path", () => {
+    page(`<form>
+      <label for="ag">Agência</label><input id="ag" type="text" maxlength="4">
+      <label for="ct">Conta</label><input id="ct" type="text" maxlength="7">
+      <input type="checkbox" id="rem"><label for="rem">Lembrar</label>
+      <label for="dv">Dígito</label><input id="dv" type="text" maxlength="1">
+      <label for="pw">Senha</label><input id="pw" type="password">
+    </form>`);
+    const form = document.querySelector("form") as HTMLFormElement;
+    const bank = classifyBank(form, env).map((b) => [b.el.id, b.role]);
+    expect(bank).toEqual([["ag", "bankBranch"], ["ct", "bankAccount"], ["dv", "bankAccountDigit"]]);
+    const login = classifyGroup(form, env);
+    expect(login.fields.map((f) => f.el.id)).toEqual(["pw"]);
+  });
+
+  it("both paths agree on the Bradesco form", () => {
+    page(`<form>
+      <label for="AGN">Agência:</label><input id="AGN" type="number" maxlength="4">
+      <label for="CTA">Conta:</label><input id="CTA" type="number" maxlength="7">
+      <label for="DIGCTA">Dígito:</label><input id="DIGCTA" type="number" maxlength="1">
+    </form>`);
+    const form = document.querySelector("form") as HTMLFormElement;
+    expect(classifyBank(form, env)).toHaveLength(3);
+    expect(classifyGroup(form, env).fields).toEqual([]);
+  });
+
+  it("the first box of a split one-time code is not a digit", () => {
+    page(`<form>
+      <label for="ag">Agência</label><input id="ag" type="text" maxlength="4">
+      <label for="ct">Conta</label><input id="ct" type="text" maxlength="7">
+      ${"<input type=\"text\" maxlength=\"1\">".repeat(6)}
+    </form>`);
+    expect(classifyBank(document, env).map((b) => b.role)).toEqual(["bankBranch", "bankAccount"]);
+  });
 });

@@ -6,24 +6,34 @@
 // ("Entrar na sua conta"): it counts only beside a branch box. Pure reads of
 // attributes compared against fixed keyword lists; nothing from the page is
 // evaluated or inserted. Imports nothing from group.ts at runtime, which
-// imports this module.
+// imports this module (the shared input filter is usable.ts).
 
 import { cardKindOf } from "./card-kind";
+import { otpScore } from "./classify";
 import type { Env } from "./group";
 import { labelText } from "./labels";
 import { hasAny, MAX_HINT_CHARS, normalize } from "./text";
-import { BANK_ACCOUNT, BANK_BRANCH, BANK_DIGIT, BANK_NEGATIVE } from "./words.generated";
+import { usableInputs } from "./usable";
+import { BANK_ACCOUNT, BANK_BRANCH, BANK_DIGIT, BANK_NEGATIVE, OTP_THRESHOLD } from "./words.generated";
 
 export type BankRole = "bankBranch" | "bankBranchDigit" | "bankAccount" | "bankAccountDigit";
 
 /** What a box's form says around it: another box with a branch or account word, and the bank role just before it. */
-export type BankGroupFacts = { groupHasBranch: boolean; groupHasAccount: boolean; prevRole: BankRole | null };
+export type BankGroupFacts = {
+  groupHasBranch: boolean;
+  groupHasAccount: boolean;
+  prevRole: BankRole | null;
+  /** The next box is a one-character box too: a split one-time code, not a check digit. */
+  nextIsSingle?: boolean;
+};
 
-/** Inputs read per call: group.ts's MAX_GROUP_INPUTS. */
-const MAX_INPUTS = 60;
 const TYPES = new Set(["text", "tel", "number"]);
-/** Autocomplete tokens that name no field. Any other token names a login, identity or card field. */
-const AC_NEUTRAL = /^(off|on|section-\S+|shipping|billing)$/;
+/**
+ * The autocomplete names HTML defines for a field that is not a bank box. Any
+ * other token ("nope", "false", "chrome-off") names nothing and is neutral.
+ */
+const AC_REAL =
+  /^(username|email|impp|tel(-\S+)?|cc-\S+|one-time-code|(current|new)-password|name|honorific-\S+|given-name|additional-name|family-name|nickname|organization(-title)?|street-address|address-line\d|address-level\d|postal-code|country(-name)?|bday(-\S+)?|sex|url|photo|transaction-\S+|webauthn)$/;
 const DIGIT_OF = { bankBranch: "bankBranchDigit", bankAccount: "bankAccountDigit" } as const;
 
 function attr(el: Element, n: string): string {
@@ -33,7 +43,7 @@ function attr(el: Element, n: string): string {
 /** The box's normalized words, or null when it can never be a bank box (rule 4, BANK_NEGATIVE). */
 function wordsOf(el: HTMLInputElement): string | null {
   if (!TYPES.has(el.type) || el.disabled || el.readOnly) return null;
-  if (!attr(el, "autocomplete").toLowerCase().split(/\s+/).filter(Boolean).every((t) => AC_NEUTRAL.test(t))) return null;
+  if (attr(el, "autocomplete").toLowerCase().split(/\s+/).some((t) => AC_REAL.test(t))) return null;
   if (cardKindOf(el, false)) return null;
   const attrs = normalize(`${attr(el, "name")} ${attr(el, "id")}`);
   const text = normalize(`${attr(el, "placeholder")} ${attr(el, "aria-label")} ${attr(el, "title")} ${labelText(el)}`, MAX_HINT_CHARS * 3);
@@ -46,10 +56,12 @@ export function bankRoleOf(el: HTMLInputElement, g: BankGroupFacts): BankRole | 
   const words = wordsOf(el);
   if (words === null) return null;
   const max = el.maxLength;
+  const otp = otpScore({ type: el.type, autocomplete: [], attrs: words, text: "", maxLength: max, inputMode: attr(el, "inputmode").toLowerCase(), codeMask: false }, false);
   // Rule 3: a check digit right after a branch or account box. A digit word
   // counts on a box with no length limit; a longer box ("Conta com dígito",
   // maxlength 8) is the number itself.
-  if (g.prevRole === "bankBranch" || g.prevRole === "bankAccount") {
+  // Not the first box of a split one-time code.
+  if ((g.prevRole === "bankBranch" || g.prevRole === "bankAccount") && !(max === 1 && g.nextIsSingle) && otp < OTP_THRESHOLD) {
     if ((max >= 1 && max <= 2) || (max < 0 && hasAny(words, BANK_DIGIT))) return DIGIT_OF[g.prevRole];
   }
   // Rule 1: a branch box looks numeric, or sits beside an account box.
@@ -78,19 +90,17 @@ export function bankRoles(els: readonly HTMLInputElement[]): Map<HTMLInputElemen
     boxes.forEach((el, i) => {
       const groupHasBranch = branches - (says(i, BANK_BRANCH) ? 1 : 0) > 0;
       const groupHasAccount = accounts - (says(i, BANK_ACCOUNT) ? 1 : 0) > 0;
-      prevRole = bankRoleOf(el, { groupHasBranch, groupHasAccount, prevRole });
+      const nextIsSingle = boxes[i + 1]?.maxLength === 1;
+      prevRole = bankRoleOf(el, { groupHasBranch, groupHasAccount, prevRole, nextIsSingle });
       if (prevRole) out.set(el, prevRole);
     });
   }
   return out;
 }
 
-/** Every visible bank box under `root`, in document order, bounded. */
+/** Every bank box under `root`, in document order, among the inputs the login classifier reads. */
 export function classifyBank(root: ParentNode, env: Env): Array<{ el: HTMLInputElement; role: BankRole }> {
-  const els = Array.from(root.querySelectorAll("input"))
-    .slice(0, MAX_INPUTS * 4)
-    .filter((el) => env.isVisible(el))
-    .slice(0, MAX_INPUTS);
+  const els = usableInputs(root, env);
   const roles = bankRoles(els);
   return els.flatMap((el) => {
     const role = roles.get(el);

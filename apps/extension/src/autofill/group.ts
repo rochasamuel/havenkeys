@@ -8,7 +8,6 @@
 // strings are only compared against keyword lists.
 
 import { bankRoles } from "./bank";
-import { cardKindOf } from "./card-kind";
 import {
   classifyPasswords,
   confidenceOf,
@@ -28,35 +27,17 @@ import {
 } from "./classify";
 import { labelText } from "./labels";
 import { MAX_HINT_CHARS, normalize } from "./text";
+import { isFillable, IGNORED_TYPES, MAX_GROUP_INPUTS, usableInputs } from "./usable";
 import { isIdentityVisible } from "./visibility";
 
-/** Inputs examined per group. */
-export const MAX_GROUP_INPUTS = 60;
+export { isFillable, MAX_GROUP_INPUTS };
+
 /** Ancestor levels climbed when a field has no <form>. */
 export const MAX_CLIMB = 8;
 /** A <form> with more inputs than this is a page wrapper (ASP.NET style), not a login form. */
 export const MAX_FORM_INPUTS = 40;
 /** Elements read for the group's intent text. */
 const MAX_INTENT_ELEMENTS = 24;
-
-/** Input types that never take part in a login. */
-const IGNORED_TYPES = new Set([
-  "hidden",
-  "submit",
-  "button",
-  "reset",
-  "image",
-  "file",
-  "checkbox",
-  "radio",
-  "range",
-  "color",
-  "date",
-  "datetime-local",
-  "month",
-  "week",
-  "time",
-]);
 
 export interface Env {
   /** Is the element rendered and visible to the user? */
@@ -85,10 +66,6 @@ export function isRendered(el: HTMLElement): boolean {
   }
   const r = el.getBoundingClientRect();
   return r.width >= 4 && r.height >= 4;
-}
-
-export function isFillable(el: HTMLInputElement, env: Env): boolean {
-  return !el.disabled && !el.readOnly && !IGNORED_TYPES.has(el.type) && env.isVisible(el);
 }
 
 /** isVisible, and for a password-type field the strict check too (EX-02). */
@@ -124,11 +101,6 @@ export function features(el: HTMLInputElement): FieldFeatures {
     inputMode: attr("inputmode").toLowerCase(),
     codeMask: CODE_MASK.test(attr("placeholder").trim()),
   };
-}
-
-/** Inputs under `root`, in document order, capped. */
-function inputsIn(root: ParentNode): HTMLInputElement[] {
-  return Array.from(root.querySelectorAll("input")).slice(0, MAX_GROUP_INPUTS * 4);
 }
 
 /**
@@ -229,9 +201,7 @@ function splitOtpRun(inputs: HTMLInputElement[], feats: Map<HTMLInputElement, Fi
 
 /** Classify every usable input of the group around `root`. */
 export function classifyGroup(root: ParentNode, env: Env): LoginGroup {
-  const usable = inputsIn(root)
-    .filter((el) => isFillable(el, env) && !cardKindOf(el, false))
-    .slice(0, MAX_GROUP_INPUTS);
+  const usable = usableInputs(root, env);
   // Agência and conta boxes are a bank account's, never a login's.
   const bank = bankRoles(usable);
   const inputs = usable.filter((el) => !bank.has(el));
