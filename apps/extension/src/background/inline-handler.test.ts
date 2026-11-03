@@ -1490,9 +1490,10 @@ describe("bank menus", () => {
     });
   });
 
-  it("with nothing saved it still opens, on the empty bank row; locked gives the unlock row", async () => {
+  it("with nothing saved it stays out on focus, opens the empty bank row from the icon; locked gives the unlock row", async () => {
     const { h } = setup(answer([]));
-    expect(await h.handleContent(bankFrame(), { type: "cs_open_menu", kind: "bank" })).toEqual({ ok: true, token: T1, rows: 1 });
+    expect(await h.handleContent(bankFrame(), { type: "cs_open_menu", kind: "bank" })).toEqual({ ok: false });
+    expect(await h.handleContent(bankFrame(), { type: "cs_open_menu", kind: "bank", explicit: true })).toEqual({ ok: true, token: T1, rows: 1 });
     expect(await h.handleInline(1, { type: "menu_state", token: T1 })).toMatchObject({ ok: true, value: { state: "ready", kind: "bank", items: [] } });
 
     const { h: locked } = setup(() => {

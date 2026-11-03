@@ -991,4 +991,10 @@ describe("bank boxes", () => {
     expect(deliver(bankFill(null))).toEqual({ filled: 3, pressing: null });
     expect(byId("ct").value).toBe("12345-6");
   });
+
+  it("a popup bank fill on a page without bank boxes fills the login form's password", () => {
+    set(`<form><input id="u" name="user" type="email"><input id="pw" type="password"><button type="submit">Entrar</button></form>`);
+    expect(deliver(bankFill(null))).toEqual({ filled: 1, pressing: null });
+    expect([byId("u").value, byId("pw").value]).toEqual(["", "bank-pw"]);
+  });
 });

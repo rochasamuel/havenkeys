@@ -112,7 +112,8 @@ export function monogram(title: string): string {
   return (title.trim()[0] ?? "?").toUpperCase();
 }
 
-/** A bank account's row line, from the parts it has: `Ag 1234 · Conta •••45-6`. */
+/** A bank account's row line, from the parts it has: `Ag 1234 · Conta •••45-6`; else the bank's name. */
 export function bankSubtitle(b: BankSummary): string {
-  return [b.branch && `${t.menu.bankAg} ${b.branch}`, b.accountLast3 && `${t.menu.bankConta} •••${b.accountLast3}`].filter(Boolean).join(" · ");
+  const parts = [b.branch && `${t.menu.bankAg} ${b.branch}`, b.accountLast3 && `${t.menu.bankConta} •••${b.accountLast3}`].filter(Boolean);
+  return parts.length > 0 ? parts.join(" · ") : (b.bank ?? "");
 }

@@ -714,6 +714,7 @@ describe("bankSubtitle", () => {
     expect(bankSubtitle({ bank: "Itaú", branch: "1234", accountLast3: "45-6" })).toBe("Ag 1234 · Account •••45-6");
     expect(bankSubtitle({ bank: "Itaú", branch: "1234", accountLast3: null })).toBe("Ag 1234");
     expect(bankSubtitle({ bank: null, branch: null, accountLast3: "45-6" })).toBe("Account •••45-6");
+    expect(bankSubtitle({ bank: "Itaú", branch: null, accountLast3: null })).toBe("Itaú");
     expect(bankSubtitle({ bank: null, branch: null, accountLast3: null })).toBe("");
   });
 });

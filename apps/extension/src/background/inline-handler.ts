@@ -654,9 +654,8 @@ export function createInlineHandler(deps: InlineDeps) {
       identity = await identityRow(frame, roles).catch(() => null);
       if (identity && identity.fills === 0) identity = null;
     }
-    // Nothing to offer: stay out of the page, unless the user asked for the
-    // menu. A bank box says that nothing is saved for the site.
-    if (!locked && kind !== "new_password" && kind !== "bank" && items.length === 0 && passkeys.length === 0 && !identity && !explicit) return { ok: false };
+    // Nothing to offer: stay out of the page, unless the user asked for the menu.
+    if (!locked && kind !== "new_password" && items.length === 0 && passkeys.length === 0 && !identity && !explicit) return { ok: false };
     const extra =
       kind === "login" && !locked && items.length > 0 && passkeys.length === 0 ? await passkeyHint(frame) : { hint: null, help: null };
     return register(frame, kind, locked, items, passkeys, extra, roles, identity);
