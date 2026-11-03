@@ -594,6 +594,7 @@ export function createInlineHandler(deps: InlineDeps) {
     anchor: Anchor | null = null,
     ancestry: Ancestry | null = null,
     viewport: Viewport | null = null,
+    passwordBox = false,
   ): Promise<OpenMenuReply> {
     if (deps.suggestionsOn && !(await deps.suggestionsOn())) {
       // The user hid the menu under login fields; saving and passkeys go on.
@@ -634,10 +635,16 @@ export function createInlineHandler(deps: InlineDeps) {
     }
     // A page that only looks like a saved site: one warning row, no fill
     // rows (no logins, passkeys or identity), even on focus.
-    if (!locked && items.length === 0 && (kind === "login" || kind === "otp")) {
+    if (!locked && items.length === 0 && (kind === "login" || kind === "otp" || kind === "bank")) {
       const imitated = await lookalikeOf(frame);
       if (imitated) return register(frame, kind, false, [], [], { hint: null, help: null }, [], null, null, imitated);
     }
+    // A bank box lists the site's bank accounts, then its logins (whose
+    // username may hold the agência or conta); a password box the reverse.
+    // Other login boxes, and codes, are for logins only.
+    const logins = items.filter((m) => m.kind !== "bankAccount");
+    const banks = items.filter((m) => m.kind === "bankAccount");
+    items = kind === "bank" ? [...banks, ...logins] : kind === "login" && passwordBox ? [...logins, ...banks] : logins;
     if (kind === "otp") items = items.filter((m) => m.hasTotp);
     if (kind === "new_password") items = [];
     const passkeys = kind === "login" && !locked ? (deps.passkeys?.conditionalFor(frame) ?? []) : [];
@@ -647,8 +654,9 @@ export function createInlineHandler(deps: InlineDeps) {
       identity = await identityRow(frame, roles).catch(() => null);
       if (identity && identity.fills === 0) identity = null;
     }
-    // Nothing to offer: stay out of the page, unless the user asked for the menu.
-    if (!locked && kind !== "new_password" && items.length === 0 && passkeys.length === 0 && !identity && !explicit) return { ok: false };
+    // Nothing to offer: stay out of the page, unless the user asked for the
+    // menu. A bank box says that nothing is saved for the site.
+    if (!locked && kind !== "new_password" && kind !== "bank" && items.length === 0 && passkeys.length === 0 && !identity && !explicit) return { ok: false };
     const extra =
       kind === "login" && !locked && items.length > 0 && passkeys.length === 0 ? await passkeyHint(frame) : { hint: null, help: null };
     return register(frame, kind, locked, items, passkeys, extra, roles, identity);
@@ -850,7 +858,17 @@ export function createInlineHandler(deps: InlineDeps) {
   async function handleContent(frame: FrameRef, req: ContentRequest): Promise<unknown> {
     switch (req.type) {
       case "cs_open_menu":
-        return openMenu(frame, req.kind, req.explicit === true, req.roles ?? [], req.cardRoles ?? [], req.anchor ?? null, req.ancestry ?? null, req.viewport ?? null);
+        return openMenu(
+          frame,
+          req.kind,
+          req.explicit === true,
+          req.roles ?? [],
+          req.cardRoles ?? [],
+          req.anchor ?? null,
+          req.ancestry ?? null,
+          req.viewport ?? null,
+          req.passwordBox === true,
+        );
       case "cs_close_menu": {
         const m = menus.get(frame.tabId);
         if (!m || m.token !== req.token) return {};
@@ -902,7 +920,7 @@ export function createInlineHandler(deps: InlineDeps) {
           return { ok: true, value: { state: "cards", site, cards: m.card.insecure ? [] : m.card.rows, insecure: m.card.insecure } };
         }
         const site = displayHost(m.frame.url) ?? "";
-        const items = m.items.map((i) => ({ id: i.id, title: i.title, username: i.username, provider: i.provider, tags: i.tags }));
+        const items = m.items.map((i) => ({ id: i.id, title: i.title, username: i.username, provider: i.provider, tags: i.tags, ...(i.bank ? { bank: i.bank } : {}) }));
         return { ok: true, value: { state: "ready", kind: m.kind, site, items, passkeys: m.passkeys, hint: m.hint, identity: m.identity } };
       }
       case "menu_pick_card": {
@@ -931,6 +949,11 @@ export function createInlineHandler(deps: InlineDeps) {
           if (m.kind === "otp") {
             const totp = await deps.client.request({ type: "get_totp", itemId: req.itemId, ...frameFields(m.frame) });
             await pickFill(m.frame, m.token, { kind: "otp", code: totp.code }, totp.autoSubmit ? { itemId: req.itemId, hasTotp: true } : null);
+          } else if (offered.kind === "bankAccount") {
+            // Rust checks the item against the frame and the top page; a bank fill never submits.
+            const c = await deps.client.request({ type: "fill_item", itemId: req.itemId, ...frameFields(m.frame) });
+            if (!c.bank) return { ok: false, message: t.errors.generic };
+            await pickFill(m.frame, m.token, { kind: "bank", values: c.bank, password: c.password }, null);
           } else {
             const c = await deps.client.request({ type: "fill_item", itemId: req.itemId, ...frameFields(m.frame) });
             // A login saved with "Sign in with" and no password: press the

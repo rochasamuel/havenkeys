@@ -154,6 +154,9 @@ export const en = {
   },
 
   menu: {
+    bankEmpty: "No bank account saved for this site — add one in HavenKeys",
+    bankAg: "Ag",
+    bankConta: "Account",
     cardFillOn: "Fill on",
     cardRow: (last4: string | null, expiry: string | null) => [last4 ? `•••• ${last4}` : null, expiry].filter(Boolean).join(" · "),
     cardExpired: "Expired",

@@ -27,10 +27,15 @@
 //   on submit, top frame only. A subframe attaches its ancestry
 //   (content/ancestry.ts) to its card menu request and scan reply, or the
 //   background gives it nothing. Card fills never submit.
+// * Bank boxes (agência, conta) get the bank menu. A bank account fills its
+//   form's bank boxes and password and never submits; a login picked there
+//   puts its username into the box the menu opened on.
 // * Nothing is logged, stored, or written anywhere but field values.
 
+import { classifyBank } from "../autofill/bank";
+import { fillBank } from "../autofill/bank-fill";
 import { isLoginRole, isNewPasswordRole } from "../autofill/classify";
-import { fillLogin, fillNewPassword, fillOtp, markUserEdit, valueSource } from "../autofill/fill";
+import { fillLogin, fillNewPassword, fillOtp, markUserEdit, setValue, valueSource } from "../autofill/fill";
 import { cardFieldsForFill, cardGroupFor, findCardGroup } from "../autofill/card";
 import { cardRolesToFill, fillCard, readCardSubmission } from "../autofill/card-fill";
 import { classifyGroup, defaultEnv, fieldsOf, groupFor, groupRoot, isFillable, isRendered, type Env } from "../autofill/group";
@@ -98,17 +103,23 @@ function inputFrom(e: Event): HTMLInputElement | null {
   return t instanceof HTMLInputElement ? t : null;
 }
 
+/** An agência or conta box (the login and identity classifiers both refuse these). */
+function isBankBox(field: HTMLInputElement, env: Env): boolean {
+  return classifyBank(groupRoot(field), env).some((b) => b.el === field);
+}
+
 /**
  * Which menu a field gets, and the identity roles of its form that could be
  * filled now (none when everything is already filled: nothing to ask for).
  */
-export function menuKindFor(field: HTMLInputElement): { kind: MenuKind; roles?: IdentityRole[]; cardRoles?: CardRole[] } | null {
+export function menuKindFor(field: HTMLInputElement): { kind: MenuKind; passwordBox?: true; roles?: IdentityRole[]; cardRoles?: CardRole[] } | null {
   const env = defaultEnv();
   const card = cardGroupFor(field, env);
   if (card) {
     const cardRoles = cardRolesToFill(card, env);
     return cardRoles.length > 0 ? { kind: "card", cardRoles } : null;
   }
+  if (isBankBox(field, env)) return { kind: "bank" };
   const { group, kind } = groupFor(field, env);
   const loginIntent = group.intent === "login";
   const identity = loginIntent ? null : identityGroupFor(field, env);
@@ -117,7 +128,9 @@ export function menuKindFor(field: HTMLInputElement): { kind: MenuKind; roles?: 
   if (isLoginRole(kind)) {
     const hasPassword = group.fields.some((f) => f.el.type === "password");
     if (hasPassword || loginIntent || !roles) {
-      return group.intent === "signup" && roles ? { kind: "login", roles } : { kind: "login" };
+      // A password box's menu also lists the site's bank accounts.
+      const box = field.type === "password" ? { passwordBox: true as const } : {};
+      return group.intent === "signup" && roles ? { kind: "login", ...box, roles } : { kind: "login", ...box };
     }
     return { kind: "identity", roles };
   }
@@ -218,6 +231,7 @@ function start(): void {
       type: "cs_open_menu",
       kind,
       ...(explicit ? { explicit: true as const } : {}),
+      ...(choice.passwordBox ? { passwordBox: true as const } : {}),
       ...(choice.roles ? { roles: choice.roles } : {}),
       ...(choice.cardRoles ? { cardRoles: choice.cardRoles } : {}),
       ...(ancestry ? { anchor: anchorOf(field), ancestry, viewport: frameViewport() } : {}),
@@ -577,9 +591,23 @@ function start(): void {
       const ig = target ? identityGroupFor(target, env) : findIdentityGroup(document, env);
       return { filled: ig ? fillIdentity(ig, m.fill.values, env) : 0, pressing: null };
     }
+    // A bank account fills the picked field's form (or, for the popup, the
+    // page's first bank form). Never submits.
+    if (m.fill.kind === "bank") {
+      let target: HTMLInputElement | null;
+      if (m.token !== null) {
+        target = takePicked(m.token, env);
+        if (!target) return none;
+      } else {
+        const login = findLoginGroup(document, env);
+        target = classifyBank(document, env)[0]?.el ?? (login ? fieldsOf(login, "current-password", "password")[0] : undefined) ?? null;
+      }
+      return { filled: target ? fillBank(document, target, m.fill.values, m.fill.password, env) : 0, pressing: null };
+    }
     let group;
+    let target: HTMLInputElement | null = null;
     if (m.token !== null) {
-      const target = takePicked(m.token, env);
+      target = takePicked(m.token, env);
       if (!target) return none;
       group = groupFor(target, env).group;
     } else {
@@ -588,7 +616,10 @@ function start(): void {
     if (!group) return none;
     switch (m.fill.kind) {
       case "login": {
-        const filled = fillLogin(group, m.fill, env);
+        // A login picked on a bank box: its username (an agência or conta) goes into that box.
+        const box = target && isBankBox(target, env) ? target : null;
+        const intoBox = box && m.fill.username ? Number(setValue(box, m.fill.username, env)) : 0;
+        const filled = intoBox + fillLogin(group, box ? { username: null, password: m.fill.password } : m.fill, env);
         return filled > 0 && m.submit ? withPress(filled, pressAfterFill(group, "login", m.totp)) : { filled, pressing: null };
       }
       case "otp": {

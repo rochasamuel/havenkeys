@@ -656,3 +656,64 @@ describe("field menu passkey rows", () => {
     expect(rows[1]).toContain("Older passkey · octo");
   });
 });
+
+describe("bank rows", () => {
+  const trusted = { isTrusted: true } as MouseEvent;
+  const BANK = "22222222-3333-4444-8555-666666666666";
+  const bankItem = { id: BANK, title: "Itaú PF", username: null, provider: null, tags: [], bank: { bank: "Itaú", branch: "1234", accountLast3: "45-6" } };
+  const login = { id: ITEM, title: "Itaú login", username: "12345", provider: null, tags: [] };
+  const view = (kind: string, items: object[]) => ({ ok: true, value: { state: "ready", kind, site: "itau.com.br", items, passkeys: [], hint: null, identity: null } });
+
+  async function setup(v: object) {
+    const handlers = captureClicks();
+    replies = [v];
+    await load();
+    (globalThis as unknown as { chrome: { runtime: { sendMessage: unknown } } }).chrome.runtime.sendMessage = async (m: unknown) => {
+      asked.push(m);
+      return { ok: true, value: null };
+    };
+    await vi.advanceTimersByTimeAsync(1000);
+    return handlers;
+  }
+
+  it("shows a bank account with its glyph, title and Ag · Conta line, then the logins; picks by item id", async () => {
+    const handlers = await setup(view("bank", [bankItem, login]));
+    const rows = Array.from(document.querySelectorAll<HTMLButtonElement>("button.row"));
+    expect(rows).toHaveLength(2);
+    expect(rows[0]!.querySelector(".avatar svg")).not.toBeNull();
+    expect(rows[0]!.querySelector(".title")!.textContent).toBe("Itaú PF");
+    expect(rows[0]!.querySelector(".user")!.textContent).toBe("Ag 1234 · Account •••45-6");
+    expect(rows[1]!.querySelector(".user")!.textContent).toBe("12345");
+    handlers.get(rows[0]!)?.(trusted);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(asked.at(-1)).toEqual({ type: "menu_pick", token: TOKEN, itemId: BANK });
+  });
+
+  it("lists bank accounts after the logins in a password box's menu", async () => {
+    await setup(view("login", [login, bankItem]));
+    const users = Array.from(document.querySelectorAll(".row .user")).map((u) => u.textContent);
+    expect(users).toEqual(["12345", "Ag 1234 · Account •••45-6"]);
+  });
+
+  it("says nothing is saved, with nothing to click, when a bank box's menu is empty", async () => {
+    await setup(view("bank", []));
+    expect(document.querySelectorAll("button")).toHaveLength(0);
+    expect(document.getElementById("main")!.textContent).toBe("No bank account saved for this site — add one in HavenKeys");
+  });
+
+  it("renders the bank's title as text, never as markup", async () => {
+    await setup(view("bank", [{ ...bankItem, title: "<img src=x onerror=alert(1)>" }]));
+    expect(document.querySelector("img")).toBeNull();
+    expect(document.querySelector(".row .title")!.textContent).toBe("<img src=x onerror=alert(1)>");
+  });
+});
+
+describe("bankSubtitle", () => {
+  it("joins the parts it has and drops the missing ones", async () => {
+    const { bankSubtitle } = await import("./common");
+    expect(bankSubtitle({ bank: "Itaú", branch: "1234", accountLast3: "45-6" })).toBe("Ag 1234 · Account •••45-6");
+    expect(bankSubtitle({ bank: "Itaú", branch: "1234", accountLast3: null })).toBe("Ag 1234");
+    expect(bankSubtitle({ bank: null, branch: null, accountLast3: "45-6" })).toBe("Account •••45-6");
+    expect(bankSubtitle({ bank: null, branch: null, accountLast3: null })).toBe("");
+  });
+});

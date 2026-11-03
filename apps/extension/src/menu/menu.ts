@@ -6,8 +6,8 @@ import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, SSO_PROVIDERS, type IdentityR
 import { applyDocumentLang, t as msg } from "../i18n";
 import { MENU_MAX_HEIGHT, MENU_MAX_ROWS, MENU_MIN_HEIGHT, type CardRowView, type IdentityRowView, type MenuItemView, type MenuView } from "../messaging/inline";
 import { tagChips } from "../shared/tags";
-import { ask, createClickGuard, h, monogram, receiveToken, userData } from "./common";
-import { alertIcon, cardBrandIcon, idCardIcon, providerIcon, switchesIcon, unlockIcon } from "./icons";
+import { ask, bankSubtitle, createClickGuard, h, monogram, receiveToken, userData } from "./common";
+import { alertIcon, bankIcon, cardBrandIcon, idCardIcon, providerIcon, switchesIcon, unlockIcon } from "./icons";
 
 const main = document.getElementById("main") as HTMLElement;
 const site = document.getElementById("site") as HTMLElement;
@@ -86,19 +86,23 @@ async function pick(req: Parameters<typeof ask>[0]): Promise<void> {
   if (!r.ok) main.replaceChildren(message(msg.menu.couldNotFill, r.message, true));
 }
 
-function itemRow(t: string, item: MenuItemView, kind: "login" | "otp"): HTMLButtonElement {
-  if (kind === "login" && item.provider) {
+function itemRow(t: string, item: MenuItemView, kind: "login" | "otp" | "bank"): HTMLButtonElement {
+  // A bank account: its glyph, and no more of its numbers than the summary.
+  if (item.bank) {
+    return row(bankIcon(), item.title, bankSubtitle(item.bank), () => pick({ type: "menu_pick", token: t, itemId: item.id }), DATA, item.tags);
+  }
+  if (kind !== "otp" && item.provider) {
     const name = SSO_PROVIDERS[item.provider].name;
     return row(providerIcon(item.provider), item.title, msg.menu.ssoRow(name, item.username), () => pick({ type: "menu_pick", token: t, itemId: item.id }), {
       title: false,
       detail: item.username === null,
-    }, kind === "login" ? item.tags : []);
+    }, item.tags);
   }
   // A code row names its account too: logins often share a title.
   const detail =
     item.username === null ? (kind === "otp" ? msg.menu.fillCode : msg.common.noUsername) : kind === "otp" ? msg.menu.codeRow(item.username) : item.username;
   const copy = { title: false, detail: item.username === null };
-  return row(monogram(item.title), item.title, detail, () => pick({ type: "menu_pick", token: t, itemId: item.id }), copy, kind === "login" ? item.tags : []);
+  return row(monogram(item.title), item.title, detail, () => pick({ type: "menu_pick", token: t, itemId: item.id }), copy, kind === "otp" ? [] : item.tags);
 }
 
 function documentList(roles: readonly IdentityRole[]): string {
@@ -328,11 +332,11 @@ function lockedMessage(t: string): HTMLElement {
 }
 
 /** A row that only informs: no button, not in the arrow-key order. */
-function hintNote(title: string, detail: string): HTMLElement {
+function hintNote(title: string, detail?: string): HTMLElement {
   return h(
     "div",
     { className: "row hint" },
-    h("span", { className: "who" }, line("title", title, true), line("user", detail, true)),
+    h("span", { className: "who" }, line("title", title, true), ...(detail === undefined ? [] : [line("user", detail, true)])),
   );
 }
 
@@ -434,6 +438,7 @@ function render(t: string, view: MenuView): void {
   const rows = [...lead, ...passkeyRows, ...view.items.map((i) => itemRow(t, i, kind)), ...identity, ...tail];
   // Opened from the field's icon with nothing saved for this site.
   if (rows.length === 0) {
+    if (kind === "bank") return void main.replaceChildren(hintNote(msg.menu.bankEmpty));
     main.replaceChildren(
       kind === "otp"
         ? message(msg.menu.noCodesTitle, msg.menu.noCodesBody)

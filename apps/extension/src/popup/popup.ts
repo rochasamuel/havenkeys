@@ -9,7 +9,8 @@ import { SSO_PROVIDERS, type IdentityRole, type Match, type SsoProvider } from "
 import type { CardsView, IdentityFillReply, PopupReply, PopupRequest, PopupState, TotpView } from "../messaging/popup";
 import { INLINE_ORIGINS, grantedOrigins } from "../background/registration";
 import { applyDocumentLang, t } from "../i18n";
-import { alertIcon, cardBrandIcon, idCardIcon, providerIcon } from "../menu/icons";
+import { bankSubtitle } from "../menu/common";
+import { alertIcon, bankIcon, cardBrandIcon, idCardIcon, providerIcon } from "../menu/icons";
 import type { CardRowView } from "../messaging/inline";
 import { displayHost } from "../shared/url";
 import { tagChips } from "../shared/tags";
@@ -78,13 +79,13 @@ const SVG = "http://www.w3.org/2000/svg";
 const EYE = "M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12zM12 9.25a2.75 2.75 0 1 0 0 5.5 2.75 2.75 0 0 0 0-5.5z";
 
 /**
- * The row's initial (or, for a "sign in with" login, its provider mark),
- * which turns into an eye on hover or keyboard focus: clicking it shows
- * the login in the desktop app. The icon is built with createElementNS,
- * never parsed from markup.
+ * The row's initial (or, for a "sign in with" login, its provider mark; for
+ * a bank account, the bank glyph), which turns into an eye on hover or
+ * keyboard focus: clicking it shows the item in the desktop app. The icon
+ * is built with createElementNS, never parsed from markup.
  */
-function openAvatar(initial: string, label: string, provider: SsoProvider | null): HTMLButtonElement {
-  const mark = provider ? providerIcon(provider, 16) : h("span", { className: "avatar-initial", text: initial });
+function openAvatar(initial: string, label: string, provider: SsoProvider | null, bank: boolean): HTMLButtonElement {
+  const mark = bank ? bankIcon(16) : provider ? providerIcon(provider, 16) : h("span", { className: "avatar-initial", text: initial });
   const b = h("button", { className: "avatar" }, mark);
   b.type = "button";
   b.title = label;
@@ -118,6 +119,8 @@ async function fillFromPopup(btn: HTMLButtonElement, req: PopupRequest, status: 
  * it's user data (truncates).
  */
 function userLine(m: Match): HTMLElement {
+  // A bank account: no more of its numbers than the summary.
+  if (m.bank) return truncates(h("div", { className: "user", text: bankSubtitle(m.bank) }));
   const text = m.provider ? t.menu.ssoRow(SSO_PROVIDERS[m.provider].name, m.username) : (m.username ?? t.common.noUsername);
   return m.username !== null ? truncates(h("div", { className: "user", text })) : h("div", { className: "user copy", text });
 }
@@ -203,7 +206,7 @@ function rowBase(m: Match, status: HTMLElement): HTMLElement {
   const initial = (m.title.trim()[0] ?? "?").toUpperCase();
   // The initial (or provider mark) opens this login in the desktop app.
   // Closes the popup on success, like a fill, since focus moves to the app.
-  const open = openAvatar(initial, t.popup.open, m.provider);
+  const open = openAvatar(initial, t.popup.open, m.provider, !!m.bank);
   open.addEventListener("click", () => void fillFromPopup(open, { type: "popup_open_item", itemId: m.id }, status));
   return h(
     "li",

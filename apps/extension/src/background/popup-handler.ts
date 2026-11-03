@@ -1,7 +1,7 @@
 // Answers popup requests using the native client. Kept free of `chrome.*`
 // so it can be tested with a fake client.
 
-import { DOCUMENT_ROLES, type IdentityRole } from "@havenkeys/protocol";
+import { DOCUMENT_ROLES, type IdentityRole, type Match } from "@havenkeys/protocol";
 import type { FillPayload } from "../messaging/inline";
 import type { CardsView, IdentityFillReply, PopupReply, PopupRequest, PopupState, TotpView } from "../messaging/popup";
 import { BridgeError, type NativeClient } from "../messaging/native";
@@ -66,6 +66,9 @@ function stateForError(e: unknown): PopupState {
   }
 }
 
+/** The site's logins first, then its bank accounts (spec 2026-11-03-bank-account §5.3). */
+const loginsFirst = (ms: Match[]): Match[] => [...ms.filter((m) => m.kind !== "bankAccount"), ...ms.filter((m) => m.kind === "bankAccount")];
+
 function fail(e: unknown): { ok: false; message: string } {
   return { ok: false, message: e instanceof BridgeError ? e.message : t.errors.generic };
 }
@@ -105,6 +108,11 @@ export function createPopupHandler(
         if (entitlement === "frozen") return frozen;
         const m = matches.find((x) => x.id === itemId);
         const c = await client.request({ type: "fill_item", itemId, url });
+        // A bank account fills the page's bank form and password; it never submits.
+        if (c.bank) {
+          filled = await fillTab(tab.id, url, { kind: "bank", values: c.bank, password: c.password }, null);
+          return filled > 0 ? { ok: true, value: null } : { ok: false, message: t.errors.noLoginForm };
+        }
         // A saved password is filled even when the login also signs in with
         // a provider; only a login without one presses the provider's button.
         if (c.password === null && m?.provider && startSso) return startSso(tab.id, url, itemId);
@@ -127,7 +135,7 @@ export function createPopupHandler(
         // Read-only: the site's logins (metadata) for their codes; no identity lookup.
         if (!url) return { kind: "frozen", site: null, matches: [] };
         const found = await client.request({ type: "find_matches", url });
-        return { kind: "frozen", site: displayHost(url), matches: found.matches };
+        return { kind: "frozen", site: displayHost(url), matches: loginsFirst(found.matches) };
       }
       if (!url) return { kind: "unlocked", site: null, matches: [], identity: null, lookalikeOf: null };
       // Both at once: the popup waits for the slower of the two, not their sum.
@@ -146,7 +154,7 @@ export function createPopupHandler(
               .then((r) => r.lookalikeOf)
               .catch(() => null)
           : null;
-      return { kind: "unlocked", site: displayHost(url), matches: found.matches, identity, lookalikeOf };
+      return { kind: "unlocked", site: displayHost(url), matches: loginsFirst(found.matches), identity, lookalikeOf };
     } catch (e) {
       return stateForError(e);
     }

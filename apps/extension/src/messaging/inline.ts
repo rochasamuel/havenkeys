@@ -23,6 +23,8 @@ import {
   MAX_IDENTITY_ROLES,
   MAX_IDENTITY_VALUE_BYTES,
   MAX_URL_BYTES,
+  type BankSummary,
+  type BankValues,
   type CardBrandId,
   type CardRole,
   type CardValue,
@@ -33,7 +35,7 @@ import {
 } from "@havenkeys/protocol";
 import type { PasskeyRow } from "../webauthn/messages";
 
-export type MenuKind = "login" | "otp" | "new_password" | "identity" | "card";
+export type MenuKind = "login" | "otp" | "new_password" | "identity" | "card" | "bank";
 
 /** A field's box in its own frame's viewport (card menus a processor frame asks the top frame to host). */
 export interface Anchor {
@@ -84,8 +86,22 @@ const RUN_STEPS: readonly RunStep[] = ["username", "password", "otp"];
 // ---------------------------------------------------------------- content → background
 
 export type ContentRequest =
-  /** `explicit`: the user clicked the field's HavenKeys icon, so answer even with no matches. */
-  | { type: "cs_open_menu"; kind: MenuKind; explicit?: true; roles?: IdentityRole[]; cardRoles?: CardRole[]; anchor?: Anchor; ancestry?: Ancestry; viewport?: Viewport }
+  /**
+   * `explicit`: the user clicked the field's HavenKeys icon, so answer even
+   * with no matches. `passwordBox`: a login menu on a password box, which
+   * also lists the site's bank accounts.
+   */
+  | {
+      type: "cs_open_menu";
+      kind: MenuKind;
+      explicit?: true;
+      passwordBox?: true;
+      roles?: IdentityRole[];
+      cardRoles?: CardRole[];
+      anchor?: Anchor;
+      ancestry?: Ancestry;
+      viewport?: Viewport;
+    }
   | { type: "cs_close_menu"; token: string }
   | { type: "cs_submit"; username: string | null; password: string | null; currentPassword?: string }
   | { type: "cs_ready" }
@@ -108,7 +124,9 @@ export type FillPayload =
   | { kind: "otp"; code: string }
   | { kind: "generated"; password: string }
   | { kind: "identity"; values: IdentityValue[] }
-  | { kind: "card"; values: CardValue[] };
+  | { kind: "card"; values: CardValue[] }
+  /** A bank account: its numbers apart, and its password. Never submits. */
+  | { kind: "bank"; values: BankValues; password: string | null };
 
 export type BackgroundToContent =
   /**
@@ -182,6 +200,8 @@ export interface MenuItemView {
   provider: SsoProvider | null;
   /** The login's tags (vault data; rendered as text only). */
   tags: string[];
+  /** Set for a bank account: what the row may show of it (no full number). */
+  bank?: BankSummary;
 }
 
 /**
@@ -299,7 +319,7 @@ function keysAre(o: Obj, keys: readonly string[]): boolean {
 }
 
 const isToken = (v: unknown): v is string => typeof v === "string" && TOKEN.test(v);
-const MENU_KINDS: readonly MenuKind[] = ["login", "otp", "new_password", "identity", "card"];
+const MENU_KINDS: readonly MenuKind[] = ["login", "otp", "new_password", "identity", "card", "bank"];
 
 function boundedOrNull(v: unknown, max: number): v is string | null {
   return v === null || (typeof v === "string" && v.length > 0 && v.length <= max);
@@ -396,8 +416,10 @@ export function parseContentRequest(msg: unknown): ContentRequest | null {
       if (!MENU_KINDS.includes(o.kind as MenuKind)) return null;
       const kind = o.kind as MenuKind;
       const keys = Object.keys(o).filter((k) => k !== "type" && k !== "kind");
-      if (keys.some((k) => k !== "explicit" && k !== "roles" && k !== "cardRoles" && k !== "anchor" && k !== "ancestry" && k !== "viewport")) return null;
+      const allowed = ["explicit", "passwordBox", "roles", "cardRoles", "anchor", "ancestry", "viewport"];
+      if (keys.some((k) => !allowed.includes(k))) return null;
       if ("explicit" in o && o.explicit !== true) return null;
+      if ("passwordBox" in o && (o.passwordBox !== true || kind !== "login")) return null;
       let roles: IdentityRole[] | undefined;
       if ("roles" in o) {
         if (kind !== "identity" && kind !== "login") return null;
@@ -433,6 +455,7 @@ export function parseContentRequest(msg: unknown): ContentRequest | null {
         type: "cs_open_menu",
         kind,
         ...(o.explicit === true ? { explicit: true as const } : {}),
+        ...(o.passwordBox === true ? { passwordBox: true as const } : {}),
         ...(roles ? { roles } : {}),
         ...(cardRoles ? { cardRoles } : {}),
         ...(anchor ? { anchor } : {}),
@@ -535,6 +558,18 @@ export function parseInlineRequest(msg: unknown): InlineRequest | null {
   }
 }
 
+/** The core's bank limits (bank.rs): branch 1-8 digits, account 1-20, check digits of 0-9 and X. */
+function parseBankValues(v: unknown): BankValues | null {
+  const o = obj(v);
+  if (!o || !keysAre(o, ["branch", "branchDigit", "account", "accountDigit"])) return null;
+  const { branch, branchDigit, account, accountDigit } = o;
+  const is = (x: unknown, re: RegExp): x is string => typeof x === "string" && re.test(x);
+  if (!is(branch, /^[0-9]{1,8}$/) || !is(account, /^[0-9]{1,20}$/)) return null;
+  if (branchDigit !== null && !is(branchDigit, /^[0-9X]$/)) return null;
+  if (accountDigit !== null && !is(accountDigit, /^[0-9X]{1,2}$/)) return null;
+  return { branch, branchDigit, account, accountDigit };
+}
+
 function parseFill(v: unknown): FillPayload | null {
   const o = obj(v);
   if (!o) return null;
@@ -575,6 +610,11 @@ function parseFill(v: unknown): FillPayload | null {
       }
       return { kind: "card", values };
     }
+    case "bank": {
+      if (!keysAre(o, ["kind", "values", "password"]) || !boundedOrNull(o.password, MAX_PASSWORD_CHARS)) return null;
+      const values = parseBankValues(o.values);
+      return values && { kind: "bank", values, password: o.password };
+    }
     default:
       return null;
   }
@@ -590,7 +630,7 @@ export function parseBackgroundMessage(msg: unknown): BackgroundToContent | null
       if (o.token !== null && !isToken(o.token)) return null;
       if (typeof o.submit !== "boolean" || typeof o.totp !== "boolean") return null;
       const fill = parseFill(o.fill);
-      if ((fill?.kind === "identity" || fill?.kind === "card") && (o.submit || o.totp)) return null;
+      if ((fill?.kind === "identity" || fill?.kind === "card" || fill?.kind === "bank") && (o.submit || o.totp)) return null;
       return fill && { type: "bg_fill", origin: o.origin, token: o.token, fill, submit: o.submit, totp: o.totp };
     }
     case "bg_resize_menu":

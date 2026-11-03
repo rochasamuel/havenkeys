@@ -279,7 +279,8 @@ main {
   height: 17px;
 }
 
-.provider-icon {
+.provider-icon,
+.bank-icon {
   flex: none;
 }
 
@@ -291,8 +292,10 @@ main {
 
 .avatar:hover .avatar-initial,
 .avatar:hover .provider-icon,
+.avatar:hover .bank-icon,
 .avatar:focus-visible .avatar-initial,
-.avatar:focus-visible .provider-icon {
+.avatar:focus-visible .provider-icon,
+.avatar:focus-visible .bank-icon {
   display: none;
 }
 

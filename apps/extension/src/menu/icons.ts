@@ -133,3 +133,23 @@ export function unlockIcon(size = 17): SVGSVGElement {
   svg.append(path);
   return svg;
 }
+
+/** A bank account's glyph: a generic bank building in the 1.6-stroke icon set. */
+export function bankIcon(size = 16): SVGSVGElement {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", String(size));
+  svg.setAttribute("height", String(size));
+  svg.setAttribute("aria-hidden", "true");
+  svg.classList.add("bank-icon");
+  const path = document.createElementNS(ns, "path");
+  path.setAttribute("d", "M3.5 9.5 12 4.5l8.5 5zM6.5 9.5v7.5M10 9.5v7.5M14 9.5v7.5M17.5 9.5v7.5M4.5 17h15M3.5 20h17");
+  path.setAttribute("fill", "none");
+  path.setAttribute("stroke", "currentColor");
+  path.setAttribute("stroke-width", "1.6");
+  path.setAttribute("stroke-linecap", "round");
+  path.setAttribute("stroke-linejoin", "round");
+  svg.append(path);
+  return svg;
+}

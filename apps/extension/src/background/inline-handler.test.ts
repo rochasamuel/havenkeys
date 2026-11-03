@@ -1434,3 +1434,117 @@ describe("identity menu", () => {
     expect(open).toEqual({ ok: false });
   });
 });
+
+describe("bank menus", () => {
+  const BANK = "22222222-3333-4444-8555-666666666666";
+  const OLD = "33333333-4444-4555-8666-777777777777";
+  const bankMatch = {
+    id: BANK, title: "Itaú PF", username: null, hasTotp: false, strength: "same_host" as const, provider: null, tags: [],
+    kind: "bankAccount" as const, bank: { bank: "Itaú", branch: "1234", accountLast3: "45-6" },
+  };
+  const loginMatch = { id: OLD, title: "Itaú login", username: "12345", hasTotp: false, strength: "same_host" as const, provider: null, tags: [], kind: "login" as const, bank: null };
+  const values = { branch: "1234", branchDigit: null, account: "12345", accountDigit: "6" };
+  const bankFrame = (over: Partial<FrameRef> = {}) => frame({ url: "https://www.itau.com.br/login", origin: "https://www.itau.com.br", ...over });
+
+  function answer(matches: unknown[]) {
+    return (r: Request): unknown => {
+      switch (r.type) {
+        case "find_matches":
+          return { type: "find_matches", matches, entitlement: "full" };
+        case "fill_item":
+          return r.itemId === BANK
+            ? { type: "fill_item", username: null, password: "bank-pw", bank: values, autoSubmit: false }
+            : { type: "fill_item", username: "12345", password: "login-pw", bank: null, autoSubmit: false };
+        case "check_lookalike":
+          return { type: "check_lookalike", lookalikeOf: null };
+        case "passkey_status":
+          return { type: "passkey_status", hasPasskey: false };
+        default:
+          return defaultAnswer(r);
+      }
+    };
+  }
+  const ids = async (h: ReturnType<typeof setup>["h"]) => {
+    const v = await h.handleInline(1, { type: "menu_state", token: T1 });
+    return (v as { value: { items: Array<{ id: string }> } }).value.items.map((i) => i.id);
+  };
+
+  it("lists the site's bank accounts first, then its logins, with the summary and no values", async () => {
+    const { h } = setup(answer([loginMatch, bankMatch]));
+    expect(await h.handleContent(bankFrame(), { type: "cs_open_menu", kind: "bank" })).toEqual({ ok: true, token: T1, rows: 2 });
+    const v = await h.handleInline(1, { type: "menu_state", token: T1 });
+    expect(v).toMatchObject({ ok: true, value: { state: "ready", kind: "bank", passkeys: [], hint: null, identity: null } });
+    expect(await ids(h)).toEqual([BANK, OLD]);
+    expect((v as { value: { items: unknown[] } }).value.items[0]).toEqual({ id: BANK, title: "Itaú PF", username: null, provider: null, tags: [], bank: bankMatch.bank });
+    expect(JSON.stringify(v)).not.toContain("12345-6");
+  });
+
+  it("an old bank login alone is listed, and its pick fills its username into the box like the login menu", async () => {
+    const { h, requests, sent } = setup(answer([loginMatch]));
+    await h.handleContent(bankFrame(), { type: "cs_open_menu", kind: "bank" });
+    expect(await ids(h)).toEqual([OLD]);
+    expect(await h.handleInline(1, { type: "menu_pick", token: T1, itemId: OLD })).toEqual({ ok: true, value: null });
+    expect(requests.at(-1)).toEqual({ type: "fill_item", itemId: OLD, url: "https://www.itau.com.br/login" });
+    expect(sent.at(-1)?.msg).toEqual({
+      type: "bg_fill", origin: "https://www.itau.com.br", token: T1, fill: { kind: "login", username: "12345", password: "login-pw" }, submit: false, totp: false,
+    });
+  });
+
+  it("with nothing saved it still opens, on the empty bank row; locked gives the unlock row", async () => {
+    const { h } = setup(answer([]));
+    expect(await h.handleContent(bankFrame(), { type: "cs_open_menu", kind: "bank" })).toEqual({ ok: true, token: T1, rows: 1 });
+    expect(await h.handleInline(1, { type: "menu_state", token: T1 })).toMatchObject({ ok: true, value: { state: "ready", kind: "bank", items: [] } });
+
+    const { h: locked } = setup(() => {
+      throw new BridgeError("locked", "x");
+    });
+    expect(await locked.handleContent(bankFrame(), { type: "cs_open_menu", kind: "bank" })).toEqual({ ok: true, token: T1, rows: 1 });
+    expect(await locked.handleInline(1, { type: "menu_state", token: T1 })).toEqual({ ok: true, value: { state: "locked" } });
+  });
+
+  it("a frozen account or a missing desktop opens nothing", async () => {
+    const frozen = (r: Request) => (r.type === "find_matches" ? { type: "find_matches", matches: [bankMatch], entitlement: "frozen" } : defaultAnswer(r));
+    expect(await setup(frozen).h.handleContent(bankFrame(), { type: "cs_open_menu", kind: "bank" })).toEqual({ ok: false });
+    const gone = () => {
+      throw new BridgeError("desktop_unavailable", "x");
+    };
+    expect(await setup(gone).h.handleContent(bankFrame(), { type: "cs_open_menu", kind: "bank" })).toEqual({ ok: false });
+  });
+
+  it("a password box lists logins, then bank accounts; any other login box lists logins only", async () => {
+    const a = setup(answer([bankMatch, loginMatch]));
+    await a.h.handleContent(bankFrame(), { type: "cs_open_menu", kind: "login", passwordBox: true });
+    expect(await ids(a.h)).toEqual([OLD, BANK]);
+    const b = setup(answer([bankMatch, loginMatch]));
+    await b.h.handleContent(bankFrame(), { type: "cs_open_menu", kind: "login" });
+    expect(await ids(b.h)).toEqual([OLD]);
+    const c = setup(answer([bankMatch]));
+    expect(await c.h.handleContent(bankFrame(), { type: "cs_open_menu", kind: "otp" })).toEqual({ ok: false });
+  });
+
+  it("picking a bank account asks fill_item with the page and top URL and sends the bank values and password, never submitting", async () => {
+    const { h, requests, sent } = setup(answer([bankMatch]));
+    const f = bankFrame({ frameId: 4, topUrl: "https://www.itau.com.br/" });
+    await h.handleContent(f, { type: "cs_open_menu", kind: "bank" });
+    expect(await h.handleInline(1, { type: "menu_pick", token: T1, itemId: BANK })).toEqual({ ok: true, value: null });
+    expect(requests.at(-1)).toEqual({ type: "fill_item", itemId: BANK, url: "https://www.itau.com.br/login", topUrl: "https://www.itau.com.br/" });
+    expect(sent.at(-1)).toEqual({
+      to: { tabId: 1, frameId: 4 },
+      msg: { type: "bg_fill", origin: "https://www.itau.com.br", token: T1, fill: { kind: "bank", values, password: "bank-pw" }, submit: false, totp: false },
+    });
+    // The same from a password box's login menu.
+    const p = setup(answer([bankMatch]));
+    await p.h.handleContent(bankFrame(), { type: "cs_open_menu", kind: "login", passwordBox: true });
+    await p.h.handleInline(1, { type: "menu_pick", token: T1, itemId: BANK });
+    expect(p.sent.at(-1)?.msg).toMatchObject({ type: "bg_fill", fill: { kind: "bank", values, password: "bank-pw" }, submit: false });
+  });
+
+  it("a bank pick whose reply carries no bank values fills nothing", async () => {
+    const noValues = (r: Request) =>
+      r.type === "fill_item" ? { type: "fill_item", username: null, password: "pw", bank: null, autoSubmit: false } : answer([bankMatch])(r);
+    const { h, sent } = setup(noValues);
+    await h.handleContent(bankFrame(), { type: "cs_open_menu", kind: "bank" });
+    expect((await h.handleInline(1, { type: "menu_pick", token: T1, itemId: BANK })).ok).toBe(false);
+    expect(sent.some((s) => s.msg.type === "bg_fill")).toBe(false);
+  });
+});

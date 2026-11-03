@@ -552,3 +552,64 @@ describe("popup look-alike warning", () => {
     expect(client.seen.some((x) => x.type === "check_lookalike")).toBe(false);
   });
 });
+
+describe("popup bank accounts", () => {
+  const BANK = "22222222-3333-4444-8555-666666666666";
+  const bankMatch = {
+    id: BANK, title: "Itaú PF", username: null, hasTotp: false, strength: "same_host" as const, provider: null, tags: [],
+    kind: "bankAccount" as const, bank: { bank: "Itaú", branch: "1234", accountLast3: "45-6" },
+  };
+  const login = { id: ID, title: "Itaú login", username: "12345", hasTotp: false, strength: "same_host" as const, provider: null, tags: [], kind: "login" as const, bank: null };
+  const values = { branch: "1234", branchDigit: null, account: "12345", accountDigit: "6" };
+  const tab = async () => ({ id: 3, url: "https://www.itau.com.br/login" });
+  const client = (entitlement: "full" | "frozen") =>
+    fakeClient((r) => {
+      switch (r.type) {
+        case "status":
+          return { type: "status", state: "unlocked", vaultExists: true, entitlement };
+        case "find_matches":
+          return { type: "find_matches", matches: [bankMatch, login], entitlement };
+        case "find_identity":
+          throw new BridgeError("not_found", "x");
+        case "fill_item":
+          return { type: "fill_item", username: null, password: "bank-pw", bank: values, autoSubmit: false };
+        default:
+          throw new Error(`unexpected ${r.type}`);
+      }
+    });
+
+  it("lists the site's bank accounts after its logins, live or frozen", async () => {
+    const ids = async (e: "full" | "frozen") => {
+      const r = await createPopupHandler(client(e), tab).handle({ type: "popup_state" });
+      return (r as { value: { kind: string; matches: Array<{ id: string }> } }).value;
+    };
+    expect(await ids("full")).toMatchObject({ kind: "unlocked" });
+    expect((await ids("full")).matches.map((m) => m.id)).toEqual([ID, BANK]);
+    expect(await ids("frozen")).toMatchObject({ kind: "frozen" });
+    expect((await ids("frozen")).matches.map((m) => m.id)).toEqual([ID, BANK]);
+  });
+
+  it("fills a bank account's values and password into the tab, never with a run", async () => {
+    const c = client("full");
+    const fills: unknown[] = [];
+    const h = createPopupHandler(c, tab, async (...a) => {
+      fills.push(a);
+      return 3;
+    });
+    expect(await h.handle({ type: "popup_fill", itemId: BANK })).toEqual({ ok: true, value: null });
+    expect(c.seen.at(-1)).toEqual({ type: "fill_item", itemId: BANK, url: "https://www.itau.com.br/login" });
+    expect(fills).toEqual([[3, "https://www.itau.com.br/login", { kind: "bank", values, password: "bank-pw" }, null]]);
+  });
+
+  it("frozen: a bank account is never filled, and no secret is asked for", async () => {
+    const c = client("frozen");
+    const fills: unknown[] = [];
+    const h = createPopupHandler(c, tab, async (...a) => {
+      fills.push(a);
+      return 3;
+    });
+    expect(await h.handle({ type: "popup_fill", itemId: BANK })).toEqual({ ok: false, message: en.errors.bridge.frozen });
+    expect(c.seen.map((x) => x.type)).toEqual(["find_matches"]);
+    expect(fills).toEqual([]);
+  });
+});

@@ -120,6 +120,9 @@ export const ptBR: Messages = {
   },
 
   menu: {
+    bankEmpty: "Nenhuma conta bancária salva para este site — adicione no HavenKeys",
+    bankAg: "Ag",
+    bankConta: "Conta",
     cardFillOn: "Preencher em",
     cardRow: (last4: string | null, expiry: string | null) => [last4 ? `•••• ${last4}` : null, expiry].filter(Boolean).join(" · "),
     cardExpired: "Vencido",

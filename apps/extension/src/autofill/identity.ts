@@ -6,6 +6,7 @@
 // Bounded like login groups: at most MAX_GROUP_INPUTS elements per group.
 
 import { DOCUMENT_ROLES, MAX_IDENTITY_ROLES, type IdentityRole } from "@havenkeys/protocol";
+import { bankRoles } from "./bank";
 import { cardKindOf } from "./card-kind";
 import { groupRoot, MAX_CLIMB, MAX_FORM_INPUTS, MAX_GROUP_INPUTS, type Env } from "./group";
 import { labelText } from "./labels";
@@ -211,8 +212,11 @@ function classify(root: ParentNode, env: Env): IdentityField[] {
     .slice(0, MAX_GROUP_INPUTS * 4)
     .filter((el) => isIdentityFillable(el, env))
     .slice(0, MAX_GROUP_INPUTS);
+  // Agência and conta boxes are a bank account's, never the identity's (a tel agência is no phone).
+  const bank = bankRoles(els.filter((el): el is HTMLInputElement => el instanceof HTMLInputElement));
   const out: IdentityField[] = [];
   for (const el of els) {
+    if (el instanceof HTMLInputElement && bank.has(el)) continue;
     const r = identityRoleOf(el);
     if (r) out.push({ el, ...r });
   }

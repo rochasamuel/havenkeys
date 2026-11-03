@@ -1,6 +1,7 @@
 // Helpers shared by the in-page menu, save prompt and passkey card (extension pages
 // embedded in web pages).
 
+import type { BankSummary } from "@havenkeys/protocol";
 import type { InlineReply, InlineRequest } from "../messaging/inline";
 import { TOKEN, TOKEN_MESSAGE } from "../messaging/inline";
 import type { SsoFrameRequest } from "../messaging/sso";
@@ -109,4 +110,9 @@ export function userData<T extends HTMLElement>(el: T): T {
 
 export function monogram(title: string): string {
   return (title.trim()[0] ?? "?").toUpperCase();
+}
+
+/** A bank account's row line, from the parts it has: `Ag 1234 · Conta •••45-6`. */
+export function bankSubtitle(b: BankSummary): string {
+  return [b.branch && `${t.menu.bankAg} ${b.branch}`, b.accountLast3 && `${t.menu.bankConta} •••${b.accountLast3}`].filter(Boolean).join(" · ");
 }

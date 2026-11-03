@@ -913,3 +913,82 @@ describe("card fields", () => {
     expect(sent.some((m) => (m as { type: string }).type === "cs_card_submit")).toBe(false);
   });
 });
+
+describe("bank boxes", () => {
+  const set = (html: string) => (document.body.innerHTML = html);
+  const byId = (id: string) => document.getElementById(id) as HTMLInputElement;
+  const kindFor = async (el: HTMLInputElement) => (await import("./index")).menuKindFor(el);
+  const BANK_FORM = `<form><label for="ag">Agência</label><input id="ag" type="text" inputmode="numeric" maxlength="4">
+    <label for="ct">Conta</label><input id="ct" type="text" inputmode="numeric" maxlength="7">
+    <label for="pw">Senha</label><input id="pw" type="password"><button type="submit">Entrar</button></form>`;
+  const values = { branch: "1234", branchDigit: null, account: "12345", accountDigit: "6" };
+  const bankFill = (token: string | null, password: string | null = "bank-pw") => ({
+    type: "bg_fill", origin: location.origin, token, fill: { kind: "bank", values, password }, submit: false, totp: false,
+  });
+  let seq = 0;
+
+  /** Opens the menu on `el` as a trusted click does, then closes it as a pick does. */
+  async function pick(el: HTMLInputElement, kind: string): Promise<string> {
+    const token = (++seq).toString(16).padStart(32, "b");
+    openReply = { ok: true, token, rows: 1 };
+    el.focus();
+    for (const l of windowListeners.get("pointerdown") ?? []) l({ isTrusted: true, composedPath: () => [el] } as unknown as Event);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(sent).toContainEqual(expect.objectContaining({ type: "cs_open_menu", kind }));
+    deliver({ type: "bg_close_menu", token });
+    openReply = undefined;
+    return token;
+  }
+
+  it("an agência or conta box gets the bank menu; the password box the login menu, as a password box", async () => {
+    set(BANK_FORM);
+    expect(await kindFor(byId("ag"))).toEqual({ kind: "bank" });
+    expect(await kindFor(byId("ct"))).toEqual({ kind: "bank" });
+    expect(await kindFor(byId("pw"))).toEqual({ kind: "login", passwordBox: true });
+  });
+
+  it("a tel agência box beside a conta box is the bank's, never the identity's phone", async () => {
+    set(`<form><input id="nome" name="nome" aria-label="Nome completo">
+      <input id="ag" type="tel" aria-label="Agência"><input id="ct" type="tel" aria-label="Conta"></form>`);
+    expect(await kindFor(byId("ag"))).toEqual({ kind: "bank" });
+    const { identityGroupFor } = await import("../autofill/identity");
+    const { defaultEnv } = await import("../autofill/group");
+    expect(identityGroupFor(byId("ag"), defaultEnv())).toBeNull();
+    expect(identityGroupFor(byId("nome"), defaultEnv())?.fields.map((f) => f.el.id) ?? []).not.toContain("ag");
+  });
+
+  it("fills the picked bank form's boxes and password, and nothing for another token", async () => {
+    set(BANK_FORM);
+    const token = await pick(byId("ag"), "bank");
+    expect(deliver(bankFill("f".repeat(32)))).toEqual({ filled: 0, pressing: null });
+    expect(byId("ag").value).toBe("");
+    const t2 = await pick(byId("ct"), "bank");
+    expect(token).not.toBe(t2);
+    expect(deliver(bankFill(t2))).toEqual({ filled: 3, pressing: null });
+    expect([byId("ag").value, byId("ct").value, byId("pw").value]).toEqual(["1234", "12345-6", "bank-pw"]);
+    expect(document.documentElement.outerHTML).not.toContain("bank-pw");
+  });
+
+  it("a bank account picked on the password box fills that form's bank boxes too", async () => {
+    set(BANK_FORM);
+    const token = await pick(byId("pw"), "login");
+    expect(deliver(bankFill(token))).toEqual({ filled: 3, pressing: null });
+    expect(byId("ag").value).toBe("1234");
+  });
+
+  it("a login picked on a bank box fills its username into that box and its password into the form", async () => {
+    set(BANK_FORM);
+    const token = await pick(byId("ct"), "bank");
+    const reply = deliver({ ...loginFill(location.origin), token, fill: { kind: "login", username: "12345", password: "login-pw" } });
+    expect(reply).toEqual({ filled: 2, pressing: null });
+    expect([byId("ag").value, byId("ct").value, byId("pw").value]).toEqual(["", "12345", "login-pw"]);
+  });
+
+  it("a popup bank fill goes to the page's first bank form, on the matched origin only", () => {
+    set(BANK_FORM);
+    expect(deliver({ ...bankFill(null), origin: "https://evil.example" })).toEqual({ filled: 0, pressing: null });
+    expect(byId("ag").value).toBe("");
+    expect(deliver(bankFill(null))).toEqual({ filled: 3, pressing: null });
+    expect(byId("ct").value).toBe("12345-6");
+  });
+});

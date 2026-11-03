@@ -259,3 +259,34 @@ describe("popup look-alike warning", () => {
     expect(document.body.textContent).toContain(en.popup.noMatches.title);
   });
 });
+
+describe("popup bank accounts", () => {
+  const bank = {
+    id: "22222222-3333-4444-8555-666666666666", title: "Itaú PF", username: null, hasTotp: false, strength: "same_host", provider: null, tags: [],
+    kind: "bankAccount", bank: { bank: "Itaú", branch: "1234", accountLast3: "45-6" },
+  };
+  const login = { id: "11111111-1111-4111-8111-111111111111", title: "Itaú login", username: "12345", hasTotp: false, strength: "same_host", provider: null, tags: [], kind: "login", bank: null };
+
+  it("shows a bank account's Ag · Conta line and fills it on Fill", async () => {
+    replies = {
+      popup_state: async () => ({ ok: true, value: { kind: "unlocked", site: "itau.com.br", matches: [login, bank], identity: null, lookalikeOf: null } }),
+      popup_fill: async () => ({ ok: true, value: null }),
+    };
+    vi.resetModules();
+    await import("./popup");
+    await vi.waitFor(() => expect(document.querySelectorAll(".item")).toHaveLength(2));
+    const row = document.querySelectorAll(".item")[1]!;
+    expect(row.querySelector(".user")!.textContent).toBe("Ag 1234 · Account •••45-6");
+    row.querySelector<HTMLButtonElement>(".actions .btn")!.click();
+    await vi.waitFor(() => expect(asked).toContainEqual({ type: "popup_fill", itemId: bank.id }));
+  });
+
+  it("frozen: the bank account is listed without Fill", async () => {
+    replies = { popup_state: async () => ({ ok: true, value: { kind: "frozen", site: "itau.com.br", matches: [login, bank] } }) };
+    vi.resetModules();
+    await import("./popup");
+    await vi.waitFor(() => expect(document.querySelectorAll(".item")).toHaveLength(2));
+    expect(document.querySelectorAll(".item")[1]!.querySelector(".user")!.textContent).toBe("Ag 1234 · Account •••45-6");
+    expect([...document.querySelectorAll("button")].map((b) => b.textContent)).not.toContain(en.popup.fill);
+  });
+});
