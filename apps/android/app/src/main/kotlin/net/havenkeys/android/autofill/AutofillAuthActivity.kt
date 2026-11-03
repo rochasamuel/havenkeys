@@ -157,15 +157,18 @@ internal fun Activity.tappedRequest(): TappedRequest? {
         is Routed.Login -> packageManager.targetOf(screen, routed.form?.webDomain, routed.form?.webScheme)
         else -> packageManager.targetOf(screen, screen.pageDomain, screen.pageScheme)
     }
-    // Android adds the keyboard's request to this Intent from Android 12 on.
-    val inlineRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        IntentCompat.getParcelableExtra(
-            intent,
-            AutofillManager.EXTRA_INLINE_SUGGESTIONS_REQUEST,
-            InlineSuggestionsRequest::class.java,
+    // Android adds the keyboard's request to this Intent from Android 12 on, and
+    // only for a row from the session's latest request: otherwise the last one seen.
+    val inlineRequest = when {
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> KeyboardRequests.orLast(
+            IntentCompat.getParcelableExtra(
+                intent,
+                AutofillManager.EXTRA_INLINE_SUGGESTIONS_REQUEST,
+                InlineSuggestionsRequest::class.java,
+            ),
         )
-    } else {
-        null
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> KeyboardRequests.orLast(null)
+        else -> null
     }
     return TappedRequest(screen, routed, target, inlineRequest)
 }

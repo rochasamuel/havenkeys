@@ -50,6 +50,7 @@ class HavenAutofillService : AutofillService() {
         val structure = request.fillContexts.lastOrNull()?.structure ?: return answer(null)
         val inlineRequest =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) request.inlineSuggestionsRequest else null
+        KeyboardRequests.remember(inlineRequest)
         val work = scope.launch {
             // Read before answering: the answer resets the history.
             val picked = guarded(emptyList()) { freshPicks() }
