@@ -103,7 +103,7 @@ impl fmt::Debug for BankAccountInput {
 pub struct BankSummary {
     pub bank: Option<String>,
     pub branch: Option<String>,
-    /// The last 3 digits, or the last 2, `-` and the check digit: `45-6`.
+    /// The last 3 characters of account and digit, `-` before the digit: `45-6`.
     pub account_last3: Option<String>,
 }
 
@@ -248,11 +248,18 @@ impl BankAccountFields {
             .account
             .as_ref()
             .map(SecretString::expose)
-            .filter(|a| a.len() >= MIN_DIGITS_FOR_LAST3)
-            .map(|a| match &self.account_digit {
-                // The digit takes the third slot: `45-6`.
-                Some(d) => format!("{}-{}", &a[a.len() - 2..], d.expose()),
-                None => a[a.len() - 3..].to_owned(),
+            .filter(|a| a.chars().count() >= MIN_DIGITS_FOR_LAST3)
+            .map(|a| {
+                // The last 3 characters of account + digit, `-` before the digit.
+                let digit = self.account_digit.as_ref().map_or("", SecretString::expose);
+                let keep = 3usize.saturating_sub(digit.chars().count());
+                let skip = a.chars().count() - keep;
+                let tail: String = a.chars().skip(skip).collect();
+                if digit.is_empty() {
+                    tail
+                } else {
+                    format!("{tail}-{digit}")
+                }
             });
         BankSummary {
             bank: self.bank.clone(),
@@ -329,6 +336,12 @@ mod tests {
         assert_eq!(f.summary().account_last3.as_deref(), Some("765"));
         f.account = Some(s("123"));
         assert_eq!(f.summary().account_last3, None);
+        f.account = Some(s("12345"));
+        f.account_digit = Some(s("66"));
+        assert_eq!(f.summary().account_last3.as_deref(), Some("5-66"));
+        // Not cleaned, not ASCII: must not panic.
+        f.account = Some(s("ééééé"));
+        assert_eq!(f.summary().account_last3.as_deref(), Some("é-66"));
     }
 
     #[test]
