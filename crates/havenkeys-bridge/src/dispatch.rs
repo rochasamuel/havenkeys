@@ -8,8 +8,8 @@
 //! integration switch and maps types, and never widens what the core returns.
 
 use crate::convert::{
-    core_card_role, core_provider, core_role, lock_state, save_action, strength, wire_brand,
-    wire_card_role, wire_provider, wire_role,
+    bank_fill, bank_match, core_card_role, core_provider, core_role, lock_state, match_kind,
+    save_action, strength, wire_brand, wire_card_role, wire_provider, wire_role,
 };
 use havenkeys_core::card::CardExpiry;
 use havenkeys_core::card_page::{CardFrame as CoreCardFrame, CardRole as CoreCardRole, NewCard};
@@ -219,6 +219,8 @@ pub(crate) fn dispatch_with(
                     strength: strength(s.strength),
                     provider: s.provider.map(wire_provider),
                     tags: s.tags,
+                    kind: match_kind(s.kind),
+                    bank: s.bank.as_ref().map(bank_match),
                 })
                 .collect();
             Ok(Dispatched::Done(ResultBody::FindMatches {
@@ -264,6 +266,7 @@ pub(crate) fn dispatch_with(
             Ok(Dispatched::Done(ResultBody::FillItem {
                 username: creds.username.clone(),
                 password: creds.password.as_ref().map(wire_secret),
+                bank: creds.bank.as_ref().map(bank_fill),
                 auto_submit,
             }))
         }

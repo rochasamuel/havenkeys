@@ -450,6 +450,9 @@ fn b64url_ok(s: &str, min: usize, max: usize) -> bool {
     b64url_len(s).is_some_and(|n| (min..=max).contains(&n))
 }
 
+const MAX_BANK_CHARS: usize = 64;
+const MAX_ACCOUNT_LAST3_CHARS: usize = 6;
+
 /// Not empty, and at most `max` bytes.
 fn text_ok(s: &str, max: usize) -> bool {
     !s.is_empty() && s.len() <= max
@@ -788,10 +791,13 @@ impl Response {
             Some(ResultBody::CheckLookalike { lookalike_of }) => {
                 lookalike_of.as_deref().is_none_or(lookalike_site_ok)
             }
+            Some(ResultBody::FillItem { bank, .. }) => bank.as_ref().is_none_or(BankFill::is_valid),
             Some(ResultBody::FindMatches { matches, .. }) => {
                 matches.len() <= MAX_MATCHES
                     && matches.iter().all(|m| {
-                        m.tags.len() <= MAX_MATCH_TAGS
+                        m.kind.is_some() == m.bank.is_some()
+                            && m.bank.as_ref().is_none_or(BankMatch::is_valid)
+                            && m.tags.len() <= MAX_MATCH_TAGS
                             && m.tags.iter().all(|t| t.len() <= MAX_MATCH_TAG_BYTES)
                     })
             }
@@ -919,6 +925,9 @@ pub enum ResultBody {
     FillItem {
         username: Option<String>,
         password: Option<WireSecret>,
+        /// A bank account's numbers; omitted for a login.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        bank: Option<BankFill>,
         /// Rust's decision that the extension may press the sign-in button.
         auto_submit: bool,
     },
@@ -1102,6 +1111,92 @@ pub struct Match {
     pub provider: Option<SsoProvider>,
     /// The login's tags, to tell several logins for one site apart. Never secret.
     pub tags: Vec<String>,
+    /// Present, with `bank`, only for a bank account.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<MatchKind>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bank: Option<BankMatch>,
+}
+
+/// What a match is, when it is not a login. A login has no `kind` on the wire.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum MatchKind {
+    BankAccount,
+}
+
+/// A bank account's overview: no secret beyond the account's last digits.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BankMatch {
+    #[serde(deserialize_with = "required")]
+    pub bank: Option<String>,
+    #[serde(deserialize_with = "required")]
+    pub branch: Option<String>,
+    #[serde(deserialize_with = "required")]
+    pub account_last3: Option<String>,
+}
+
+impl fmt::Debug for BankMatch {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("BankMatch(<redacted>)")
+    }
+}
+
+impl BankMatch {
+    fn is_valid(&self) -> bool {
+        self.bank
+            .as_deref()
+            .is_none_or(|b| b.chars().count() <= MAX_BANK_CHARS)
+            && self.branch.as_deref().is_none_or(|b| digits_ok(b, 1, 8))
+            && self
+                .account_last3
+                .as_deref()
+                .is_none_or(|l| l.chars().count() <= MAX_ACCOUNT_LAST3_CHARS)
+    }
+}
+
+/// A bank account's numbers for one fill.
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BankFill {
+    pub branch: String,
+    #[serde(deserialize_with = "required")]
+    pub branch_digit: Option<String>,
+    pub account: WireSecret,
+    #[serde(deserialize_with = "required")]
+    pub account_digit: Option<WireSecret>,
+}
+
+impl fmt::Debug for BankFill {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("BankFill(<redacted>)")
+    }
+}
+
+impl BankFill {
+    fn is_valid(&self) -> bool {
+        digits_ok(&self.branch, 1, 8)
+            && self
+                .branch_digit
+                .as_deref()
+                .is_none_or(|d| check_digit_ok(d, 1))
+            && digits_ok(self.account.expose(), 1, 20)
+            && self
+                .account_digit
+                .as_ref()
+                .is_none_or(|d| check_digit_ok(d.expose(), 2))
+    }
+}
+
+/// `min..=max` ASCII digits.
+fn digits_ok(s: &str, min: usize, max: usize) -> bool {
+    (min..=max).contains(&s.len()) && s.bytes().all(|b| b.is_ascii_digit())
+}
+
+/// `1..=max` characters of `0-9X`.
+fn check_digit_ok(s: &str, max: usize) -> bool {
+    (1..=max).contains(&s.len()) && s.bytes().all(|b| b.is_ascii_digit() || b == b'X')
 }
 
 impl fmt::Debug for Match {

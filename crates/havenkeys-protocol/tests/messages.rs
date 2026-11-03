@@ -305,6 +305,7 @@ fn outgoing_round_trip_and_validation() {
         ResultBody::FillItem {
             username: Some("octo".into()),
             password: Some(WireSecret::new("pw".into())),
+            bank: None,
             auto_submit: false,
         },
     ))
@@ -349,6 +350,8 @@ fn too_many_matches_rejected() {
         strength: MatchStrength::SameHost,
         provider: None,
         tags: vec![],
+        kind: None,
+        bank: None,
     };
     let r = Response::ok(
         1,
@@ -371,6 +374,7 @@ fn debug_output_hides_urls_and_secrets() {
     let fill = ResultBody::FillItem {
         username: Some("alice@example.com".into()),
         password: Some(WireSecret::new("pw".into())),
+        bank: None,
         auto_submit: false,
     };
     let printed = format!("{:?}", Response::ok(1, fill));
@@ -844,6 +848,8 @@ fn one_match(tags: Vec<String>) -> Vec<u8> {
         strength: MatchStrength::SameHost,
         provider: None,
         tags,
+        kind: None,
+        bank: None,
     };
     Outgoing::from(Response::ok(
         1,
@@ -1013,4 +1019,146 @@ fn check_lookalike_debug_hides_the_site_and_the_url() {
         parse(r#"{"v":1,"id":1,"request":{"type":"check_lookalike","url":"https://paypa1.com/"}}"#)
             .unwrap();
     assert!(!format!("{env:?}").contains("paypa1"));
+}
+
+fn login_match() -> Match {
+    Match {
+        id: Uuid::nil(),
+        title: "GitHub".into(),
+        username: Some("octo".into()),
+        has_totp: true,
+        strength: MatchStrength::SameHost,
+        provider: None,
+        tags: vec![],
+        kind: None,
+        bank: None,
+    }
+}
+
+fn bank_match(bank: BankMatch) -> Match {
+    Match {
+        kind: Some(MatchKind::BankAccount),
+        bank: Some(bank),
+        username: None,
+        has_totp: false,
+        ..login_match()
+    }
+}
+
+fn find_bytes(m: Match) -> Vec<u8> {
+    let r = Response::ok(
+        1,
+        ResultBody::FindMatches {
+            matches: vec![m],
+            entitlement: Entitlement::Full,
+        },
+    );
+    Outgoing::from(r).to_bytes().unwrap().to_vec()
+}
+
+/// A login's wire shape must not change: older extensions parse it strictly.
+#[test]
+fn login_match_and_fill_serialize_exactly_as_before() {
+    let json = String::from_utf8(find_bytes(login_match())).unwrap();
+    assert_eq!(
+        json,
+        r#"{"v":1,"id":1,"result":{"type":"find_matches","matches":[{"id":"00000000-0000-0000-0000-000000000000","title":"GitHub","username":"octo","hasTotp":true,"strength":"same_host","provider":null,"tags":[]}]}}"#
+    );
+    let fill = Response::ok(
+        1,
+        ResultBody::FillItem {
+            username: Some("octo".into()),
+            password: Some(WireSecret::new("pw".into())),
+            bank: None,
+            auto_submit: false,
+        },
+    );
+    let json = String::from_utf8(Outgoing::from(fill).to_bytes().unwrap().to_vec()).unwrap();
+    assert_eq!(
+        json,
+        r#"{"v":1,"id":1,"result":{"type":"fill_item","username":"octo","password":"pw","autoSubmit":false}}"#
+    );
+}
+
+#[test]
+fn bank_match_round_trips_and_is_validated() {
+    let bank = |bank: Option<&str>, branch: Option<&str>, last3: Option<&str>| BankMatch {
+        bank: bank.map(Into::into),
+        branch: branch.map(Into::into),
+        account_last3: last3.map(Into::into),
+    };
+    let good = find_bytes(bank_match(bank(Some("Itaú"), Some("1234"), Some("45-6"))));
+    let json = String::from_utf8(good.clone()).unwrap();
+    assert!(json.contains(
+        r#""kind":"bankAccount","bank":{"bank":"Itaú","branch":"1234","accountLast3":"45-6"}"#
+    ));
+    assert!(Outgoing::parse(&good).is_some());
+    let nulls = find_bytes(bank_match(bank(None, None, None)));
+    assert!(Outgoing::parse(&nulls).is_some());
+
+    let long = "x".repeat(65);
+    for bad in [
+        bank(Some(&long), None, None),
+        bank(None, Some("123456789"), None),
+        bank(None, Some("12a"), None),
+        bank(None, Some(""), None),
+        bank(None, None, Some("1234567")),
+    ] {
+        assert!(Outgoing::parse(&find_bytes(bank_match(bad))).is_none());
+    }
+    // kind and bank travel together.
+    let mut half = bank_match(bank(None, None, None));
+    half.kind = None;
+    assert!(Outgoing::parse(&find_bytes(half)).is_none());
+}
+
+#[test]
+fn bank_fill_round_trips_and_is_validated() {
+    let fill = |branch: &str, bd: Option<&str>, acct: &str, ad: Option<&str>| {
+        let r = Response::ok(
+            1,
+            ResultBody::FillItem {
+                username: None,
+                password: Some(WireSecret::new("pw".into())),
+                bank: Some(BankFill {
+                    branch: branch.into(),
+                    branch_digit: bd.map(Into::into),
+                    account: WireSecret::new(acct.into()),
+                    account_digit: ad.map(|d| WireSecret::new(d.into())),
+                }),
+                auto_submit: false,
+            },
+        );
+        Outgoing::from(r).to_bytes().unwrap().to_vec()
+    };
+    let good = fill("1234", Some("5"), "123456", Some("X"));
+    let json = String::from_utf8(good.clone()).unwrap();
+    assert!(json.contains(
+        r#""bank":{"branch":"1234","branchDigit":"5","account":"123456","accountDigit":"X"}"#
+    ));
+    assert!(Outgoing::parse(&good).is_some());
+    assert!(Outgoing::parse(&fill("1", None, "1", None)).is_some());
+    for bad in [
+        fill("", None, "1", None),
+        fill("123456789", None, "1", None),
+        fill("1234", Some("55"), "1", None),
+        fill("1234", Some("x"), "1", None),
+        fill("1234", None, "", None),
+        fill(&"1".repeat(21), None, &"1".repeat(21), None),
+        fill("1234", None, "12", Some("123")),
+        fill("1234", None, "12", Some("")),
+    ] {
+        assert!(Outgoing::parse(&bad).is_none());
+    }
+}
+
+#[test]
+fn bank_values_never_print() {
+    let f = BankFill {
+        branch: "1234".into(),
+        branch_digit: None,
+        account: WireSecret::new("987654".into()),
+        account_digit: None,
+    };
+    assert!(!format!("{f:?}").contains("1234") && !format!("{f:?}").contains("987654"));
 }

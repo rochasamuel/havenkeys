@@ -21,6 +21,8 @@ const SEEDS: unknown[] = [
   { v: 1, id: 1, result: { type: "status", state: "unlocked", vaultExists: true, entitlement: "full" } },
   { v: 1, id: 2, result: { type: "find_matches", matches: [{ id: ID, title: "t", username: null, hasTotp: false, strength: "same_site", provider: null, tags: [] }], entitlement: "full" } },
   { v: 1, id: 3, result: { type: "fill_item", username: "u", password: "p", autoSubmit: false } },
+  { v: 1, id: 41, result: { type: "find_matches", matches: [{ id: ID, title: "Itaú", username: null, hasTotp: false, strength: "same_host", provider: null, tags: [], kind: "bankAccount", bank: { bank: "Itaú", branch: "1234", accountLast3: "45-6" } }], entitlement: "full" } },
+  { v: 1, id: 42, result: { type: "fill_item", username: null, password: "p", bank: { branch: "1234", branchDigit: "5", account: "12345", accountDigit: "6" }, autoSubmit: false } },
   { v: 1, id: 4, result: { type: "get_totp", code: "123456", period: 30, secondsRemaining: 3, autoSubmit: false } },
   { v: 1, id: 5, result: { type: "check_login", action: "update", itemId: ID } },
   { v: 1, id: 6, result: { type: "save_login", itemId: ID } },

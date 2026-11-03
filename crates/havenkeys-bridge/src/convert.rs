@@ -4,15 +4,16 @@
 //! impls. Every `match` is exhaustive: a variant added on either side fails
 //! to compile here until it is mapped.
 
+use havenkeys_core::bank::{BankSummary, BankValues};
 use havenkeys_core::card::CardBrand;
 use havenkeys_core::card_page::CardRole as CoreCardRole;
 use havenkeys_core::identity::FillRole;
 use havenkeys_core::origin::MatchStrength as CoreStrength;
 use havenkeys_core::sso::SsoProvider as CoreProvider;
-use havenkeys_core::vault::{SaveAction as CoreSaveAction, VaultState};
+use havenkeys_core::vault::{MatchKind as CoreKind, SaveAction as CoreSaveAction, VaultState};
 use havenkeys_protocol::{
-    CardBrandId, CardRole, IdentityRole, LockState, MatchStrength, SaveAction,
-    SsoProvider as WireProvider,
+    BankFill, BankMatch, CardBrandId, CardRole, IdentityRole, LockState, MatchKind, MatchStrength,
+    SaveAction, SsoProvider as WireProvider, WireSecret,
 };
 use uuid::Uuid;
 
@@ -32,6 +33,29 @@ pub(crate) fn strength(s: CoreStrength) -> MatchStrength {
         // The wire has no "equivalent" (spec 2026-10-13 §4): older
         // extensions reject unknown strengths, and order is Rust's.
         CoreStrength::SameSite | CoreStrength::Equivalent => MatchStrength::SameSite,
+    }
+}
+
+/// Only a bank account names its kind on the wire; a login's match is unchanged.
+pub(crate) fn match_kind(k: CoreKind) -> Option<MatchKind> {
+    (k == CoreKind::BankAccount).then_some(MatchKind::BankAccount)
+}
+
+pub(crate) fn bank_match(b: &BankSummary) -> BankMatch {
+    BankMatch {
+        bank: b.bank.clone(),
+        branch: b.branch.clone(),
+        account_last3: b.account_last3.clone(),
+    }
+}
+
+pub(crate) fn bank_fill(b: &BankValues) -> BankFill {
+    let secret = |s: &havenkeys_core::SecretString| WireSecret::new(s.expose().to_owned());
+    BankFill {
+        branch: b.branch.clone(),
+        branch_digit: b.branch_digit.clone(),
+        account: secret(&b.account),
+        account_digit: b.account_digit.as_ref().map(secret),
     }
 }
 

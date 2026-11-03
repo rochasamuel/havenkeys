@@ -3,6 +3,7 @@
 
 use havenkeys_bridge::Bridge;
 use havenkeys_core::account::{AccountRef, NormalizedEmail};
+use havenkeys_core::bank::BankAccountInput;
 use havenkeys_core::card::{CardExpiry, CardInput};
 use havenkeys_core::crypto::kdf::{KdfParams, MIN_ITERATIONS, MIN_MEMORY_KIB};
 use havenkeys_core::generator::GeneratorOptions;
@@ -2889,4 +2890,76 @@ fn an_offline_clean_up_still_answers() {
     assert_eq!(named["result"]["passkeys"][0]["credentialId"], new);
     let all = find_passkeys(&f, &[]);
     assert_eq!(all["result"]["passkeys"].as_array().unwrap().len(), 2);
+}
+
+/// Give the fixture's vault an Itaú account bound to https://itau.example.
+fn add_bank_account(f: &Fixture) -> Uuid {
+    let mut v = f.vault.lock().unwrap();
+    let input = ItemInput {
+        item_type: ItemType::BankAccount,
+        title: "Itaú".into(),
+        urls: vec![UrlRule {
+            url: "https://itau.example".into(),
+            match_type: MatchType::Domain,
+        }],
+        password: SecretUpdate::Set(SecretString::from("bank-pass")),
+        bank: Some(BankAccountInput {
+            bank: Some("Itaú".into()),
+            branch: Some("1234".into()),
+            branch_digit: Some("5".into()),
+            account: SecretUpdate::Set(SecretString::from("12345")),
+            account_digit: SecretUpdate::Set(SecretString::from("6")),
+            ..Default::default()
+        }),
+        ..item("", "", "", "", None)
+    };
+    let staged = v.stage_create(input, NOW).unwrap();
+    v.commit_write(staged, 70).unwrap().unwrap().id
+}
+
+#[test]
+fn fill_item_bank_on_saved_site() {
+    let f = fixture();
+    let id = add_bank_account(&f);
+    let r = fill(&f, id, "https://itau.example/login");
+    assert_eq!(
+        r["result"],
+        serde_json::json!({
+            "type": "fill_item",
+            "username": null,
+            "password": "bank-pass",
+            "bank": {"branch": "1234", "branchDigit": "5", "account": "12345", "accountDigit": "6"},
+            "autoSubmit": false
+        })
+    );
+    // The overview carries the summary and no secret.
+    let m = &find(&f, "https://itau.example/")["result"]["matches"][0];
+    assert_eq!(m["kind"], "bankAccount");
+    assert_eq!(
+        m["bank"],
+        serde_json::json!({"bank": "Itaú", "branch": "1234", "accountLast3": "45-6"})
+    );
+    assert!(!m.to_string().contains("12345"));
+    // A login's match carries neither key.
+    let g = &find(&f, "https://github.com/")["result"]["matches"][0];
+    assert!(g.get("kind").is_none() && g.get("bank").is_none());
+}
+
+#[test]
+fn fill_item_bank_on_evil_origin() {
+    let f = fixture();
+    let id = add_bank_account(&f);
+    for url in ["https://evil.example/", "https://itau.example.evil.com/"] {
+        assert_eq!(error_code(&fill(&f, id, url)), Some("denied"), "{url}");
+    }
+}
+
+#[test]
+fn fill_item_bank_locked() {
+    let f = fixture();
+    let id = add_bank_account(&f);
+    f.vault.lock().unwrap().lock();
+    let r = fill(&f, id, "https://itau.example/");
+    assert_eq!(error_code(&r), Some("locked"));
+    assert!(!r.to_string().contains("12345"));
 }

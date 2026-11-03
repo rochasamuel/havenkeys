@@ -306,6 +306,12 @@ carries its account when the item has no username of its own.
 `Match.tags`: the login's tags (≤ 20, each ≤ 128 bytes); required. Desktop and
 extension must be the same release: both sides reject a `Match` with an
 unexpected or missing key.
+`Match.kind` and `Match.bank` are sent together, and only for a bank account:
+`kind` is `"bankAccount"` and `bank` is `{bank, branch, accountLast3}`, each
+string or `null` (`bank` at most 64 characters, `branch` 1-8 digits,
+`accountLast3` at most 6 characters, such as `45-6`). A bank account has
+`username: null`. A login's `Match` has neither key and is byte-identical to
+before; the extension reads a missing `kind` as `"login"`.
 
 **Responses** answer one request ID and carry exactly one of `result` or
 `error`:
@@ -344,6 +350,14 @@ the rest of the result. It tells the extension whether it may press the
 site's sign-in button after filling this value (`autofill.md`, Automatic
 sign-in). The parser on both ends requires it to be present and boolean;
 anything else is rejected like any other malformed result.
+
+`fill_item` for a bank account also carries `bank`:
+`{"branch","branchDigit","account","accountDigit"}`. `branch` (1-8 digits) and
+`account` (1-20 digits) are strings, `branchDigit` (one of `0-9X`) and
+`accountDigit` (1-2 of `0-9X`) are strings or `null`, and `account` and
+`accountDigit` are `WireSecret`s on the Rust side. It is omitted for a login,
+whose result is unchanged; the holder name, notes and custom fields never
+leave Rust. `autoSubmit` is always `false` for a bank account.
 
 `id` is `null` only when a request was so broken that its ID could not be
 read.

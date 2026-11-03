@@ -167,6 +167,24 @@ export interface Match {
   provider: SsoProvider | null;
   /** The login's tags, to tell logins for one site apart. */
   tags: string[];
+  /** A bank account's matches carry a summary instead of a username. */
+  kind: "login" | "bankAccount";
+  bank: BankSummary | null;
+}
+
+/** What the menu may show of a bank account: no more than its last digits. */
+export interface BankSummary {
+  bank: string | null;
+  branch: string | null;
+  accountLast3: string | null;
+}
+
+/** A bank account's numbers for one fill. */
+export interface BankValues {
+  branch: string;
+  branchDigit: string | null;
+  account: string;
+  accountDigit: string | null;
 }
 
 /** A passkey offered for a page. Never contains a key. */
@@ -191,7 +209,7 @@ export type Result =
   | { type: "lock" }
   | { type: "find_matches"; matches: Match[]; entitlement: Entitlement }
   | { type: "check_lookalike"; lookalikeOf: string | null }
-  | { type: "fill_item"; username: string | null; password: string | null; autoSubmit: boolean }
+  | { type: "fill_item"; username: string | null; password: string | null; bank: BankValues | null; autoSubmit: boolean }
   | { type: "get_totp"; code: string; period: number; secondsRemaining: number; autoSubmit: boolean }
   | { type: "generator_options"; options: PasswordOptions }
   | { type: "generate_password"; password: string }
@@ -411,15 +429,49 @@ const LOCK_STATES: readonly LockState[] = ["locked", "unlocking", "unlocked", "l
 const STRENGTHS: readonly MatchStrength[] = ["exact_url", "same_host", "same_site"];
 const SAVE_ACTIONS: readonly SaveAction[] = ["add", "update", "unchanged"];
 
+// Core limits (bank.rs): bank at most 64 characters, branch 1-8 digits, account
+// 1-20 digits, check digits of 0-9 and X, the summary's last digits at most 6.
+const MAX_BANK_CHARS = 64;
+const isDigits = (v: unknown, max: number): v is string => isStr(v) && new RegExp(`^[0-9]{1,${max}}$`).test(v);
+const isCheckDigit = (v: unknown, max: number): v is string => isStr(v) && new RegExp(`^[0-9X]{1,${max}}$`).test(v);
+
+function parseBankSummary(v: unknown): BankSummary | null {
+  if (!isObj(v) || !hasExactKeys(v, ["bank", "branch", "accountLast3"])) return null;
+  const { bank, branch, accountLast3 } = v;
+  if (!isNullableStr(bank) || (bank !== null && [...bank].length > MAX_BANK_CHARS)) return null;
+  if (branch !== null && !isDigits(branch, 8)) return null;
+  if (!isNullableStr(accountLast3) || (accountLast3 !== null && [...accountLast3].length > 6)) return null;
+  return { bank, branch, accountLast3 };
+}
+
+function parseBankValues(v: unknown): BankValues | null {
+  if (!isObj(v) || !hasExactKeys(v, ["branch", "branchDigit", "account", "accountDigit"])) return null;
+  const { branch, branchDigit, account, accountDigit } = v;
+  if (!isDigits(branch, 8) || !isDigits(account, 20)) return null;
+  if (branchDigit !== null && !isCheckDigit(branchDigit, 1)) return null;
+  if (accountDigit !== null && !isCheckDigit(accountDigit, 2)) return null;
+  return { branch, branchDigit, account, accountDigit };
+}
+
+const MATCH_KEYS = ["id", "title", "username", "hasTotp", "strength", "provider", "tags"] as const;
+
 function parseMatch(v: unknown): Match | null {
-  if (!isObj(v) || !hasExactKeys(v, ["id", "title", "username", "hasTotp", "strength", "provider", "tags"])) return null;
+  // A login has exactly the keys it always had; a bank account adds `kind` and `bank`, together.
+  const isBank = isObj(v) && hasExactKeys(v, [...MATCH_KEYS, "kind", "bank"]);
+  if (!isObj(v) || !(isBank || hasExactKeys(v, MATCH_KEYS))) return null;
+  if (isBank && v.kind !== "bankAccount") return null;
+  const bank = isBank ? parseBankSummary(v.bank) : null;
+  if (isBank && !bank) return null;
   const { id, title, username, hasTotp, strength, provider, tags } = v;
   if (!isStr(id) || !UUID.test(id) || !isStr(title) || !isNullableStr(username) || !isBool(hasTotp)) return null;
   if (!STRENGTHS.includes(strength as MatchStrength)) return null;
   if (provider !== null && !isSsoProvider(provider)) return null;
   if (!Array.isArray(tags) || tags.length > MAX_MATCH_TAGS) return null;
   if (!tags.every((t) => isStr(t) && utf8Length(t) <= MAX_MATCH_TAG_BYTES)) return null;
-  return { id, title, username, hasTotp, strength: strength as MatchStrength, provider, tags: [...tags] as string[] };
+  return {
+    id, title, username, hasTotp, strength: strength as MatchStrength, provider, tags: [...tags] as string[],
+    kind: bank ? "bankAccount" : "login", bank,
+  };
 }
 
 function parseResult(v: unknown): Result | null {
@@ -456,10 +508,15 @@ function parseResult(v: unknown): Result | null {
       }
       return { type: "find_matches", matches, entitlement: (v.entitlement ?? "full") as Entitlement };
     }
-    case "fill_item":
-      if (!hasExactKeys(v, ["type", "username", "password", "autoSubmit"])) return null;
+    case "fill_item": {
+      // `bank` is sent only for a bank account.
+      const hasBank = hasExactKeys(v, ["type", "username", "password", "bank", "autoSubmit"]);
+      if (!hasBank && !hasExactKeys(v, ["type", "username", "password", "autoSubmit"])) return null;
       if (!isNullableStr(v.username) || !isNullableStr(v.password) || !isBool(v.autoSubmit)) return null;
-      return { type: "fill_item", username: v.username, password: v.password, autoSubmit: v.autoSubmit };
+      const bank = hasBank ? parseBankValues(v.bank) : null;
+      if (hasBank && !bank) return null;
+      return { type: "fill_item", username: v.username, password: v.password, bank, autoSubmit: v.autoSubmit };
+    }
     case "get_totp":
       if (!hasExactKeys(v, ["type", "code", "period", "secondsRemaining", "autoSubmit"])) return null;
       if (!isStr(v.code) || !/^[0-9]{6,8}$/.test(v.code) || !isU32(v.period) || !isU32(v.secondsRemaining)) return null;

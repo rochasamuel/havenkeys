@@ -68,7 +68,7 @@ describe("parseIncoming", () => {
 
   it("requires a boolean autoSubmit on fills", () => {
     const ok = parseIncoming({ v: 1, id: 1, result: { type: "fill_item", username: "u", password: "p", autoSubmit: true } });
-    expect(ok && "result" in ok && ok.result).toEqual({ type: "fill_item", username: "u", password: "p", autoSubmit: true });
+    expect(ok && "result" in ok && ok.result).toEqual({ type: "fill_item", username: "u", password: "p", bank: null, autoSubmit: true });
     for (const result of [
       { type: "fill_item", username: "u", password: "p" },
       { type: "fill_item", username: "u", password: "p", autoSubmit: "yes" },
@@ -364,5 +364,69 @@ describe("check_lookalike", () => {
       id: 4,
       request: { type: "check_lookalike", url: "https://a.com/", topUrl: "https://b.com/" },
     });
+  });
+});
+
+describe("bank accounts", () => {
+  const bankSummary = { bank: "Itaú", branch: "1234", accountLast3: "45-6" };
+  const bankMatch = { ...match, username: null, hasTotp: false, kind: "bankAccount", bank: bankSummary };
+  const find = (m: unknown) => parseIncoming({ v: 1, id: 1, result: { type: "find_matches", matches: [m], entitlement: "full" } });
+  const matchOf = (m: unknown) => {
+    const r = find(m);
+    return r && "result" in r && r.result.type === "find_matches" ? r.result.matches[0] : null;
+  };
+
+  it("reads a login without the keys as a login and a bank with both as a bank", () => {
+    expect(matchOf(match)).toMatchObject({ kind: "login", bank: null });
+    expect(matchOf(bankMatch)).toMatchObject({ kind: "bankAccount", bank: bankSummary });
+    expect(matchOf({ ...bankMatch, bank: { bank: null, branch: null, accountLast3: null } })).not.toBeNull();
+  });
+  it("rejects kind and bank apart, other kinds and a bank on a login", () => {
+    const { bank: _b, ...kindOnly } = bankMatch;
+    const { kind: _k, ...bankOnly } = bankMatch;
+    for (const m of [
+      { ...bankMatch, kind: "card" },
+      { ...bankMatch, kind: "login" },
+      kindOnly,
+      bankOnly,
+      { ...match, bank: bankSummary },
+      { ...bankMatch, extra: 1 },
+    ]) expect(find(m), JSON.stringify(m)).toBeNull();
+  });
+  it("holds the summary to the core's limits", () => {
+    const withBank = (b: unknown) => ({ ...bankMatch, bank: b });
+    for (const b of [
+      { ...bankSummary, accountLast3: "1234567" },
+      { ...bankSummary, bank: "x".repeat(65) },
+      { ...bankSummary, branch: "123456789" },
+      { ...bankSummary, branch: "12a4" },
+      { ...bankSummary, branch: "" },
+      { ...bankSummary, extra: 1 },
+      { bank: "Itaú", branch: "1234" },
+      { ...bankSummary, accountLast3: 4 },
+      null,
+    ]) expect(find(withBank(b)), JSON.stringify(b)).toBeNull();
+    expect(find(withBank({ ...bankSummary, bank: "x".repeat(64), accountLast3: "123456" }))).not.toBeNull();
+  });
+
+  const values = { branch: "1234", branchDigit: "5", account: "12345", accountDigit: "6" };
+  const fill = (extra: object) =>
+    parseIncoming({ v: 1, id: 1, result: { type: "fill_item", username: null, password: "p", autoSubmit: false, ...extra } });
+  it("parses fill_item's bank object by its exact four keys", () => {
+    const ok = fill({ bank: values });
+    expect(ok && "result" in ok && ok.result).toEqual({ type: "fill_item", username: null, password: "p", bank: values, autoSubmit: false });
+    expect(fill({ bank: { ...values, branchDigit: null, accountDigit: null } })).not.toBeNull();
+    const { accountDigit: _d, ...missing } = values;
+    for (const bank of [
+      { ...values, holderName: "x" },
+      missing,
+      { ...values, account: 12345 },
+      { ...values, account: "" },
+      { ...values, branch: "" },
+      { ...values, branchDigit: "55" },
+      { ...values, accountDigit: "123" },
+      null,
+      "x",
+    ]) expect(fill({ bank }), JSON.stringify(bank)).toBeNull();
   });
 });
