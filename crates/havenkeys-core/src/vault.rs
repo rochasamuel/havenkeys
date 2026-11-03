@@ -6,6 +6,7 @@
 
 use crate::account::AccountRef;
 use crate::attachment::FileEdits;
+use crate::bank::BankAccountFields;
 use crate::card::{CardField, CardFields};
 use crate::crypto::blob::{self, BlobContext, Purpose};
 use crate::crypto::kdf::{derive_master_key, KdfParams};
@@ -1374,7 +1375,8 @@ impl VaultService {
         Ok(items)
     }
 
-    /// Case-insensitive search over title, username, website hosts and tags.
+    /// Case-insensitive search over title, username, website hosts, tags and a
+    /// bank account's bank and branch.
     /// Secret fields and note bodies are never searched.
     pub fn search(&self, query: &str) -> Result<Vec<ItemOverview>> {
         let session = self.session()?;
@@ -1405,6 +1407,12 @@ impl VaultService {
                             || s.account
                                 .as_deref()
                                 .is_some_and(|a| a.to_lowercase().contains(&q))
+                    })
+                    || i.bank.as_ref().is_some_and(|b| {
+                        [&b.bank, &b.branch]
+                            .into_iter()
+                            .flatten()
+                            .any(|v| v.to_lowercase().contains(&q))
                     })
                     || (q.bytes().all(|b| b.is_ascii_digit())
                         && i.card
@@ -1665,9 +1673,10 @@ impl VaultService {
             .clone();
         let password = match self.load_details(id)? {
             ItemDetails::Login { password, .. } => password,
-            ItemDetails::SecureNote { .. } | ItemDetails::Identity(_) | ItemDetails::Card(_) => {
-                return Err(Error::Denied)
-            }
+            ItemDetails::SecureNote { .. }
+            | ItemDetails::Identity(_)
+            | ItemDetails::Card(_)
+            | ItemDetails::BankAccount(_) => return Err(Error::Denied),
         };
         if password.is_some() {
             self.record_fill(*id, page_url, now_ms)?;
@@ -2072,9 +2081,10 @@ impl VaultService {
             ItemDetails::Login {
                 password_history, ..
             } => Ok(password_history.iter().map(|p| p.replaced_at).collect()),
-            ItemDetails::SecureNote { .. } | ItemDetails::Identity(_) | ItemDetails::Card(_) => {
-                Ok(Vec::new())
-            }
+            ItemDetails::SecureNote { .. }
+            | ItemDetails::Identity(_)
+            | ItemDetails::Card(_)
+            | ItemDetails::BankAccount(_) => Ok(Vec::new()),
         }
     }
 
@@ -2253,6 +2263,7 @@ impl VaultService {
                 ..Default::default()
             }),
             card: None,
+            bank: None,
             sections: None,
             tags: None,
         };
@@ -2293,6 +2304,16 @@ impl VaultService {
     pub fn card_fields(&self, id: Uuid) -> Result<CardFields> {
         match self.load_details(&id)? {
             ItemDetails::Card(fields) => Ok(*fields),
+            _ => Err(Error::Denied),
+        }
+    }
+
+    /// A bank account's values. `Denied` for any other kind of item. Holds
+    /// the account number and password: each caller hands out only what its
+    /// request needs.
+    pub fn bank_fields(&self, id: Uuid) -> Result<BankAccountFields> {
+        match self.load_details(&id)? {
+            ItemDetails::BankAccount(fields) => Ok(*fields),
             _ => Err(Error::Denied),
         }
     }
@@ -2440,6 +2461,7 @@ impl VaultService {
         report.logins = 0;
         report.secure_notes = 0;
         report.cards = 0;
+        report.bank_accounts = 0;
 
         for item in items {
             let id = Uuid::new_v4();
@@ -2485,6 +2507,7 @@ impl VaultService {
                 // `stage_identity_if_missing`.
                 ItemType::Identity => return Err(Error::Denied),
                 ItemType::Card => report.cards += 1,
+                ItemType::BankAccount => report.bank_accounts += 1,
             }
             writes.push(staged);
         }
@@ -2508,7 +2531,9 @@ impl VaultService {
             // Secure notes need their body; a damaged one simply isn't a duplicate.
             let details = match ov.item_type {
                 ItemType::Login | ItemType::Identity => None,
-                ItemType::SecureNote | ItemType::Card => self.load_details(&ov.id).ok(),
+                ItemType::SecureNote | ItemType::Card | ItemType::BankAccount => {
+                    self.load_details(&ov.id).ok()
+                }
             };
             let key = dedupe_key_parts(ov, details.as_ref());
             keys.insert(key);
@@ -2655,6 +2680,22 @@ pub(crate) fn dedupe_key_parts(overview: &ItemOverview, details: Option<&ItemDet
             field(&mut h, "identity");
             field(&mut h, &overview.id.to_string());
         }
+        // The same bank, branch and account is the same bank account; one
+        // without an account is told apart by its title.
+        ItemType::BankAccount => {
+            field(&mut h, "bank");
+            match details {
+                Some(ItemDetails::BankAccount(f)) => {
+                    field(&mut h, f.bank.as_deref().unwrap_or(""));
+                    field(&mut h, f.branch.as_deref().unwrap_or(""));
+                    match &f.account {
+                        Some(a) => field(&mut h, a.expose()),
+                        None => field(&mut h, &overview.title),
+                    }
+                }
+                _ => field(&mut h, &overview.id.to_string()),
+            }
+        }
         // The same number and expiry is the same card; one without a number
         // is told apart by its title.
         ItemType::Card => {
@@ -2707,6 +2748,7 @@ pub(crate) fn build_item(
         sign_in_with,
         identity,
         card,
+        bank,
         sections,
         tags,
     } = input;
@@ -2834,6 +2876,54 @@ pub(crate) fn build_item(
             .clean()?;
             ItemDetails::Card(Box::new(fields))
         }
+        ItemType::BankAccount => {
+            let (cur_account, cur_digit, cur_password, cur_notes, cur_sections, app_bindings) =
+                match current {
+                    Some(ItemDetails::BankAccount(f)) => {
+                        let BankAccountFields {
+                            account,
+                            account_digit,
+                            password,
+                            notes,
+                            sections,
+                            app_bindings,
+                            ..
+                        } = *f;
+                        (
+                            account,
+                            account_digit,
+                            password,
+                            notes,
+                            sections,
+                            app_bindings,
+                        )
+                    }
+                    Some(_) => return Err(Error::Corrupted),
+                    None => Default::default(),
+                };
+            // `check_shape` guarantees the values are there.
+            let input = bank.ok_or(Error::InvalidInput("a bank account needs its values"))?;
+            let fields = BankAccountFields {
+                bank: input.bank,
+                holder_name: input.holder_name,
+                account_type: input.account_type,
+                branch: input.branch,
+                branch_digit: input.branch_digit,
+                account: input.account.apply(cur_account),
+                account_digit: input.account_digit.apply(cur_digit),
+                password: password.apply(cur_password),
+                notes: notes.apply(cur_notes),
+                sections: custom_field::apply_sections(sections, cur_sections)?,
+                app_bindings,
+            }
+            .clean()?;
+            if title.trim().is_empty() && fields.bank.is_none() && fields.account.is_none() {
+                return Err(Error::InvalidInput(
+                    "a bank account needs a title, a bank or an account",
+                ));
+            }
+            ItemDetails::BankAccount(Box::new(fields))
+        }
     };
     // An identity's title is its name, never typed; it may be empty. A card
     // without a title is named after its brand, but only if it has a number.
@@ -2845,6 +2935,10 @@ pub(crate) fn build_item(
             }
             fields.effective_brand().display_name().to_owned()
         }
+        ItemDetails::BankAccount(fields) if title.trim().is_empty() => fields
+            .bank
+            .clone()
+            .unwrap_or_else(|| "Bank account".to_owned()),
         _ => clean_title(&title)?,
     };
 
@@ -2864,6 +2958,12 @@ pub(crate) fn build_item(
         ItemDetails::SecureNote { .. } => (false, false, false, false),
         ItemDetails::Identity(fields) => (false, false, fields.notes.is_some(), false),
         ItemDetails::Card(fields) => (false, false, fields.notes.is_some(), false),
+        ItemDetails::BankAccount(fields) => (
+            fields.password.is_some(),
+            false,
+            fields.notes.is_some(),
+            false,
+        ),
     };
     let identity_email = match &details {
         ItemDetails::Identity(fields) => fields.email.as_ref().map(|e| e.expose().to_owned()),
@@ -2875,12 +2975,12 @@ pub(crate) fn build_item(
         title,
         username: match item_type {
             ItemType::Login => clean_username(username.as_deref())?,
-            ItemType::SecureNote | ItemType::Card => None,
+            ItemType::SecureNote | ItemType::Card | ItemType::BankAccount => None,
             // Shown as the list subtitle and searched, like a login's username.
             ItemType::Identity => identity_email,
         },
         urls: match item_type {
-            ItemType::Login => clean_urls(&urls)?,
+            ItemType::Login | ItemType::BankAccount => clean_urls(&urls)?,
             ItemType::SecureNote | ItemType::Identity | ItemType::Card => Vec::new(),
         },
         has_password,
@@ -2890,10 +2990,16 @@ pub(crate) fn build_item(
         auto_sign_in: auto_sign_in.unwrap_or(true),
         sign_in_with: match item_type {
             ItemType::Login => crate::sso::clean_sign_in_with(sign_in_with)?,
-            ItemType::SecureNote | ItemType::Identity | ItemType::Card => None,
+            ItemType::SecureNote | ItemType::Identity | ItemType::Card | ItemType::BankAccount => {
+                None
+            }
         },
         card: match &details {
             ItemDetails::Card(fields) => Some(fields.summary()),
+            _ => None,
+        },
+        bank: match &details {
+            ItemDetails::BankAccount(fields) => Some(fields.summary()),
             _ => None,
         },
         tags: crate::tags::normalize(&tags.unwrap_or_default())?,

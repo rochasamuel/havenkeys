@@ -122,7 +122,7 @@ fn url_host(raw: &str) -> Option<String> {
 pub(crate) fn summary(o: &ItemOverview) -> ItemSummary {
     let (kind, subtitle) = match o.item_type {
         ItemType::Login => (ItemKind::Login, o.username.clone()),
-        ItemType::SecureNote => (ItemKind::SecureNote, None),
+        ItemType::SecureNote | ItemType::BankAccount => (ItemKind::SecureNote, None),
         ItemType::Card => (
             ItemKind::Card,
             o.card
@@ -300,6 +300,8 @@ impl MobileVault {
                     fields.push(field(key, key, kind, None));
                 }
             }
+            // Not shown on the phone yet.
+            ItemType::BankAccount => {}
             ItemType::Identity => {
                 let present = vault.reveal_identity(&id)?;
                 for name in present.filled_field_names() {
@@ -412,6 +414,7 @@ mod tests {
             sign_in_with: None,
             identity: None,
             card: None,
+            bank: None,
             sections: None,
         };
         let mut vault = v.client.vault().unwrap();
@@ -573,6 +576,7 @@ mod tests {
             sign_in_with: None,
             identity: None,
             card: None,
+            bank: None,
             sections: None,
         }
     }

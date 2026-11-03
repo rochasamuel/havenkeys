@@ -229,6 +229,7 @@ fn card() -> ItemInput {
             expiry: None,
             notes: None,
         }),
+        bank: None,
         sections: None,
     }
 }
@@ -377,7 +378,7 @@ fn cards_have_no_custom_fields() {
     assert_eq!(
         v.stage_create(input, NOW).err(),
         Some(Error::InvalidInput(
-            "only a login or a secure note has custom fields"
+            "only a login, a bank account or a secure note has custom fields"
         ))
     );
 }

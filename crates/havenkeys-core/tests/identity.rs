@@ -24,6 +24,7 @@ fn identity_input(fields: IdentityFields) -> ItemInput {
         sign_in_with: None,
         identity: Some(fields),
         card: None,
+        bank: None,
         sections: None,
     }
 }

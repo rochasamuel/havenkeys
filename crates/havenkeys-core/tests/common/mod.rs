@@ -45,6 +45,7 @@ pub fn login(title: &str, username: &str, password: &str, url: &str) -> ItemInpu
         sign_in_with: None,
         identity: None,
         card: None,
+        bank: None,
         sections: None,
     }
 }
@@ -128,6 +129,7 @@ pub fn note(title: &str, content: &str) -> ItemInput {
         sign_in_with: None,
         identity: None,
         card: None,
+        bank: None,
         sections: None,
     }
 }

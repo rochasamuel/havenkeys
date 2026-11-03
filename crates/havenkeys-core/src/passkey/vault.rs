@@ -630,9 +630,10 @@ impl VaultService {
                     replaced: p.replaced_at.is_some(),
                 })
                 .collect()),
-            ItemDetails::SecureNote { .. } | ItemDetails::Identity(_) | ItemDetails::Card(_) => {
-                Ok(Vec::new())
-            }
+            ItemDetails::SecureNote { .. }
+            | ItemDetails::Identity(_)
+            | ItemDetails::Card(_)
+            | ItemDetails::BankAccount(_) => Ok(Vec::new()),
         }
     }
 

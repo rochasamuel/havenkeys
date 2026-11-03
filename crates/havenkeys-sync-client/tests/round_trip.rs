@@ -6,6 +6,7 @@
 //! Needs Postgres: `scripts/test-server.sh` starts one.
 
 use havenkeys_core::account::{AccountRef, NormalizedEmail};
+use havenkeys_core::bank::BankAccountInput;
 use havenkeys_core::crypto::kdf::KdfParams;
 use havenkeys_core::crypto::keys::AuthKey;
 use havenkeys_core::crypto::secret_key::SecretKey;
@@ -161,6 +162,7 @@ fn login_item(title: &str, password: &str) -> ItemInput {
         sign_in_with: None,
         identity: None,
         card: None,
+        bank: None,
         sections: None,
     }
 }
@@ -935,5 +937,41 @@ async fn an_attachment_is_uploaded_committed_with_a_write_and_read_back() {
         .unwrap();
     assert_eq!((owner, blob.as_slice()), (item_id, &b"sealed bytes"[..]));
     device.vault.lock();
+    server.cleanup().await;
+}
+
+/// Spec 2026-11-03-bank-account §4.7: a bank account written on one device
+/// reads back on another with the same overview.
+#[tokio::test]
+async fn a_bank_account_written_on_one_device_opens_on_another() {
+    let server = Server::start().await;
+    let client = server.client();
+    let email = "bank@example.com";
+    let mut first = activate(&server, email).await;
+
+    let mut input = ItemInput::blank_for_tests(ItemType::BankAccount, "");
+    input.bank = Some(BankAccountInput {
+        bank: Some("Itaú".into()),
+        branch: Some("1234".into()),
+        account: SecretUpdate::Set(SecretString::from("12345-6")),
+        ..Default::default()
+    });
+    let staged = first.vault.stage_create(input, NOW).unwrap();
+    let item_id = staged.item_id;
+    push(&client, &mut first, vec![staged]).await.unwrap();
+
+    let second = second_device(&server, &first, email).await;
+    let one = first.vault.get_item(&item_id).unwrap();
+    let other = second.vault.get_item(&item_id).unwrap();
+    assert_eq!(other.title, "Itaú");
+    assert_eq!(
+        serde_json::to_value(&other.bank).unwrap(),
+        serde_json::to_value(&one.bank).unwrap()
+    );
+    assert_eq!(
+        other.bank.as_ref().unwrap().account_last3.as_deref(),
+        Some("45-6")
+    );
+
     server.cleanup().await;
 }

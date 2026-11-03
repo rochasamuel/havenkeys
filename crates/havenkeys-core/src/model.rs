@@ -5,6 +5,7 @@
 //! * [`ItemDetails`]  — secrets; decrypted per request only.
 
 use crate::attachment::AttachmentMeta;
+use crate::bank::{BankAccountFields, BankAccountInput, BankSummary};
 use crate::card::{CardFields, CardInput, CardSummary};
 use crate::custom_field::{FieldSection, SectionInput};
 use crate::error::{Error, Result};
@@ -39,6 +40,16 @@ pub enum ItemType {
     Identity,
     /// A payment card (spec 2026-09-29-card-item).
     Card,
+    /// A bank account (spec 2026-11-03-bank-account).
+    BankAccount,
+}
+
+impl ItemType {
+    /// Whether the item is bound to websites and apps, so a page or app can
+    /// match and fill it.
+    pub fn is_site_bound(self) -> bool {
+        matches!(self, ItemType::Login | ItemType::BankAccount)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -88,6 +99,9 @@ pub struct ItemOverview {
     /// A card's brand, last four digits and expiry; `None` for other items.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub card: Option<CardSummary>,
+    /// A bank account's bank, branch and last digits; `None` for other items.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bank: Option<BankSummary>,
     /// The user's tags, normalised by [`crate::tags::normalize`]. `default`:
     /// overviews written before tags existed have none.
     #[serde(default)]
@@ -190,6 +204,7 @@ pub enum ItemDetails {
     },
     Identity(Box<IdentityFields>),
     Card(Box<CardFields>),
+    BankAccount(Box<BankAccountFields>),
 }
 
 /// A password that was replaced, and when (Unix milliseconds).
@@ -221,6 +236,7 @@ impl ItemDetails {
             ItemDetails::SecureNote { .. } => ItemType::SecureNote,
             ItemDetails::Identity(_) => ItemType::Identity,
             ItemDetails::Card(_) => ItemType::Card,
+            ItemDetails::BankAccount(_) => ItemType::BankAccount,
         }
     }
 }
@@ -309,7 +325,12 @@ pub struct ItemInput {
     /// A card's values. Required for a card, refused for the other types.
     #[serde(default)]
     pub card: Option<CardInput>,
-    /// A login's or secure note's custom fields. `None` keeps them as they are (every save
+    /// A bank account's own values; its websites, password, notes and custom
+    /// fields use the fields above. Required for a bank account, refused for
+    /// the other types.
+    #[serde(default)]
+    pub bank: Option<BankAccountInput>,
+    /// A login's, bank account's or secure note's custom fields. `None` keeps them as they are (every save
     /// path except the desktop editor); `Some` replaces the whole layout, in
     /// order (`custom_field::apply_sections`).
     #[serde(default)]
@@ -344,6 +365,7 @@ impl ItemInput {
             sign_in_with: None,
             identity: None,
             card: None,
+            bank: None,
             sections: None,
             tags: None,
         }
@@ -561,7 +583,9 @@ pub(crate) fn check_note_content(n: &SecretString) -> Result<()> {
 }
 
 /// Reject login-only fields on a secure note and vice versa, anything but
-/// identity values on an identity, and anything but card values on a card.
+/// identity values on an identity, anything but card values on a card, and
+/// anything but bank values (and websites, password and notes) on a bank
+/// account.
 pub(crate) fn check_shape(input: &ItemInput) -> Result<()> {
     let login_fields = input
         .username
@@ -575,10 +599,35 @@ pub(crate) fn check_shape(input: &ItemInput) -> Result<()> {
     // What a login or a secure note may hold, and an identity or card not.
     let identity_only = login_fields || !input.content.is_keep();
     match input.item_type {
-        t if !matches!(t, ItemType::Login | ItemType::SecureNote) && input.sections.is_some() => {
+        t if !matches!(
+            t,
+            ItemType::Login | ItemType::SecureNote | ItemType::BankAccount
+        ) && input.sections.is_some() =>
+        {
             Err(Error::InvalidInput(
-                "only a login or a secure note has custom fields",
+                "only a login, a bank account or a secure note has custom fields",
             ))
+        }
+        ItemType::BankAccount if input.bank.is_none() => {
+            Err(Error::InvalidInput("a bank account needs its values"))
+        }
+        ItemType::BankAccount
+            if input
+                .username
+                .as_deref()
+                .is_some_and(|u| !u.trim().is_empty())
+                || !input.totp.is_keep()
+                || !input.content.is_keep()
+                || input.sign_in_with.is_some()
+                || input.identity.is_some()
+                || input.card.is_some() =>
+        {
+            Err(Error::InvalidInput("a bank account only has bank values"))
+        }
+        ItemType::Login | ItemType::SecureNote | ItemType::Identity | ItemType::Card
+            if input.bank.is_some() =>
+        {
+            Err(Error::InvalidInput("only a bank account has bank values"))
         }
         ItemType::Card if input.card.is_none() => {
             Err(Error::InvalidInput("a card needs its values"))

@@ -24,6 +24,7 @@ fn card_input(title: &str, card: CardInput) -> ItemInput {
         sign_in_with: None,
         identity: None,
         card: Some(card),
+        bank: None,
         sections: None,
     }
 }

@@ -375,6 +375,7 @@ mod tests {
             sign_in_with: None,
             identity: None,
             card: None,
+            bank: None,
             sections: None,
         };
         let mut vault = v.client.vault().unwrap();

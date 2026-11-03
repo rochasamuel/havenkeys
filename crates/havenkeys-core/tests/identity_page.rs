@@ -44,6 +44,7 @@ fn with_identity() -> VaultService {
         sign_in_with: None,
         identity: Some(fields),
         card: None,
+        bank: None,
         sections: None,
     };
     let staged = v.stage_update(&id, input, NOW + 1).unwrap();
@@ -112,6 +113,7 @@ fn a_long_accented_name_fits_the_summary_title_limit() {
         sign_in_with: None,
         identity: Some(fields),
         card: None,
+        bank: None,
         sections: None,
     };
     let staged = v.stage_update(&id, input, NOW + 2).unwrap();

@@ -898,6 +898,7 @@ fn password_history_is_bounded_and_skips_unchanged() {
             sign_in_with: None,
             identity: None,
             card: None,
+            bank: None,
             sections: None,
         };
         let staged = v.stage_update(&gh, input, now).unwrap();

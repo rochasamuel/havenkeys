@@ -184,6 +184,7 @@ fn a_staged_import_upgrades_a_matching_login_with_sign_in_with() {
         sign_in_with: None,
         identity: None,
         card: None,
+        bank: None,
         sections: None,
     };
     let imported = |title: &str, url: &str| ImportedItem {
@@ -207,6 +208,7 @@ fn a_staged_import_upgrades_a_matching_login_with_sign_in_with() {
             }),
             identity: None,
             card: None,
+            bank: None,
             sections: None,
         },
         created_at: None,

@@ -86,6 +86,7 @@ fn item(title: &str, user: &str, pw: &str, url: &str, totp: Option<&str>) -> Ite
         sign_in_with: None,
         identity: None,
         card: None,
+        bank: None,
         sections: None,
     }
 }
@@ -143,6 +144,7 @@ fn build_fixture(writer: Option<()>) -> Fixture {
                 sign_in_with: None,
                 identity: None,
                 card: None,
+                bank: None,
                 sections: None,
             },
             NOW,
@@ -171,6 +173,7 @@ fn build_fixture(writer: Option<()>) -> Fixture {
                 }),
                 identity: None,
                 card: None,
+                bank: None,
                 sections: None,
             },
             NOW,
@@ -761,6 +764,7 @@ fn add_card(f: &Fixture) -> Uuid {
             }),
             notes: None,
         }),
+        bank: None,
         sections: None,
     };
     let staged = v.stage_create(input, NOW).unwrap();
@@ -2523,6 +2527,7 @@ fn add_identity(f: &Fixture) -> Uuid {
             ..Default::default()
         }),
         card: None,
+        bank: None,
         sections: None,
     };
     let staged = v.stage_update(&id, input, NOW + 1).unwrap();

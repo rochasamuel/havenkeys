@@ -250,6 +250,8 @@ fn item(ov: &ItemOverview, details: ItemDetails) -> Item {
                 code: f.verification_number,
             });
         }
+        // Written by the import/export task (spec 2026-11-03-bank-account §6.3).
+        ItemDetails::BankAccount(_) => {}
         ItemDetails::Identity(f) => {
             let f = *f;
             it.r#type = 4;

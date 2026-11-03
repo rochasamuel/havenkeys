@@ -80,6 +80,7 @@ pub struct ExportSummary {
     pub secure_notes: usize,
     pub cards: usize,
     pub identities: usize,
+    pub bank_accounts: usize,
     /// Never in a plaintext export.
     pub passkeys_left_out: usize,
     pub password_history_left_out: usize,
@@ -129,6 +130,7 @@ fn count(s: &mut ExportSummary, format: ExportFormat, ov: &ItemOverview, d: &Ite
         ItemType::SecureNote => s.secure_notes += 1,
         ItemType::Card => s.cards += 1,
         ItemType::Identity => s.identities += 1,
+        ItemType::BankAccount => s.bank_accounts += 1,
     }
     if format == ExportFormat::Backup {
         s.attachments += ov.attachments.len();

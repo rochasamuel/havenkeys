@@ -161,6 +161,7 @@ pub mod testing {
             sign_in_with: None,
             identity: None,
             card: None,
+            bank: None,
             sections: None,
         }
     }

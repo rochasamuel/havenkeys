@@ -326,6 +326,7 @@ impl VaultService {
                 expiry,
                 notes: None,
             }),
+            bank: None,
             sections: None,
         };
         let write = self.stage_create(input, now_ms)?;

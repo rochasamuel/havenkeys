@@ -98,7 +98,7 @@ impl fmt::Debug for BankAccountInput {
 }
 
 /// What the list and search may show without a reveal.
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BankSummary {
     pub bank: Option<String>,

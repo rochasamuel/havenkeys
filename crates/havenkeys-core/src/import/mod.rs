@@ -131,6 +131,8 @@ pub struct ImportReport {
     pub secure_notes: usize,
     /// Credit cards imported as Cards.
     pub cards: usize,
+    /// Bank accounts imported as Bank Accounts.
+    pub bank_accounts: usize,
     /// Items of other kinds (identities, SSH keys, …) stored as secure notes
     /// with their fields written out.
     pub converted_to_notes: usize,

@@ -7,6 +7,7 @@
 use super::backup::{BackupAttachment, BackupItem, OpenedBackup};
 use crate::app_target::valid_package;
 use crate::attachment::{AttachmentMeta, MAX_ATTACHMENTS_PER_ITEM};
+use crate::bank::BankAccountInput;
 use crate::card::CardInput;
 use crate::custom_field::{FieldInput, FieldSection, FieldValue, FieldValueInput, SectionInput};
 use crate::error::{Error, Result};
@@ -119,6 +120,7 @@ fn rebuild(id: Uuid, item: BackupItem) -> Result<(ItemOverview, ItemDetails)> {
     let mut blank = ItemInput::blank(ov.item_type, ov.title.clone());
     blank.tags = Some(ov.tags.clone());
     let mut extra = None;
+    let mut bank_bindings = Vec::new();
     let input = match details {
         ItemDetails::Login {
             password,
@@ -169,6 +171,27 @@ fn rebuild(id: Uuid, item: BackupItem) -> Result<(ItemOverview, ItemDetails)> {
                 ..blank
             }
         }
+        ItemDetails::BankAccount(f) => {
+            let f = *f;
+            check_bindings(&f.app_bindings)?;
+            bank_bindings = f.app_bindings;
+            ItemInput {
+                urls: ov.urls.clone(),
+                password: set(f.password),
+                notes: set(f.notes),
+                sections: Some(sections_input(f.sections)),
+                bank: Some(BankAccountInput {
+                    bank: f.bank,
+                    holder_name: f.holder_name,
+                    account_type: f.account_type,
+                    branch: f.branch,
+                    branch_digit: f.branch_digit,
+                    account: set(f.account),
+                    account_digit: set(f.account_digit),
+                }),
+                ..blank
+            }
+        }
     };
     let (mut overview, mut details) = build_item(id, input, None, ov.created_at, ov.updated_at)?;
     if let (
@@ -188,6 +211,9 @@ fn rebuild(id: Uuid, item: BackupItem) -> Result<(ItemOverview, ItemDetails)> {
         *app_bindings = bindings;
         *health_ignored = ignored;
     }
+    if let ItemDetails::BankAccount(f) = &mut details {
+        f.app_bindings = bank_bindings;
+    }
     Ok((overview, details))
 }
 
@@ -201,6 +227,7 @@ impl ImportReport {
             Some(ItemType::SecureNote) => Some(&mut self.secure_notes),
             Some(ItemType::Card) => Some(&mut self.cards),
             Some(ItemType::Identity) => Some(&mut self.identities),
+            Some(ItemType::BankAccount) => Some(&mut self.bank_accounts),
             None => None,
         };
         if let Some(count) = count {
@@ -336,6 +363,7 @@ impl VaultService {
                 ItemType::SecureNote => report.secure_notes += 1,
                 ItemType::Card => report.cards += 1,
                 ItemType::Identity => report.identities += 1,
+                ItemType::BankAccount => report.bank_accounts += 1,
             }
             places.insert(backup_id, items.len());
             items.push(rebuilt);

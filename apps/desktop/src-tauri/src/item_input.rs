@@ -52,6 +52,8 @@ pub struct ItemInputWire {
     pub identity: Option<havenkeys_core::identity::IdentityFields>,
     #[serde(default)]
     pub card: Option<havenkeys_core::card::CardInput>,
+    #[serde(default)]
+    pub bank: Option<havenkeys_core::bank::BankAccountInput>,
     /// The core's `sections`, with OTP setups that may also be scanned
     /// tokens (resolved here, like `totp`).
     #[serde(default)]
@@ -103,6 +105,7 @@ impl ItemInputWire {
             sign_in_with: self.sign_in_with,
             identity: self.identity,
             card: self.card,
+            bank: self.bank,
             sections,
         })
     }

@@ -153,7 +153,9 @@ fn fields_of(kind: ItemKind) -> Vec<(String, FieldKind)> {
 fn kind_of(t: ItemType) -> ItemKind {
     match t {
         ItemType::Login => ItemKind::Login,
-        ItemType::SecureNote => ItemKind::SecureNote,
+        // The phone has no bank account screens yet; it shows one as a note
+        // without fields, and the core refuses a save as a type change.
+        ItemType::SecureNote | ItemType::BankAccount => ItemKind::SecureNote,
         ItemType::Card => ItemKind::Card,
         ItemType::Identity => ItemKind::Identity,
     }
@@ -197,6 +199,7 @@ fn blank(item_type: ItemType, title: String) -> ItemInput {
         sign_in_with: None,
         identity: None,
         card: None,
+        bank: None,
         sections: None,
     }
 }
