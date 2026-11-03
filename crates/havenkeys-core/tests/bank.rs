@@ -5,6 +5,7 @@ mod common;
 use common::{activated_vault, login, note, secret, NOW};
 use havenkeys_core::bank::{BankAccountFields, BankAccountInput};
 use havenkeys_core::card::CardInput;
+use havenkeys_core::custom_field::{FieldInput, FieldValueInput, SectionInput};
 use havenkeys_core::model::{ItemInput, ItemType, MatchType, SecretUpdate, UrlRule};
 use havenkeys_core::vault::VaultService;
 use havenkeys_core::Error;
@@ -25,6 +26,18 @@ fn bank_input(title: &str, bank: BankAccountInput) -> ItemInput {
     ItemInput {
         bank: Some(bank),
         ..ItemInput::blank_for_tests(ItemType::BankAccount, title)
+    }
+}
+
+fn pin_section() -> SectionInput {
+    SectionInput {
+        id: None,
+        title: Some(secret("Online")),
+        fields: vec![FieldInput {
+            id: None,
+            label: secret("PIN"),
+            value: FieldValueInput::Password(SecretUpdate::Set(secret("4321"))),
+        }],
     }
 }
 
@@ -132,12 +145,14 @@ fn shape_rules() {
         }],
         password: SecretUpdate::Set(secret("hunter2")),
         notes: SecretUpdate::Set(secret("agency note")),
+        sections: Some(vec![pin_section()]),
         ..bank_input("B", itau())
     };
     let id = create(&mut v, ok);
     let ov = v.get_item(&id).unwrap();
     assert_eq!(ov.urls.len(), 1);
     assert!(ov.has_password && ov.has_notes);
+    assert_eq!(fields(&v, &id).sections.len(), 1);
     let f = fields(&v, &id);
     assert_eq!(f.password.unwrap().expose(), "hunter2");
     assert_eq!(f.notes.unwrap().expose(), "agency note");
@@ -234,4 +249,21 @@ fn only_logins_and_bank_accounts_are_site_bound() {
     assert!(!ItemType::SecureNote.is_site_bound());
     assert!(!ItemType::Card.is_site_bound());
     assert!(!ItemType::Identity.is_site_bound());
+}
+
+#[test]
+fn custom_fields_read_back_through_item_sections_and_item_field() {
+    let (mut v, _) = activated_vault();
+    let input = ItemInput {
+        sections: Some(vec![pin_section()]),
+        ..bank_input("Main", itau())
+    };
+    let id = create(&mut v, input);
+    let sections = v.item_sections(&id).unwrap();
+    assert_eq!(sections.len(), 1);
+    let field = &sections[0].fields[0];
+    assert_eq!(field.label.expose(), "PIN");
+    let same = v.item_field(&id, &field.id).unwrap();
+    assert_eq!(same.id, field.id);
+    assert!(v.item_field(&id, &Uuid::new_v4()).is_err());
 }

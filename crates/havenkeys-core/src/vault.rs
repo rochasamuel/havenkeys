@@ -2334,11 +2334,12 @@ impl VaultService {
             ItemDetails::Login { sections, .. } | ItemDetails::SecureNote { sections, .. } => {
                 Ok(sections)
             }
+            ItemDetails::BankAccount(f) => Ok(f.sections),
             _ => Err(Error::NotFound),
         }
     }
 
-    /// One custom field of a login or note: the one lookup behind reveal,
+    /// One custom field of a login, bank account or note: the one lookup behind reveal,
     /// code, copy and open. `load_details` checks the session first, so a
     /// locked vault answers `Locked` before any id is looked at.
     pub fn item_field(&self, id: &Uuid, field_id: &Uuid) -> Result<CustomField> {
@@ -3193,4 +3194,31 @@ mod tests {
     // `derive_kek_for`: `UnlockTicket::derive_session_for_account` takes a
     // `&SecretKey` and an `&AccountRef`, not options, so neither can be
     // missing. The guarantee is now in the signature rather than in a test.
+
+    #[test]
+    fn a_bank_accounts_app_bindings_survive_an_edit() {
+        use crate::bank::BankAccountInput;
+        let input = || ItemInput {
+            bank: Some(BankAccountInput {
+                bank: Some("Itaú".into()),
+                ..Default::default()
+            }),
+            ..ItemInput::blank(ItemType::BankAccount, "Main".into())
+        };
+        let (_, details) = build_item(Uuid::from_u128(1), input(), None, 0, 0).unwrap();
+        let ItemDetails::BankAccount(mut f) = details else {
+            panic!("not a bank account")
+        };
+        f.app_bindings = vec![crate::model::AppBinding {
+            package: "com.itau".into(),
+            cert_sha256: "a".repeat(64),
+        }];
+        let current = Some(ItemDetails::BankAccount(f));
+        let (_, edited) = build_item(Uuid::from_u128(1), input(), current, 0, 1).unwrap();
+        let ItemDetails::BankAccount(f) = edited else {
+            panic!("not a bank account")
+        };
+        assert_eq!(f.app_bindings.len(), 1);
+        assert_eq!(f.app_bindings[0].package, "com.itau");
+    }
 }
