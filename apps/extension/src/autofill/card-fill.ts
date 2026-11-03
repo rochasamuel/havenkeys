@@ -209,7 +209,7 @@ function keyOf(kind: CardField["kind"], v: string): string {
 }
 
 /** A short non-cryptographic hash (cyrb53): only to recognise our own value again, not to protect it. */
-function hash(s: string): string {
+export function hash(s: string): string {
   let h1 = 0xdeadbeef;
   let h2 = 0x41c6ce57;
   for (let i = 0; i < s.length; i++) {
