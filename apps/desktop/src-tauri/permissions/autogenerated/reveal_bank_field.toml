@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-reveal-bank-field"
+description = "Enables the reveal_bank_field command without any pre-configured scope."
+commands.allow = ["reveal_bank_field"]
+
+[[permission]]
+identifier = "deny-reveal-bank-field"
+description = "Denies the reveal_bank_field command without any pre-configured scope."
+commands.deny = ["reveal_bank_field"]

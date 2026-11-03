@@ -119,7 +119,7 @@ const invalidInput: Record<string, string> = {
   "too many fields": "Campos demais.",
   "too many sections": "Seções demais.",
   "date must be YYYY-MM-DD": "A data deve estar no formato AAAA-MM-DD.",
-  "only a login or a secure note has custom fields": "Só um login ou uma nota segura tem campos personalizados.",
+  "only a login, a bank account or a secure note has custom fields": "Só um login, uma conta bancária ou uma nota segura tem campos personalizados.",
   "address is too long or contains control characters": "O endereço é longo demais ou contém caracteres de controle.",
   "email is too long or contains control characters": "O e-mail é longo demais ou contém caracteres de controle.",
   "phone is too long or contains control characters": "O telefone é longo demais ou contém caracteres de controle.",

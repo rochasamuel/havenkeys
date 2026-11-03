@@ -8,6 +8,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
   AccountField,
+  BankCopyField,
+  BankRevealField,
+  BankView,
   AccountStatus,
   FilesEdit,
   PendingFile,
@@ -197,6 +200,12 @@ export const api = {
   revealCardField: (id: string, field: CardRevealField) => call<string>("reveal_card_field", { id, field }),
   /** Rust copies the value and clears the clipboard later. */
   copyCardField: (id: string, field: CardCopyField) => call<CopyResult>("copy_card_field", { id, field }),
+  /** A bank account's values without its account, the digit or the password, on opening it. */
+  revealBank: (id: string) => call<BankView>("reveal_bank", { id }),
+  /** The account, its digit or the password, on an explicit reveal. */
+  revealBankField: (id: string, field: BankRevealField) => call<string>("reveal_bank_field", { id, field }),
+  /** Rust copies the value (branch and account with their digit) and clears the clipboard later. */
+  copyBankField: (id: string, field: BankCopyField) => call<CopyResult>("copy_bank_field", { id, field }),
   /** Brand and check digit of a number being typed; Rust keeps nothing. */
   checkCardNumber: (number: string) => call<CardNumberCheck>("check_card_number", { number }),
 

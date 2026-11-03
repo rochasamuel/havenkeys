@@ -13,7 +13,7 @@ export interface VaultStatus {
   damagedSettings: boolean;
 }
 
-export type ItemType = "login" | "secure_note" | "identity" | "card";
+export type ItemType = "login" | "secure_note" | "identity" | "card" | "bank_account";
 export type MatchType = "exact" | "origin" | "domain";
 
 export interface UrlRule {
@@ -54,6 +54,16 @@ export type CardBrand =
 
 /** "YYYY-MM" */
 export type CardExpiry = string;
+
+export type BankAccountType = "checking" | "savings" | "payment" | "other";
+
+/** What the overview keeps of a bank account: never the account, only its last 3 characters. */
+export interface BankSummary {
+  bank: string | null;
+  branch: string | null;
+  /** The account's last 3 characters with its digit: `45-6`; null under 4 digits. */
+  accountLast3: string | null;
+}
 
 /** What the overview keeps of a card: never the number, only its last 4 digits. */
 export interface CardSummary {
@@ -100,6 +110,7 @@ export interface ItemOverview {
   tags: string[];
   signInWith?: SignInWith;
   card?: CardSummary;
+  bank?: BankSummary;
   attachments?: AttachmentMeta[];
   createdAt: number;
   updatedAt: number;
@@ -151,6 +162,8 @@ export interface ItemInput {
   identity?: IdentityFields;
   /** A card's values. */
   card?: CardInput;
+  /** A bank account's values; the password, notes and sections are the item's own fields. */
+  bank?: BankInput;
 }
 
 /** A custom field's kind (spec 2026-09-30-login-custom-fields). */
@@ -274,6 +287,33 @@ export interface CardNumberCheck {
   brand: CardBrand | null;
   checkDigitOk: boolean;
 }
+
+/** A bank account as the editor sends it; account and its digit are keep/set/clear. */
+export interface BankInput {
+  bank?: string | null;
+  holderName?: string | null;
+  accountType?: BankAccountType | null;
+  branch?: string | null;
+  branchDigit?: string | null;
+  account?: SecretUpdate;
+  accountDigit?: SecretUpdate;
+}
+
+/** An opened bank account, without its account, the digit and the password. */
+export interface BankView {
+  bank: string | null;
+  holderName: string | null;
+  accountType: BankAccountType | null;
+  branch: string | null;
+  branchDigit: string | null;
+  notes: string | null;
+  sections: SectionView[];
+  hasAccount: boolean;
+  hasPassword: boolean;
+}
+
+export type BankRevealField = "account" | "accountDigit" | "password";
+export type BankCopyField = "branch" | "account" | "password";
 
 export type SecretField = "password" | "notes" | "content";
 export type CopyField = "username" | "password" | "totp" | "content";

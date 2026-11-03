@@ -8,6 +8,7 @@
 mod account;
 mod attachments;
 mod autostart;
+mod bank;
 mod card;
 mod clipboard;
 mod commands;
@@ -360,6 +361,9 @@ pub fn run() {
             identity::identity_item_id,
             identity::reveal_identity,
             identity::copy_identity_field,
+            bank::reveal_bank,
+            bank::reveal_bank_field,
+            bank::copy_bank_field,
             card::reveal_card,
             card::reveal_card_field,
             card::copy_card_field,
