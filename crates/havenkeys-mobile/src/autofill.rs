@@ -317,7 +317,11 @@ impl MobileVault {
                     Err(Error::NotFound) => None,
                     Err(e) => return Err(e.into()),
                 };
-                FillCredentials { username, password }
+                FillCredentials {
+                    username,
+                    password,
+                    bank: None,
+                }
             }
         };
         self.note_use(&item);

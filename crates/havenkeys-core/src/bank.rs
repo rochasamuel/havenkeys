@@ -121,6 +121,8 @@ impl Drop for BankSummary {
 
 /// The numbers a fill or copy needs; only an item with a branch and an
 /// account has them.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BankValues {
     pub branch: String,
     pub branch_digit: Option<String>,

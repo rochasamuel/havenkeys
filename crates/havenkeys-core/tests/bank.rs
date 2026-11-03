@@ -3,11 +3,12 @@
 mod common;
 
 use common::{activated_vault, login, note, secret, NOW};
+use havenkeys_core::app_target::AppIdentity;
 use havenkeys_core::bank::{BankAccountFields, BankAccountInput};
 use havenkeys_core::card::CardInput;
 use havenkeys_core::custom_field::{FieldInput, FieldValueInput, SectionInput};
 use havenkeys_core::model::{ItemInput, ItemType, MatchType, SecretUpdate, UrlRule};
-use havenkeys_core::vault::VaultService;
+use havenkeys_core::vault::{MatchKind, SaveAction, SaveTarget, VaultService};
 use havenkeys_core::Error;
 use uuid::Uuid;
 
@@ -266,4 +267,154 @@ fn custom_fields_read_back_through_item_sections_and_item_field() {
     let same = v.item_field(&id, &field.id).unwrap();
     assert_eq!(same.id, field.id);
     assert!(v.item_field(&id, &Uuid::new_v4()).is_err());
+}
+
+// ---------------------------------------------------------------- site binding
+
+const ITAU: &str = "https://www.itau.com.br/";
+
+fn itau_bank(password: &str) -> ItemInput {
+    ItemInput {
+        urls: vec![UrlRule {
+            url: "https://www.itau.com.br".into(),
+            match_type: MatchType::Domain,
+        }],
+        password: SecretUpdate::Set(secret(password)),
+        notes: SecretUpdate::Set(secret("agency note")),
+        sections: Some(vec![pin_section()]),
+        ..bank_input("Itaú PF", itau())
+    }
+}
+
+#[test]
+fn bank_matches_its_site_ranked_with_logins() {
+    let (mut v, _) = activated_vault();
+    let lg = create(
+        &mut v,
+        login("Itaú old", "maria", "pw", "https://www.itau.com.br"),
+    );
+    let bank = create(&mut v, itau_bank("bank-pw"));
+    let m = v.find_matches(ITAU, None, NOW).unwrap();
+    assert_eq!(m.len(), 2);
+    let b = m.iter().find(|s| s.id == bank).unwrap();
+    assert_eq!(b.kind, MatchKind::BankAccount);
+    assert!(b.username.is_none());
+    let summary = b.bank.as_ref().unwrap();
+    assert_eq!(summary.branch.as_deref(), Some("1234"));
+    assert_eq!(summary.account_last3.as_deref(), Some("45-6"));
+    let l = m.iter().find(|s| s.id == lg).unwrap();
+    assert_eq!(l.kind, MatchKind::Login);
+    assert!(l.bank.is_none());
+    let json = serde_json::to_string(&m).unwrap();
+    assert!(!json.contains("12345") && !json.contains("bank-pw") && !json.contains("Maria"));
+    assert!(v.matches_page(&bank, ITAU, None).unwrap());
+}
+
+#[test]
+fn bank_fill_returns_values_and_password_only() {
+    let (mut v, _) = activated_vault();
+    let bank = create(&mut v, itau_bank("bank-pw"));
+    let c = v.fill_for_page(&bank, ITAU, None, NOW).unwrap();
+    assert!(c.username.is_none());
+    assert_eq!(c.password.unwrap().expose(), "bank-pw");
+    let b = c.bank.unwrap();
+    assert_eq!(b.branch, "1234");
+    assert!(b.branch_digit.is_none());
+    assert_eq!(b.account.expose(), "12345");
+    assert_eq!(b.account_digit.unwrap().expose(), "6");
+
+    // A login's reply has no bank values.
+    let lg = create(&mut v, login("L", "u", "p", "https://www.itau.com.br"));
+    assert!(v
+        .fill_for_page(&lg, ITAU, None, NOW)
+        .unwrap()
+        .bank
+        .is_none());
+}
+
+#[test]
+fn fill_for_app_serves_bank_to_bound_app_only() {
+    let (mut v, _) = activated_vault();
+    let bank = create(&mut v, itau_bank("bank-pw"));
+    let app = AppIdentity::new("com.itau", &[vec![1; 32]]).unwrap();
+    let staged = v.stage_bind_app(&bank, &app, NOW).unwrap();
+    v.commit_write(staged, 2).unwrap();
+    assert_eq!(fields(&v, &bank).app_bindings.len(), 1);
+
+    let m = v.matches_for_app(&app, &[], NOW).unwrap();
+    assert_eq!(m.len(), 1);
+    assert_eq!(m[0].kind, MatchKind::BankAccount);
+    let c = v.fill_for_app(&bank, &app, &[]).unwrap();
+    assert!(c.username.is_none());
+    assert_eq!(c.password.unwrap().expose(), "bank-pw");
+    assert_eq!(c.bank.unwrap().account.expose(), "12345");
+
+    let wrong = AppIdentity::new("com.itau", &[vec![2; 32]]).unwrap();
+    assert!(v.matches_for_app(&wrong, &[], NOW).unwrap().is_empty());
+    assert_eq!(
+        v.fill_for_app(&bank, &wrong, &[]).err(),
+        Some(Error::Denied)
+    );
+    assert_eq!(
+        v.totp_for_app(&bank, &app, &[], 59).err(),
+        Some(Error::Denied)
+    );
+    // Verified by the site, too.
+    let hosts = vec!["www.itau.com.br".to_string()];
+    assert!(v.fill_for_app(&bank, &wrong, &hosts).is_ok());
+    assert!(v.login_hosts().unwrap().contains(&"www.itau.com.br".into()));
+    assert_eq!(v.search_logins("itaú").unwrap()[0].id, bank);
+}
+
+#[test]
+fn check_login_unchanged_for_bank_password() {
+    let (mut v, _) = activated_vault();
+    let bank = create(&mut v, itau_bank("bank-pw"));
+    let check =
+        |user: Option<&str>, pw: &str| v.check_login(ITAU, None, user, &secret(pw), None).unwrap();
+    assert_eq!(check(None, "bank-pw"), SaveAction::Unchanged);
+    assert_eq!(check(Some(" "), "bank-pw"), SaveAction::Unchanged);
+    assert_eq!(check(None, "other"), SaveAction::Add);
+    assert_eq!(check(Some("maria"), "other"), SaveAction::Add);
+    // A change-password form naming the bank's password never updates it.
+    assert_eq!(
+        v.check_login(ITAU, None, None, &secret("new"), Some(&secret("bank-pw")))
+            .unwrap(),
+        SaveAction::Add
+    );
+    // Nor may a save update be aimed at it.
+    let e = v.stage_save_login(
+        ITAU,
+        None,
+        None,
+        secret("new"),
+        SaveTarget::Update(&bank),
+        NOW,
+    );
+    assert_eq!(e.err(), Some(Error::Denied));
+}
+
+#[test]
+fn health_skips_bank_accounts() {
+    let (mut v, _) = activated_vault();
+    create(&mut v, itau_bank("123456"));
+    create(&mut v, itau_bank("123456"));
+    let report = havenkeys_core::health::compute(&v.health_snapshot().unwrap(), NOW);
+    assert!(report.issues.is_empty());
+    assert_eq!(report.counts.weak + report.counts.reused, 0);
+}
+
+#[test]
+fn lookalike_names_a_bank_accounts_site() {
+    let (mut v, _) = activated_vault();
+    create(&mut v, itau_bank("bank-pw"));
+    // "itаu" with a Cyrillic "а".
+    let fake = url::Url::parse("https://it\u{0430}u.com.br/login").unwrap();
+    assert_eq!(
+        v.lookalike_for_page(fake.as_str(), None)
+            .unwrap()
+            .as_deref(),
+        Some("itau.com.br")
+    );
+    assert_eq!(v.lookalike_for_page(ITAU, None).unwrap(), None);
 }

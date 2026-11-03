@@ -1,8 +1,9 @@
 //! Filling Android apps (spec 2026-10-01-android-app §7.2). An app target
-//! matches a login only if the user bound that app (package and signing
-//! certificate) to it, or if one of the login's websites vouches for the app
-//! through Digital Asset Links. `verified_hosts` is that second set, computed
-//! by the caller from `asset_links` — never from anything the app reported.
+//! matches a login (or bank account) only if the user bound that app
+//! (package and signing certificate) to it, or if one of the item's websites
+//! vouches for the app through Digital Asset Links. `verified_hosts` is that
+//! second set, computed by the caller from `asset_links` — never from
+//! anything the app reported.
 
 use crate::app_target::{AppIdentity, CERT_LEN};
 use crate::error::{Error, Result};
@@ -20,19 +21,6 @@ use crate::SecretString;
 use data_encoding::HEXLOWER_PERMISSIVE;
 use std::collections::BTreeSet;
 use uuid::Uuid;
-
-fn suggestion(o: &ItemOverview, strength: MatchStrength) -> Suggestion {
-    Suggestion {
-        id: o.id,
-        title: o.title.clone(),
-        username: o.username.clone(),
-        has_totp: o.has_totp,
-        strength,
-        account: o.sign_in_with.as_ref().and_then(|s| s.account.clone()),
-        provider: o.sign_in_with.as_ref().map(|s| s.provider),
-        tags: o.tags.clone(),
-    }
-}
 
 fn binding_cert(b: &AppBinding) -> Option<[u8; CERT_LEN]> {
     HEXLOWER_PERMISSIVE
@@ -89,10 +77,10 @@ impl VaultService {
         for o in session
             .overviews
             .values()
-            .filter(|o| o.item_type == ItemType::Login)
+            .filter(|o| o.item_type.is_site_bound())
         {
             if let Some(strength) = self.app_match(o, app, verified_hosts, policy)? {
-                out.push(suggestion(o, strength));
+                out.push(Suggestion::new(o, strength));
             }
         }
         out.sort_by_cached_key(|s| (s.strength, s.title.to_lowercase(), s.id));
@@ -118,15 +106,17 @@ impl VaultService {
     }
 
     fn bound_to(&self, id: &Uuid, app: &AppIdentity) -> Result<bool> {
-        match self.load_details(id) {
-            Ok(ItemDetails::Login { app_bindings, .. }) => Ok(app_bindings.iter().any(|b| {
-                b.package == app.package() && binding_cert(b).is_some_and(|c| app.signed_by(&c))
-            })),
-            Ok(_) => Ok(false),
-            Err(Error::Locked) => Err(Error::Locked),
+        let bindings = match self.load_details(id) {
+            Ok(ItemDetails::Login { app_bindings, .. }) => app_bindings,
+            Ok(ItemDetails::BankAccount(f)) => f.app_bindings,
+            Ok(_) => return Ok(false),
+            Err(Error::Locked) => return Err(Error::Locked),
             // A damaged item is simply not offered.
-            Err(_) => Ok(false),
-        }
+            Err(_) => return Ok(false),
+        };
+        Ok(bindings.iter().any(|b| {
+            b.package == app.package() && binding_cert(b).is_some_and(|c| app.signed_by(&c))
+        }))
     }
 
     fn authorize_for_app(
@@ -148,8 +138,7 @@ impl VaultService {
         policy: MatchPolicy,
     ) -> Result<&ItemOverview> {
         let o = self.session()?.overviews.get(id).ok_or(Error::NotFound)?;
-        if o.item_type != ItemType::Login
-            || self.app_match(o, app, verified_hosts, policy)?.is_none()
+        if !o.item_type.is_site_bound() || self.app_match(o, app, verified_hosts, policy)?.is_none()
         {
             return Err(Error::Denied);
         }
@@ -166,11 +155,7 @@ impl VaultService {
             .authorize_for_app(id, app, verified_hosts)?
             .username
             .clone();
-        let password = match self.load_details(id)? {
-            ItemDetails::Login { password, .. } => password,
-            _ => return Err(Error::Denied),
-        };
-        Ok(FillCredentials { username, password })
+        self.fill_reply(id, username)
     }
 
     pub fn totp_for_app(
@@ -180,20 +165,25 @@ impl VaultService {
         verified_hosts: &[String],
         unix_seconds: u64,
     ) -> Result<TotpCode> {
-        self.authorize_for_app(id, app, verified_hosts)?;
+        if self.authorize_for_app(id, app, verified_hosts)?.item_type != ItemType::Login {
+            return Err(Error::Denied);
+        }
         self.totp_code(id, unix_seconds)
     }
 
-    /// The user confirmed "Use <login> in <app>?". One binding per signing
-    /// certificate, so a multi-signer app matches with any of them.
+    /// The user confirmed "Use <login> in <app>?" (a login or bank
+    /// account). One binding per signing certificate, so a multi-signer app
+    /// matches with any of them.
     pub fn stage_bind_app(&self, id: &Uuid, app: &AppIdentity, now_ms: i64) -> Result<StagedWrite> {
         let existing = self.get_item(id)?;
-        if existing.item_type != ItemType::Login {
+        if !existing.item_type.is_site_bound() {
             return Err(Error::Denied);
         }
         let mut details = self.load_details(id)?;
-        let ItemDetails::Login { app_bindings, .. } = &mut details else {
-            return Err(Error::Corrupted);
+        let app_bindings = match &mut details {
+            ItemDetails::Login { app_bindings, .. } => app_bindings,
+            ItemDetails::BankAccount(f) => &mut f.app_bindings,
+            _ => return Err(Error::Corrupted),
         };
         for binding in bindings_for(app) {
             if !app_bindings.contains(&binding) {
@@ -254,6 +244,9 @@ impl VaultService {
             SaveTarget::Update(id) => {
                 let existing =
                     self.authorize_for_app_with(id, app, verified_hosts, MatchPolicy::DIRECT)?;
+                if existing.item_type != ItemType::Login {
+                    return Err(Error::Denied);
+                }
                 let input = ItemInput {
                     password: SecretUpdate::Set(password),
                     sign_in_with: existing.sign_in_with.clone(),
@@ -288,25 +281,27 @@ impl VaultService {
         })
     }
 
-    /// Every login whose title, username or website contains `query`, for
-    /// "Search HavenKeys…". No secrets.
+    /// Every login or bank account whose title, username or website (a bank
+    /// account: bank or branch) contains `query`, for "Search HavenKeys…".
+    /// No secrets.
     pub fn search_logins(&self, query: &str) -> Result<Vec<Suggestion>> {
         Ok(self
             .search(query)?
             .iter()
-            .filter(|o| o.item_type == ItemType::Login)
-            .map(|o| suggestion(o, MatchStrength::SameSite))
+            .filter(|o| o.item_type.is_site_bound())
+            .map(|o| Suggestion::new(o, MatchStrength::SameSite))
             .collect())
     }
 
-    /// Hosts the Digital Asset Links lookup may ask about.
+    /// Hosts the Digital Asset Links lookup may ask about: those of every
+    /// login's and bank account's websites.
     pub fn login_hosts(&self) -> Result<Vec<String>> {
         let session = self.session()?;
         let mut hosts = BTreeSet::new();
         for o in session
             .overviews
             .values()
-            .filter(|o| o.item_type == ItemType::Login)
+            .filter(|o| o.item_type.is_site_bound())
         {
             for rule in &o.urls {
                 let Ok(url) = url::Url::parse(&rule.url) else {

@@ -6,7 +6,7 @@
 
 use crate::account::AccountRef;
 use crate::attachment::FileEdits;
-use crate::bank::BankAccountFields;
+use crate::bank::{BankAccountFields, BankSummary, BankValues};
 use crate::card::{CardField, CardFields};
 use crate::crypto::blob::{self, BlobContext, Purpose};
 use crate::crypto::kdf::{derive_master_key, KdfParams};
@@ -192,13 +192,25 @@ impl UnlockTicket {
     }
 }
 
-/// A login offered for a page. Deliberately contains no secrets.
+/// What kind of site-bound item a [`Suggestion`] is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MatchKind {
+    Login,
+    BankAccount,
+}
+
+/// A login or bank account offered for a page. Deliberately contains no
+/// secrets.
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Suggestion {
     pub id: Uuid,
+    pub kind: MatchKind,
     pub title: String,
     pub username: Option<String>,
+    /// A bank account's summary, shown instead of a username.
+    pub bank: Option<BankSummary>,
     pub has_totp: bool,
     pub strength: MatchStrength,
     /// The account of a "Sign in with" login (never a secret).
@@ -206,6 +218,28 @@ pub struct Suggestion {
     pub provider: Option<SsoProvider>,
     /// The login's tags (never secret).
     pub tags: Vec<String>,
+}
+
+impl Suggestion {
+    /// `o` must be site-bound ([`ItemType::is_site_bound`]).
+    pub(crate) fn new(o: &ItemOverview, strength: MatchStrength) -> Self {
+        Self {
+            id: o.id,
+            kind: if o.item_type == ItemType::BankAccount {
+                MatchKind::BankAccount
+            } else {
+                MatchKind::Login
+            },
+            title: o.title.clone(),
+            username: o.username.clone(),
+            bank: o.bank.clone(),
+            has_totp: o.has_totp,
+            strength,
+            account: o.sign_in_with.as_ref().and_then(|s| s.account.clone()),
+            provider: o.sign_in_with.as_ref().map(|s| s.provider),
+            tags: o.tags.clone(),
+        }
+    }
 }
 
 impl std::fmt::Debug for Suggestion {
@@ -334,12 +368,14 @@ impl PageContext {
     }
 }
 
-/// Exactly what is needed to fill a login form, nothing more.
+/// Exactly what is needed to fill a login form, nothing more. A bank
+/// account's has no username and its [`BankValues`].
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FillCredentials {
     pub username: Option<String>,
     pub password: Option<SecretString>,
+    pub bank: Option<BankValues>,
 }
 
 impl std::fmt::Debug for FillCredentials {
@@ -1494,8 +1530,9 @@ impl VaultService {
     // URL is re-checked against the item's own website rules on every call; the
     // caller's claims about which item "belongs" to a page are never trusted.
 
-    /// Logins whose website rules match the page, best match first.
-    /// Returns no secrets: only ID, title and username.
+    /// Logins and bank accounts whose website rules match the page, best
+    /// match first. Returns no secrets: only ID, title and username (a bank
+    /// account: its [`BankSummary`]).
     ///
     /// `top_url` is the tab's top-level page when the fields are in an
     /// iframe (`None` for the top frame). A login is offered in a frame only
@@ -1544,7 +1581,7 @@ impl VaultService {
         let saved: BTreeSet<String> = session
             .overviews
             .values()
-            .filter(|o| o.item_type == ItemType::Login)
+            .filter(|o| o.item_type.is_site_bound())
             .flat_map(|o| o.urls.iter())
             .filter_map(|r| lookalike::rule_site(&r.url))
             .collect();
@@ -1557,8 +1594,8 @@ impl VaultService {
             .find_map(|site| lookalike::imitated(&site, &saved)))
     }
 
-    /// Whether `id` is a login whose rules match the page (and the embedding
-    /// page, for frames), under the same equivalent-domains setting as
+    /// Whether `id` is a login or bank account whose rules match the page
+    /// (and the embedding page, for frames), under the same equivalent-domains setting as
     /// [`find_matches`](Self::find_matches). The same answer as "is `id`
     /// among `find_matches`", without ranking: it reads no activity record,
     /// so an origin check never depends on one. An unknown ID or an
@@ -1572,7 +1609,7 @@ impl VaultService {
         Ok(session
             .overviews
             .get(id)
-            .is_some_and(|o| o.item_type == ItemType::Login && page.matches(o, policy).is_some()))
+            .is_some_and(|o| o.item_type.is_site_bound() && page.matches(o, policy).is_some()))
     }
 
     /// The policy user-facing match lists and fill authorization follow:
@@ -1606,26 +1643,15 @@ impl VaultService {
         let mut out: Vec<Suggestion> = session
             .overviews
             .values()
-            .filter(|o| o.item_type == ItemType::Login)
-            .filter_map(|o| {
-                page.matches(o, policy).map(|strength| Suggestion {
-                    id: o.id,
-                    title: o.title.clone(),
-                    username: o.username.clone(),
-                    has_totp: o.has_totp,
-                    strength,
-                    account: o.sign_in_with.as_ref().and_then(|s| s.account.clone()),
-                    provider: o.sign_in_with.as_ref().map(|s| s.provider),
-                    tags: o.tags.clone(),
-                })
-            })
+            .filter(|o| o.item_type.is_site_bound())
+            .filter_map(|o| page.matches(o, policy).map(|s| Suggestion::new(o, s)))
             .collect();
         out.sort_by_cached_key(|s| (s.strength, s.title.to_lowercase(), s.id));
         Ok(out)
     }
 
-    /// The item, if and only if it is a login whose rules match the page
-    /// (and the embedding page, for frames).
+    /// The item, if and only if it is a login or bank account whose rules
+    /// match the page (and the embedding page, for frames).
     ///
     /// Follows the vault's equivalent-domains setting, like
     /// [`find_matches`](Self::find_matches).
@@ -1651,15 +1677,16 @@ impl VaultService {
         let session = self.session()?;
         let overview = session.overviews.get(id).ok_or(Error::NotFound)?;
         let page = PageContext::parse(page_url, top_url).ok_or(Error::Denied)?;
-        if overview.item_type != ItemType::Login || page.matches(overview, policy).is_none() {
+        if !overview.item_type.is_site_bound() || page.matches(overview, policy).is_none() {
             return Err(Error::Denied);
         }
         Ok(overview)
     }
 
-    /// Username and password for filling the page. Denied unless the item's
-    /// own website rules match it. A returned password is remembered for
-    /// `UPGRADE_WINDOW_MS` as consent for the site's passkey upgrade.
+    /// Username and password (a bank account: password and bank values)
+    /// for filling the page. Denied unless the item's own website rules
+    /// match it. A fill is remembered for `UPGRADE_WINDOW_MS` as consent for
+    /// the site's passkey upgrade.
     pub fn fill_for_page(
         &mut self,
         id: &Uuid,
@@ -1671,17 +1698,35 @@ impl VaultService {
             .authorize_for_page(id, page_url, top_url)?
             .username
             .clone();
-        let password = match self.load_details(id)? {
-            ItemDetails::Login { password, .. } => password,
-            ItemDetails::SecureNote { .. }
-            | ItemDetails::Identity(_)
-            | ItemDetails::Card(_)
-            | ItemDetails::BankAccount(_) => return Err(Error::Denied),
-        };
-        if password.is_some() {
+        let creds = self.fill_reply(id, username)?;
+        if creds.password.is_some() || creds.bank.is_some() {
             self.record_fill(*id, page_url, now_ms)?;
         }
-        Ok(FillCredentials { username, password })
+        Ok(creds)
+    }
+
+    /// The fill for an authorized item: a login's username and password, or
+    /// a bank account's password and values. Nothing else leaves.
+    pub(crate) fn fill_reply(
+        &self,
+        id: &Uuid,
+        username: Option<String>,
+    ) -> Result<FillCredentials> {
+        Ok(match self.load_details(id)? {
+            ItemDetails::Login { password, .. } => FillCredentials {
+                username,
+                password,
+                bank: None,
+            },
+            ItemDetails::BankAccount(f) => FillCredentials {
+                username: None,
+                bank: f.values(),
+                password: f.password,
+            },
+            ItemDetails::SecureNote { .. } | ItemDetails::Identity(_) | ItemDetails::Card(_) => {
+                return Err(Error::Denied)
+            }
+        })
     }
 
     fn record_fill(&mut self, item_id: Uuid, page_url: &str, now_ms: i64) -> Result<()> {
@@ -1709,17 +1754,22 @@ impl VaultService {
         top_url: Option<&str>,
         unix_seconds: u64,
     ) -> Result<TotpCode> {
-        self.authorize_for_page(id, page_url, top_url)?;
+        if self.authorize_for_page(id, page_url, top_url)?.item_type != ItemType::Login {
+            return Err(Error::Denied);
+        }
         self.totp_code(id, unix_seconds)
     }
 
     /// Whether a fill of this login may press the page's sign-in button: the
     /// vault's `auto_sign_in` setting and the login's own switch. Asked only
-    /// after `fill_for_page` / `totp_for_page` authorized the item.
+    /// after `fill_for_page` / `totp_for_page` authorized the item. Never
+    /// for anything but a login: a bank fill does not submit.
     pub fn auto_sign_in_for(&self, id: &Uuid) -> Result<bool> {
         let session = self.session()?;
         let overview = session.overviews.get(id).ok_or(Error::NotFound)?;
-        Ok(session.settings.auto_sign_in && overview.auto_sign_in)
+        Ok(overview.item_type == ItemType::Login
+            && session.settings.auto_sign_in
+            && overview.auto_sign_in)
     }
 
     /// Start a "Sign in with" pick: the provider, account and whether the
@@ -1929,6 +1979,10 @@ impl VaultService {
     /// may still make it `Unchanged`, never `Update`
     /// ([`unchanged_or_add`](Self::unchanged_or_add)).
     ///
+    /// A bank account saved for the page counts only for `Unchanged`, when
+    /// no username was typed and its password is the one submitted (a
+    /// bank's password-only second page). It is never `Update`d.
+    ///
     /// Usernames compare case-insensitively after trimming. Passwords are
     /// compared inside the core and never returned.
     pub fn check_login(
@@ -1990,17 +2044,20 @@ impl VaultService {
                 continue;
             }
             let saved = match self.load_details(&c.id) {
-                Ok(ItemDetails::Login {
-                    password: Some(saved),
-                    ..
-                }) => Some(saved),
+                Ok(ItemDetails::Login { password, .. }) => password,
+                Ok(ItemDetails::BankAccount(f)) => f.password,
                 _ => None,
             };
-            if let Some(saved) = &saved {
-                if secrets_equal(saved, password) {
-                    return Ok(SaveAction::Unchanged);
-                }
-                if current.is_some_and(|cur| secrets_equal(saved, cur)) {
+            if saved.as_ref().is_some_and(|s| secrets_equal(s, password)) {
+                return Ok(SaveAction::Unchanged);
+            }
+            // A bank account's password can only make a submission
+            // `Unchanged`: it is never updated from a form.
+            if c.kind != MatchKind::Login {
+                continue;
+            }
+            if let (Some(saved), Some(cur)) = (&saved, current) {
+                if secrets_equal(saved, cur) {
                     by_current.push(c.id);
                 }
             }
@@ -2065,6 +2122,9 @@ impl VaultService {
         now_ms: i64,
     ) -> Result<StagedSave> {
         let existing = self.authorize_for_page_with(id, page_url, top_url, MatchPolicy::DIRECT)?;
+        if existing.item_type != ItemType::Login {
+            return Err(Error::Denied);
+        }
         let input = ItemInput {
             password: SecretUpdate::Set(password),
             sign_in_with: existing.sign_in_with.clone(),
@@ -2325,10 +2385,11 @@ impl VaultService {
 
     // ------------------------------------------------------------ custom fields
 
-    /// A login's or secure note's custom fields (specs
-    /// 2026-09-30-login-custom-fields, 2026-10-16-secure-note-fields).
-    /// `NotFound` for any other kind of item. Holds Password values and OTP
-    /// secrets: callers hand out `custom_field::views` or one value.
+    /// A login's, secure note's or bank account's custom fields (specs
+    /// 2026-09-30-login-custom-fields, 2026-10-16-secure-note-fields,
+    /// 2026-11-03-bank-account). `NotFound` for any other kind of item.
+    /// Holds Password values and OTP secrets: callers hand out
+    /// `custom_field::views` or one value.
     pub fn item_sections(&self, id: &Uuid) -> Result<Vec<FieldSection>> {
         match self.load_details(id)? {
             ItemDetails::Login { sections, .. } | ItemDetails::SecureNote { sections, .. } => {
@@ -2339,9 +2400,9 @@ impl VaultService {
         }
     }
 
-    /// One custom field of a login, bank account or note: the one lookup behind reveal,
-    /// code, copy and open. `load_details` checks the session first, so a
-    /// locked vault answers `Locked` before any id is looked at.
+    /// One custom field of a login, bank account or note: the one lookup
+    /// behind reveal, code, copy and open. `load_details` checks the session
+    /// first, so a locked vault answers `Locked` before any id is looked at.
     pub fn item_field(&self, id: &Uuid, field_id: &Uuid) -> Result<CustomField> {
         self.item_sections(id)?
             .into_iter()

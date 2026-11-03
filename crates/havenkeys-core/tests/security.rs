@@ -1685,3 +1685,162 @@ fn save_check_order_is_pinned() {
         Some(Error::Locked)
     );
 }
+
+// ---------------------------------------------------------------- bank accounts
+
+const ITAU: &str = "https://www.itau.com.br/login";
+
+/// A vault with an Itaú bank account (agência 1234, conta 12345-6) saved
+/// for `www.itau.com.br`, with both auto sign-in switches on.
+fn bank_vault() -> (havenkeys_core::vault::VaultService, Uuid) {
+    let (mut v, _) = activated_vault();
+    let input = ItemInput {
+        urls: vec![havenkeys_core::model::UrlRule {
+            url: "https://www.itau.com.br".into(),
+            match_type: havenkeys_core::model::MatchType::Domain,
+        }],
+        password: SecretUpdate::Set(secret("bank-pw")),
+        auto_sign_in: Some(true),
+        bank: Some(havenkeys_core::bank::BankAccountInput {
+            bank: Some("Itaú".into()),
+            branch: Some("1234".into()),
+            account: SecretUpdate::Set(secret("12345-6")),
+            ..Default::default()
+        }),
+        ..ItemInput::blank_for_tests(ItemType::BankAccount, "Itaú")
+    };
+    let staged = v.stage_create(input, NOW).unwrap();
+    let id = v.commit_write(staged, 1).unwrap().unwrap().id;
+    (v, id)
+}
+
+/// A1/A2 with a bank account: another site never gets it.
+#[test]
+fn bank_fill_denied_on_wrong_origin() {
+    let (mut v, id) = bank_vault();
+    assert!(v.fill_for_page(&id, ITAU, None, NOW).is_ok());
+    for page in [
+        "https://evil.com/login",
+        "https://itau.com.br.evil.com/login",
+        "https://itau-login.example.com/",
+        "http://www.itau.com.br/login",
+    ] {
+        assert_eq!(
+            v.fill_for_page(&id, page, None, NOW).err(),
+            Some(Error::Denied),
+            "{page}"
+        );
+        assert!(!v.matches_page(&id, page, None).unwrap(), "{page}");
+        assert!(
+            v.find_matches(page, None, NOW).unwrap().is_empty(),
+            "{page}"
+        );
+    }
+}
+
+/// A1 (frames): the bank's own page framed by a page it is not saved for.
+#[test]
+fn bank_fill_denied_in_frame_of_unsaved_top_page() {
+    let (mut v, id) = bank_vault();
+    for top in ["https://evil.com/", "https://itau.com.br.evil.com/"] {
+        assert!(v.find_matches(ITAU, Some(top), NOW).unwrap().is_empty());
+        assert_eq!(
+            v.fill_for_page(&id, ITAU, Some(top), NOW).err(),
+            Some(Error::Denied),
+            "{top}"
+        );
+    }
+}
+
+/// A3 with a bank account.
+#[test]
+fn bank_fill_denied_when_locked() {
+    let (mut v, id) = bank_vault();
+    v.lock();
+    assert_eq!(
+        v.fill_for_page(&id, ITAU, None, NOW).err(),
+        Some(Error::Locked)
+    );
+    assert_eq!(v.find_matches(ITAU, None, NOW).err(), Some(Error::Locked));
+}
+
+/// A card (or note) id sent to the page fill is denied, even on a page.
+#[test]
+fn card_id_sent_to_fill_is_denied() {
+    let (mut v, _) = bank_vault();
+    let card = ItemInput {
+        card: Some(havenkeys_core::card::CardInput {
+            number: SecretUpdate::Set(secret("5200 8282 8282 8210")),
+            ..Default::default()
+        }),
+        ..ItemInput::blank_for_tests(ItemType::Card, "Card")
+    };
+    let staged = v.stage_create(card, NOW).unwrap();
+    let card = v.commit_write(staged, 2).unwrap().unwrap().id;
+    let staged = v.stage_create(note("www.itau.com.br", "x"), NOW).unwrap();
+    let note = v.commit_write(staged, 3).unwrap().unwrap().id;
+    for id in [card, note] {
+        assert_eq!(
+            v.fill_for_page(&id, ITAU, None, NOW).err(),
+            Some(Error::Denied)
+        );
+        assert!(!v.matches_page(&id, ITAU, None).unwrap());
+    }
+}
+
+/// A bank account has no TOTP, passkey or "Sign in with": those requests
+/// are denied for its id on its own site.
+#[test]
+fn bank_id_denied_for_totp_passkey_sso() {
+    let (mut v, id) = bank_vault();
+    assert_eq!(
+        v.totp_for_page(&id, ITAU, None, 59).err(),
+        Some(Error::Denied)
+    );
+    assert_eq!(
+        v.start_sso_for_page(&id, ITAU, None).err(),
+        Some(Error::Denied)
+    );
+    assert_eq!(
+        v.passkey_assert(&id, &[1; 16], "itau.com.br", ITAU, None, &[3; 32])
+            .err(),
+        Some(Error::Denied)
+    );
+    let create = havenkeys_core::passkey::PasskeyCreate {
+        rp_id: "itau.com.br",
+        page_url: ITAU,
+        top_url: None,
+        challenge: &[7; 32],
+        user_handle: &[1],
+        user_name: "maria",
+        display_name: None,
+        item_id: Some(id),
+        conditional: false,
+    };
+    assert_eq!(
+        v.stage_passkey_create(create, NOW).err(),
+        Some(Error::Denied)
+    );
+    let query = havenkeys_core::passkey::CreateQuery {
+        rp_id: "itau.com.br",
+        page_url: ITAU,
+        top_url: None,
+        user_name: "maria",
+        exclude: &[],
+        conditional: false,
+    };
+    assert!(v
+        .check_passkey_create(&query, NOW)
+        .unwrap()
+        .candidates
+        .is_empty());
+}
+
+/// A bank fill never submits, whatever the vault setting and item switch.
+#[test]
+fn auto_sign_in_is_false_for_bank() {
+    let (v, id) = bank_vault();
+    assert!(v.settings().unwrap().auto_sign_in);
+    assert!(v.get_item(&id).unwrap().auto_sign_in);
+    assert!(!v.auto_sign_in_for(&id).unwrap());
+}

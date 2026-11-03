@@ -256,7 +256,7 @@ pub(crate) fn dispatch_with(
                 .fill_for_page(item_id, url, top_url.as_deref(), now_ms(unix_seconds))
                 .map_err(item_code)?;
             let auto_submit = v.auto_sign_in_for(item_id).map_err(item_code)?;
-            if creds.password.is_some() {
+            if creds.password.is_some() || creds.bank.is_some() {
                 // The user picked this login: rank it higher next time.
                 // Never fails the fill (activity is a convenience).
                 let _ = v.record_use(item_id, now_ms(unix_seconds));
