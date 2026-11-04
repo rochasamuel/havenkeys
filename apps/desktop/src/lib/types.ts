@@ -313,7 +313,7 @@ export interface BankView {
 }
 
 export type BankRevealField = "account" | "accountDigit" | "password";
-export type BankCopyField = "branch" | "account" | "password";
+export type BankCopyField = "bank" | "holderName" | "branch" | "account" | "password" | "details";
 
 export type SecretField = "password" | "notes" | "content";
 export type CopyField = "username" | "password" | "totp" | "content";

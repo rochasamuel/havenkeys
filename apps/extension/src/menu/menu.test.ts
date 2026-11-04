@@ -682,7 +682,7 @@ describe("bank rows", () => {
     expect(rows).toHaveLength(2);
     expect(rows[0]!.querySelector(".avatar svg")).not.toBeNull();
     expect(rows[0]!.querySelector(".title")!.textContent).toBe("Itaú PF");
-    expect(rows[0]!.querySelector(".user")!.textContent).toBe("Ag 1234 · Account •••45-6");
+    expect(rows[0]!.querySelector(".user")!.textContent).toBe("Branch 1234 · Account •••45-6");
     expect(rows[1]!.querySelector(".user")!.textContent).toBe("12345");
     handlers.get(rows[0]!)?.(trusted);
     await vi.advanceTimersByTimeAsync(0);
@@ -692,7 +692,7 @@ describe("bank rows", () => {
   it("lists bank accounts after the logins in a password box's menu", async () => {
     await setup(view("login", [login, bankItem]));
     const users = Array.from(document.querySelectorAll(".row .user")).map((u) => u.textContent);
-    expect(users).toEqual(["12345", "Ag 1234 · Account •••45-6"]);
+    expect(users).toEqual(["12345", "Branch 1234 · Account •••45-6"]);
   });
 
   it("says nothing is saved, with nothing to click, when a bank box's menu is empty", async () => {
@@ -711,8 +711,8 @@ describe("bank rows", () => {
 describe("bankSubtitle", () => {
   it("joins the parts it has and drops the missing ones", async () => {
     const { bankSubtitle } = await import("./common");
-    expect(bankSubtitle({ bank: "Itaú", branch: "1234", accountLast3: "45-6" })).toBe("Ag 1234 · Account •••45-6");
-    expect(bankSubtitle({ bank: "Itaú", branch: "1234", accountLast3: null })).toBe("Ag 1234");
+    expect(bankSubtitle({ bank: "Itaú", branch: "1234", accountLast3: "45-6" })).toBe("Branch 1234 · Account •••45-6");
+    expect(bankSubtitle({ bank: "Itaú", branch: "1234", accountLast3: null })).toBe("Branch 1234");
     expect(bankSubtitle({ bank: null, branch: null, accountLast3: "45-6" })).toBe("Account •••45-6");
     expect(bankSubtitle({ bank: "Itaú", branch: null, accountLast3: null })).toBe("Itaú");
     expect(bankSubtitle({ bank: null, branch: null, accountLast3: null })).toBe("");

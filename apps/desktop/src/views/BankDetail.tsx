@@ -39,7 +39,15 @@ async function revealAccount(id: string): Promise<string> {
  * The account or the password: dots until the eye, fetched from Rust only
  * then, and dropped when hidden, after 30 s, and on unmount (including lock).
  */
-function SecretRow({ label, masked, load, copy }: { label: string; masked: string; load: () => Promise<string>; copy: () => Promise<boolean> }) {
+function SecretRow(props: {
+  label: string;
+  masked: string;
+  /** What a screen reader hears for the dots. */
+  hiddenLabel: string;
+  load: () => Promise<string>;
+  copy: () => Promise<boolean>;
+}) {
+  const { label, masked, hiddenLabel, load, copy } = props;
   const { t } = useI18n();
   const toast = useToast();
   const secret = useRevealedSecret(load);
@@ -64,7 +72,7 @@ function SecretRow({ label, masked, load, copy }: { label: string; masked: strin
         {shown ? (
           <span className="mono selectable revealed">{secret.value}</span>
         ) : (
-          <span className="mono masked" aria-label={t.bank.hidden(label)}>
+          <span className="mono masked" aria-label={hiddenLabel}>
             {masked}
           </span>
         )}
@@ -76,7 +84,7 @@ function SecretRow({ label, masked, load, copy }: { label: string; masked: strin
 /** A bank account, read-only. Opening it decrypts everything but the account, its digit and the password. */
 export function BankDetail({ item, readOnly, onTag, onEdit, onDelete }: Props) {
   const toast = useToast();
-  const { t, dateLocale } = useI18n();
+  const { t, locale, dateLocale } = useI18n();
   const [view, setView] = useState<BankView | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -99,7 +107,7 @@ export function BankDetail({ item, readOnly, onTag, onEdit, onDelete }: Props) {
 
   const copy = (field: BankCopyField, label: string) => async () => {
     try {
-      const r = await api.copyBankField(item.id, field);
+      const r = await api.copyBankField(item.id, field, locale);
       toast(t.bank.copied(label, r.clearAfterSeconds));
       return true;
     } catch (e) {
@@ -107,6 +115,7 @@ export function BankDetail({ item, readOnly, onTag, onEdit, onDelete }: Props) {
       return false;
     }
   };
+  const copyButton = (field: BankCopyField, label: string) => <CopyButton label={t.bank.copy(label)} onCopy={copy(field, label)} />;
   const loadAccount = useCallback(() => revealAccount(item.id), [item.id]);
   const loadPassword = useCallback(() => api.revealBankField(item.id, "password"), [item.id]);
   const f = t.bank.fields;
@@ -121,6 +130,9 @@ export function BankDetail({ item, readOnly, onTag, onEdit, onDelete }: Props) {
           <p className="item-kind">{t.bank.kind}</p>
         </div>
         <div className="item-head-actions">
+          <button className="btn btn-small" onClick={() => void copy("details", t.bank.details)()} disabled={!view}>
+            <Icon name="copy" size={15} /> {t.bank.copyDetails}
+          </button>
           <button className="btn btn-small" onClick={onEdit} disabled={readOnly || !view}>
             <Icon name="edit" size={15} /> {t.common.edit}
           </button>
@@ -144,34 +156,40 @@ export function BankDetail({ item, readOnly, onTag, onEdit, onDelete }: Props) {
         <>
           <div className="group">
             {view.bank && (
-              <Field label={f.bank}>
-                <span className="selectable" data-truncate="">
+              <Field label={f.bank} actions={copyButton("bank", f.bank)}>
+                <span className="selectable" data-truncate="" title={view.bank}>
                   {view.bank}
                 </span>
               </Field>
             )}
-            {view.holderName && (
-              <Field label={f.holderName}>
-                <span className="selectable" data-truncate="">
-                  {view.holderName}
-                </span>
+            {view.branch && (
+              <Field label={f.branch} actions={copyButton("branch", f.branch)}>
+                <span className="mono selectable">{joinDigit(view.branch, view.branchDigit)}</span>
               </Field>
+            )}
+            {view.hasAccount && (
+              <SecretRow
+                label={f.account}
+                masked={last3 ? `•••${last3}` : "•••"}
+                hiddenLabel={last3 ? t.bank.accountEnding(last3) : t.bank.hidden(f.account)}
+                load={loadAccount}
+                copy={copy("account", f.account)}
+              />
             )}
             {view.accountType && (
               <Field label={f.accountType}>
                 <span>{t.bank.types[view.accountType]}</span>
               </Field>
             )}
-            {view.branch && (
-              <Field label={f.branch} actions={<CopyButton label={t.bank.copy(f.branch)} onCopy={copy("branch", f.branch)} />}>
-                <span className="mono selectable">{joinDigit(view.branch, view.branchDigit)}</span>
+            {view.holderName && (
+              <Field label={f.holderName} actions={copyButton("holderName", f.holderName)}>
+                <span className="selectable" data-truncate="" title={view.holderName}>
+                  {view.holderName}
+                </span>
               </Field>
             )}
-            {view.hasAccount && (
-              <SecretRow label={f.account} masked={last3 ? `•••${last3}` : "•••"} load={loadAccount} copy={copy("account", f.account)} />
-            )}
             {view.hasPassword && (
-              <SecretRow label={f.password} masked="••••••••••••" load={loadPassword} copy={copy("password", f.password)} />
+              <SecretRow label={f.password} masked="••••••••••••" hiddenLabel={t.bank.hidden(f.password)} load={loadPassword} copy={copy("password", f.password)} />
             )}
           </div>
 

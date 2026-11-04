@@ -868,8 +868,18 @@ export const desktopScenarios = [
     respond: {},
     act: async (page) => {
       await page.click(".list-item:has(.avatar-bank_account)");
-      await page.click(".item-head-actions .btn");
+      await page.click(".item-head-actions .btn >> nth=1");
       // The saved account is kept: its boxes stay empty, with the keep hint.
+    },
+  },
+  {
+    // The account row, its Remove and the keep hint, scrolled into view (the min size cuts it off).
+    name: "bank-editor-account",
+    respond: {},
+    act: async (page) => {
+      await page.click(".list-item:has(.avatar-bank_account)");
+      await page.click(".item-head-actions .btn >> nth=1");
+      await page.locator(".bank-keep").scrollIntoViewIfNeeded();
     },
   },
   {

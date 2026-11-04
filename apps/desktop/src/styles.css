@@ -4223,8 +4223,8 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
 }
 
 /* A number and its check digit, two boxes in one row read as one value:
-   `12345 – 6`. The number box is sized to its longest value so the digit
-   sits beside it, not at the row's far end. */
+   `12345 – 6`. Each number box is sized to its longest usual value so the
+   digit sits right after it. */
 .bank-number {
   flex: 1 1 100px;
   display: flex;
@@ -4234,10 +4234,22 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   min-width: 0;
 }
 
+/* The number, the dash and the digit never part; Remove and the hint wrap. */
+.bank-pair {
+  flex: 0 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .bank-number .edit-input {
-  flex: 1 1 0;
-  max-width: 12em;
+  flex: 0 1 9ch;
   min-width: 3em;
+}
+
+.bank-number .edit-input.bank-account {
+  flex-basis: 16ch;
 }
 
 .bank-number .edit-input.bank-digit {
@@ -4256,4 +4268,16 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
 .bank-dash {
   flex: none;
   color: var(--muted);
+}
+
+/* Under a kept account's empty boxes: what leaving them empty does. */
+.bank-keep {
+  flex: 1 0 100%;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* The row's label is a <label> here, pointing at the number box. */
+label.edit-label {
+  cursor: default;
 }

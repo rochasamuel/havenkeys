@@ -276,7 +276,7 @@ describe("popup bank accounts", () => {
     await import("./popup");
     await vi.waitFor(() => expect(document.querySelectorAll(".item")).toHaveLength(2));
     const row = document.querySelectorAll(".item")[1]!;
-    expect(row.querySelector(".user")!.textContent).toBe("Ag 1234 · Account •••45-6");
+    expect(row.querySelector(".user")!.textContent).toBe("Branch 1234 · Account •••45-6");
     row.querySelector<HTMLButtonElement>(".actions .btn")!.click();
     await vi.waitFor(() => expect(asked).toContainEqual({ type: "popup_fill", itemId: bank.id }));
   });
@@ -286,7 +286,7 @@ describe("popup bank accounts", () => {
     vi.resetModules();
     await import("./popup");
     await vi.waitFor(() => expect(document.querySelectorAll(".item")).toHaveLength(2));
-    expect(document.querySelectorAll(".item")[1]!.querySelector(".user")!.textContent).toBe("Ag 1234 · Account •••45-6");
+    expect(document.querySelectorAll(".item")[1]!.querySelector(".user")!.textContent).toBe("Branch 1234 · Account •••45-6");
     expect([...document.querySelectorAll("button")].map((b) => b.textContent)).not.toContain(en.popup.fill);
   });
 });

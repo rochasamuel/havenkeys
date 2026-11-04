@@ -99,15 +99,31 @@ describe("BankDetail", () => {
     expect(host.textContent).not.toContain("s3cret");
   });
 
-  it("copies the branch, the account and the password through Rust", async () => {
+  it("copies each value through Rust, in the UI language", async () => {
     await render();
-    await click(en.bank.copy(f.branch));
-    await click(en.bank.copy(f.account));
-    await click(en.bank.copy(f.password));
+    for (const label of [f.bank, f.branch, f.account, f.holderName, f.password]) await click(en.bank.copy(label));
     expect(copyBankField.mock.calls).toEqual([
-      ["b1", "branch"],
-      ["b1", "account"],
-      ["b1", "password"],
+      ["b1", "bank", "en"],
+      ["b1", "branch", "en"],
+      ["b1", "account", "en"],
+      ["b1", "holderName", "en"],
+      ["b1", "password", "en"],
     ]);
+    expect(button(en.bank.copy(f.accountType))).toBeNull();
+  });
+
+  it("copies the transfer details from the header", async () => {
+    await render();
+    const copyDetails = [...host.querySelectorAll<HTMLButtonElement>(".item-head-actions button")].find((b) => b.textContent?.includes(en.bank.copyDetails))!;
+    await act(async () => copyDetails.click());
+    expect(copyBankField).toHaveBeenCalledWith("b1", "details", "en");
+    expect(document.body.textContent).toContain(en.bank.copied(en.bank.details, 30));
+  });
+
+  it("lists bank, branch, account, type, then holder, and names the account's ending", async () => {
+    await render();
+    const labels = [...host.querySelectorAll(".row-label")].map((l) => l.textContent);
+    expect(labels).toEqual([f.bank, f.branch, f.account, f.accountType, f.holderName, f.password]);
+    expect(host.querySelector(`[aria-label="${en.bank.accountEnding("45-6")}"]`)?.textContent).toBe("•••45-6");
   });
 });

@@ -22,8 +22,8 @@ describe("joinDigit", () => {
 
 describe("bankSubtitle", () => {
   it("joins the parts present", () => {
-    expect(bankSubtitle({ bank: "Itaú", branch: "1234", accountLast3: "45-6" })).toBe("Ag 1234 · Account •••45-6");
-    expect(bankSubtitle({ bank: "Itaú", branch: "1234", accountLast3: null })).toBe("Ag 1234");
+    expect(bankSubtitle({ bank: "Itaú", branch: "1234", accountLast3: "45-6" })).toBe("Branch 1234 · Account •••45-6");
+    expect(bankSubtitle({ bank: "Itaú", branch: "1234", accountLast3: null })).toBe("Branch 1234");
   });
   it("falls back to the bank's name, then nothing", () => {
     expect(bankSubtitle({ bank: "Itaú", branch: null, accountLast3: null })).toBe("Itaú");

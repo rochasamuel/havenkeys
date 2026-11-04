@@ -204,8 +204,11 @@ export const api = {
   revealBank: (id: string) => call<BankView>("reveal_bank", { id }),
   /** The account, its digit or the password, on an explicit reveal. */
   revealBankField: (id: string, field: BankRevealField) => call<string>("reveal_bank_field", { id, field }),
-  /** Rust copies the value (branch and account with their digit) and clears the clipboard later. */
-  copyBankField: (id: string, field: BankCopyField) => call<CopyResult>("copy_bank_field", { id, field }),
+  /**
+   * Rust copies the value (branch and account with their digit) and clears the
+   * clipboard later; `details` are the transfer details, composed in `lang`.
+   */
+  copyBankField: (id: string, field: BankCopyField, lang: "en" | "pt-BR") => call<CopyResult>("copy_bank_field", { id, field, lang }),
   /** Brand and check digit of a number being typed; Rust keeps nothing. */
   checkCardNumber: (number: string) => call<CardNumberCheck>("check_card_number", { number }),
 

@@ -52,7 +52,16 @@ export function Websites({ item }: { item: ItemOverview }) {
 }
 
 /** The websites group of an editor: an address and how it matches, per row. */
-export function WebsitesEdit({ urls, onChange }: { urls: UrlRule[]; onChange: (next: UrlRule[]) => void }) {
+export function WebsitesEdit({
+  urls,
+  onChange,
+  placeholder = "github.com",
+}: {
+  urls: UrlRule[];
+  onChange: (next: UrlRule[]) => void;
+  /** An example address for an empty row. */
+  placeholder?: string;
+}) {
   const { t } = useI18n();
   const matchLabels: Record<MatchType, string> = {
     domain: t.editor.matchDomain,
@@ -70,7 +79,7 @@ export function WebsitesEdit({ urls, onChange }: { urls: UrlRule[]; onChange: (n
               className="edit-input"
               value={rule.url}
               onChange={(e) => update(i, { url: e.target.value })}
-              placeholder="github.com"
+              placeholder={placeholder}
               spellCheck={false}
               autoCapitalize="off"
               inputMode="url"
@@ -179,7 +188,6 @@ export function PasswordEdit({
             type={shown ? "text" : "password"}
             value={value.value}
             onChange={(e) => onChange({ mode: "set", value: e.target.value })}
-            placeholder={label}
             autoComplete="new-password"
             spellCheck={false}
             autoCapitalize="off"

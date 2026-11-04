@@ -9,7 +9,7 @@ export interface BankLabels {
   account: string;
 }
 
-const DEFAULT_LABELS: BankLabels = { ag: "Ag", account: "Account" };
+const DEFAULT_LABELS: BankLabels = { ag: "Branch", account: "Account" };
 
 /** A number and its check digit as people write them: `12345-6`. */
 export const joinDigit = (number: string, digit: string | null | undefined) => (digit ? `${number}-${digit}` : number);
@@ -22,7 +22,7 @@ export function splitPasted(text: string): { number: string; digit: string | nul
   return { number: compact.slice(0, dash), digit: compact.slice(dash + 1) || null };
 }
 
-/** A bank account's row line: `Ag 1234 · Account •••45-6`; the bank's name when it has neither. */
+/** A bank account's row line: `Branch 1234 · Account •••45-6`; the bank's name when it has neither. */
 export function bankSubtitle(b: BankSummary, labels: BankLabels = DEFAULT_LABELS): string {
   const parts = [b.branch && `${labels.ag} ${b.branch}`, b.accountLast3 && `${labels.account} •••${b.accountLast3}`].filter(Boolean);
   return parts.length > 0 ? parts.join(" · ") : (b.bank ?? "");

@@ -5,6 +5,7 @@ import { BRAND_NAMES, CARD_BRAND_CHOICES, capDigits, cardSecretUpdate, digitsOnl
 import { TagsEditor, type TagsEditorHandle } from "../components/TagsEditor";
 import { CardBrandLogo } from "../components/CardBrandLogo";
 import { AttachRow, FileRows, useFileEdits } from "../components/FileRows";
+import { Icon } from "../components/Icon";
 import { useToast } from "../components/Toast";
 import { useI18n } from "../i18n/context";
 import { errorMessage } from "../i18n/errors";
@@ -229,15 +230,18 @@ export function CardEditor({ existing, readOnly, onCancel, onSaved, onDirtyChang
             )}
             <label className="row edit-row">
               <span className="edit-label">{f.brand}</span>
-              <select className="edit-input" value={draft.brand} onChange={(e) => set("brand", e.target.value)}>
-                <option value="">{t.card.detectBrand}</option>
-                {CARD_BRAND_CHOICES.map((b) => (
-                  <option key={b} value={b}>
-                    {BRAND_NAMES[b]}
-                  </option>
-                ))}
-                <option value="other">{t.card.otherBrand}</option>
-              </select>
+              <span className="select-wrap">
+                <select value={draft.brand} onChange={(e) => set("brand", e.target.value)}>
+                  <option value="">{t.card.detectBrand}</option>
+                  {CARD_BRAND_CHOICES.map((b) => (
+                    <option key={b} value={b}>
+                      {BRAND_NAMES[b]}
+                    </option>
+                  ))}
+                  <option value="other">{t.card.otherBrand}</option>
+                </select>
+                <Icon name="chevronDown" size={14} className="select-chevron" />
+              </span>
             </label>
             <label className="row edit-row">
               <span className="edit-label">{f.verificationNumber}</span>

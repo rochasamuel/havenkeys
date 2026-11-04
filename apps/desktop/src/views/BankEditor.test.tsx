@@ -97,6 +97,21 @@ describe("BankEditor", () => {
     expect(box(en.bank.digitOf(f.branch)).value).toBe("X");
   });
 
+  it("leaves a paste that does not fit the boxes unsplit", async () => {
+    await render();
+    paste(box(f.branch), "1234-56");
+    expect(box(f.branch).value).toBe("");
+    expect(box(en.bank.digitOf(f.branch)).value).toBe("");
+    paste(box(f.account), "123456789012345678901-6");
+    expect(box(f.account).value).toBe("");
+  });
+
+  it("labels the number box with its row label", async () => {
+    await render();
+    const label = [...host.querySelectorAll<HTMLLabelElement>("label.edit-label")].find((l) => l.textContent === f.account)!;
+    expect(label.control).toBe(box(f.account));
+  });
+
   it("saves a new account as a bank_account with its bank values", async () => {
     await render();
     type(box(f.bank), "Itaú");

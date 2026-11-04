@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type ClipboardEvent, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type ClipboardEvent, type FormEvent } from "react";
 import { api } from "../lib/api";
 import type { BankAccountType, BankInput, ItemOverview, SecretUpdate, UrlRule } from "../lib/types";
 import { splitPasted } from "../lib/bank";
 import { fromViews, sectionsInput, type EditSection } from "../lib/customFields";
 import { EMPTY, KEEP, toUpdate, type SecretEdit } from "../lib/secretEdit";
+import { Icon } from "../components/Icon";
 import { TagsEditor, type TagsEditorHandle } from "../components/TagsEditor";
 import { FileRows, useFileEdits } from "../components/FileRows";
 import { useToast } from "../components/Toast";
@@ -42,6 +43,9 @@ interface Draft {
 }
 
 const ACCOUNT_TYPES: BankAccountType[] = ["checking", "savings", "payment", "other"];
+
+/** Each box's length limit (spec §4.2); Rust checks them again. */
+const MAX = { branch: 8, branchDigit: 1, account: 20, accountDigit: 2 } as const;
 
 const EMPTY_DRAFT: Draft = {
   title: "", bank: "", holderName: "", accountType: "", branch: "", branchDigit: "", account: "", accountDigit: "",
@@ -117,14 +121,16 @@ export function BankEditor({ existing, readOnly, onCancel, onSaved, onDirtyChang
   useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft((d) => (d ? { ...d, [key]: value } : d));
-  /** A pasted `12345-6` fills the number box and its digit box. */
+  /** A pasted `12345-6` fills the number box and its digit box, when both parts fit; else it pastes as is. */
   const pasteSplit = (number: "branch" | "account", digit: "branchDigit" | "accountDigit") => (e: ClipboardEvent<HTMLInputElement>) => {
     const parts = splitPasted(e.clipboardData.getData("text"));
-    if (parts.digit === null) return;
+    if (parts.digit === null || parts.number.length > MAX[number] || parts.digit.length > MAX[digit]) return;
     e.preventDefault();
     setDraft((d) => (d ? { ...d, [number]: parts.number, [digit]: parts.digit } : d));
   };
   const f = t.bank.fields;
+  const ids = useId();
+  const keepHint = saved.account && !draft?.account && !draft?.accountDigit;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -217,30 +223,37 @@ export function BankEditor({ existing, readOnly, onCancel, onSaved, onDirtyChang
             </label>
             <label className="row edit-row">
               <span className="edit-label">{f.accountType}</span>
-              <select className="edit-input" value={draft.accountType} aria-label={f.accountType}
-                onChange={(e) => set("accountType", e.target.value as Draft["accountType"])}>
-                <option value="">{t.bank.noType}</option>
-                {ACCOUNT_TYPES.map((type) => (
-                  <option key={type} value={type}>
-                    {t.bank.types[type]}
-                  </option>
-                ))}
-              </select>
+              <span className="select-wrap">
+                <select value={draft.accountType} aria-label={f.accountType}
+                  onChange={(e) => set("accountType", e.target.value as Draft["accountType"])}>
+                  <option value="">{t.bank.noType}</option>
+                  {ACCOUNT_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {t.bank.types[type]}
+                    </option>
+                  ))}
+                </select>
+                <Icon name="chevronDown" size={14} className="select-chevron" />
+              </span>
             </label>
             <div className="row edit-row">
-              <span className="edit-label">{f.branch}</span>
+              {/* The label names the number box; clicking it lands there. */}
+              <label className="edit-label" htmlFor={`${ids}-branch`}>{f.branch}</label>
               <span className="bank-number">
-                <input className="edit-input mono" inputMode="numeric" value={draft.branch} maxLength={8} aria-label={f.branch}
-                  onChange={(e) => set("branch", e.target.value)} onPaste={pasteSplit("branch", "branchDigit")}
-                  autoComplete="off" spellCheck={false} />
-                <span className="bank-dash" aria-hidden="true">–</span>
-                <input className="edit-input mono bank-digit" value={draft.branchDigit} maxLength={1} placeholder={t.bank.digit}
-                  aria-label={t.bank.digitOf(f.branch)} onChange={(e) => set("branchDigit", e.target.value.toUpperCase())}
-                  autoComplete="off" spellCheck={false} />
+                <span className="bank-pair">
+                  <input id={`${ids}-branch`} className="edit-input mono bank-branch" inputMode="numeric" value={draft.branch}
+                    maxLength={MAX.branch} aria-label={f.branch} placeholder={t.bank.number}
+                    onChange={(e) => set("branch", e.target.value)} onPaste={pasteSplit("branch", "branchDigit")}
+                    autoComplete="off" spellCheck={false} />
+                  <span className="bank-dash" aria-hidden="true">–</span>
+                  <input className="edit-input mono bank-digit" value={draft.branchDigit} maxLength={MAX.branchDigit} placeholder={t.bank.digit}
+                    aria-label={t.bank.digitOf(f.branch)} onChange={(e) => set("branchDigit", e.target.value.toUpperCase())}
+                    autoComplete="off" spellCheck={false} />
+                </span>
               </span>
             </div>
             <div className="row edit-row">
-              <span className="edit-label">{f.account}</span>
+              <label className="edit-label" htmlFor={`${ids}-account`}>{f.account}</label>
               {draft.clearAccount ? (
                 <div className="edit-secret">
                   <span className="muted">{t.bank.accountRemoved}</span>
@@ -253,19 +266,27 @@ export function BankEditor({ existing, readOnly, onCancel, onSaved, onDirtyChang
                 </div>
               ) : (
                 <span className="bank-number">
-                  <input className="edit-input mono" inputMode="numeric" value={draft.account} maxLength={20} aria-label={f.account}
-                    placeholder={saved.account ? t.bank.keepAccount : undefined}
-                    onChange={(e) => set("account", e.target.value)} onPaste={pasteSplit("account", "accountDigit")}
-                    autoComplete="off" spellCheck={false} />
-                  <span className="bank-dash" aria-hidden="true">–</span>
-                  <input className="edit-input mono bank-digit" value={draft.accountDigit} maxLength={2} placeholder={t.bank.digit}
-                    aria-label={t.bank.digitOf(f.account)} onChange={(e) => set("accountDigit", e.target.value.toUpperCase())}
-                    autoComplete="off" spellCheck={false} />
-                  {saved.account && !draft.account && !draft.accountDigit && (
+                  <span className="bank-pair">
+                    <input id={`${ids}-account`} className="edit-input mono bank-account" inputMode="numeric" value={draft.account}
+                      maxLength={MAX.account} aria-label={f.account} placeholder={t.bank.number}
+                      aria-describedby={keepHint ? `${ids}-keep` : undefined}
+                      onChange={(e) => set("account", e.target.value)} onPaste={pasteSplit("account", "accountDigit")}
+                      autoComplete="off" spellCheck={false} />
+                    <span className="bank-dash" aria-hidden="true">–</span>
+                    <input className="edit-input mono bank-digit" value={draft.accountDigit} maxLength={MAX.accountDigit} placeholder={t.bank.digit}
+                      aria-label={t.bank.digitOf(f.account)} onChange={(e) => set("accountDigit", e.target.value.toUpperCase())}
+                      autoComplete="off" spellCheck={false} />
+                  </span>
+                  {keepHint && (
                     <button type="button" className="btn btn-small btn-quiet-danger" aria-label={`${t.common.remove}: ${f.account}`}
                       onClick={() => set("clearAccount", true)}>
                       {t.common.remove}
                     </button>
+                  )}
+                  {keepHint && (
+                    <span className="bank-keep" id={`${ids}-keep`}>
+                      {t.bank.keepAccount}
+                    </span>
                   )}
                 </span>
               )}
@@ -274,7 +295,7 @@ export function BankEditor({ existing, readOnly, onCancel, onSaved, onDirtyChang
               saved={saved.password} label={f.password} />
           </div>
 
-          <WebsitesEdit urls={draft.urls} onChange={(next) => set("urls", next)} />
+          <WebsitesEdit urls={draft.urls} onChange={(next) => set("urls", next)} placeholder="example.com" />
 
           <h3 className="group-title">{f.notes}</h3>
           <div className="group">
