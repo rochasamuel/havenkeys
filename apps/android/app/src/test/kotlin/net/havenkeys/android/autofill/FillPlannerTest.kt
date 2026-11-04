@@ -293,6 +293,25 @@ class FillPlannerTest {
     }
 
     @Test
+    fun aLoginsUsernameNeverGoesIntoADigitBox() = runTest {
+        val fields = bankScreen(focus = 2)
+        val form = requireNotNull(LoginFormFinder.find(fields))
+        assertEquals(listOf(fields[3].index), FillPlanner.fieldsOf(form, match))
+        val entries = FillPlanner.entries(form, fields, FillValues("12345", "s3cret"))
+        assertEquals(listOf(fields[3].index to "s3cret"), entries)
+    }
+
+    @Test
+    fun aUsernameLongerThanTheFocusedBankBoxIsNotSet() = runTest {
+        // The agência box takes 4 characters: an old login's conta does not fit.
+        val fields = bankScreen(focus = 0)
+        val form = requireNotNull(LoginFormFinder.find(fields))
+        val entries = FillPlanner.entries(form, fields, FillValues("12345", "s3cret"))
+        assertEquals(listOf(fields[3].index to "s3cret"), entries)
+        assertEquals(fields[0].index to "1234", FillPlanner.entries(form, fields, FillValues("1234", null)).single())
+    }
+
+    @Test
     fun aPasswordBoxListsLoginsThenBankAccounts() = runTest {
         val form = requireNotNull(LoginFormFinder.find(bankScreen(focus = 3)))
         val repo = FakeAutofillRepository().apply {

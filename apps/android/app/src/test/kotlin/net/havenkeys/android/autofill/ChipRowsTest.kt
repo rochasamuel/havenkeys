@@ -25,6 +25,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.GraphicsMode
+import uniffi.havenkeys_mobile.AutofillKind
+import uniffi.havenkeys_mobile.AutofillMatch
 import uniffi.havenkeys_mobile.BankSummaryRecord
 
 @RunWith(RobolectricTestRunner::class)
@@ -86,6 +88,15 @@ class ChipRowsTest {
         assertEquals("•••45-6", bankSubtitle(pt, itau.copy(branch = null)))
         assertEquals("Itaú", bankSubtitle(pt, itau.copy(branch = null, accountLast3 = null)))
         assertNull(bankSubtitle(pt, null))
+    }
+
+    @Test
+    fun aBankRowsSecondLineIsItsMaskedAccountNotAUsername() {
+        val itau = BankSummaryRecord("Itaú", "1234", "45-6")
+        val bank = AutofillMatch("b1", "Itaú", "octo", false, AutofillKind.BANK_ACCOUNT, itau)
+        assertEquals("Branch 1234 · •••45-6", app.subtitleOf(bank, otpOnly = false))
+        val login = AutofillMatch("id1", "GitHub", "octo", false, AutofillKind.LOGIN)
+        assertEquals("octo", app.subtitleOf(login, otpOnly = false))
     }
 
     // Gboard's chip style tints the start icon one flat colour; a picture keeps its own.

@@ -150,8 +150,11 @@ object FillPlanner {
 
     /** What [values] put into [form], by field index, each bank number shaped to its box. */
     fun entries(form: LoginForm, fields: List<FieldFacts>, values: FillValues): List<Pair<Int, String>> {
-        val bank = values.bank?.let { BankShapes.values(form.bank, fields.associateBy { it.index }, it) }.orEmpty()
+        val byIndex = fields.associateBy { it.index }
+        val bank = values.bank?.let { BankShapes.values(form.bank, byIndex, it) }.orEmpty()
+        // A username too long for the bank box it would go into is not set: the box would cut it.
         val username = form.usernameTarget?.let { i -> values.username?.let { i to it } }
+            ?.takeUnless { (i, v) -> form.focusedOnBank && byIndex[i]?.let(::maxLengthOf) in 1 until v.length }
         val password = form.passwords.firstOrNull()?.let { i -> values.password?.let { i to it } }
         return listOfNotNull(username) + bank + listOfNotNull(password)
     }

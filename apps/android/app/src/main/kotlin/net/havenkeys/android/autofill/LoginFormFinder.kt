@@ -15,9 +15,15 @@ data class LoginForm(
 
     /**
      * Where a login's username goes: the focused bank box (an old bank login
-     * holds the agência or conta, spec 2026-11-03-bank-account §5.4), else the username field.
+     * holds the agência or conta, spec 2026-11-03-bank-account §5.4) unless
+     * it is a check digit's, else the username field.
      */
-    val usernameTarget: Int? get() = focused?.takeIf { focusedOnBank } ?: usernames.firstOrNull()
+    val usernameTarget: Int?
+        get() = when (bank.firstOrNull { it.index == focused }?.role) {
+            null -> usernames.firstOrNull()
+            BankRole.BRANCH_DIGIT, BankRole.ACCOUNT_DIGIT -> null
+            else -> focused
+        }
 }
 
 object LoginFormFinder {

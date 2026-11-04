@@ -204,4 +204,16 @@ class BankFieldClassifierTest {
         )
         assertNull(IdentityFormFinder.find(fields))
     }
+
+    @Test
+    fun aReadonlyBoxBetweenContaAndDigitoIsSkipped() {
+        // bank.ts's isFillable drops it, so the dígito still follows the conta.
+        val fields = listOf(
+            box("Agência", "type" to "text", "maxlength" to "4"),
+            box("Conta", "type" to "text", "maxlength" to "7"),
+            box("Nome", "type" to "text", "readonly" to ""),
+            box("Dígito", "type" to "text", "maxlength" to "1"),
+        )
+        assertEquals(listOf(BankRole.BRANCH, BankRole.ACCOUNT, BankRole.ACCOUNT_DIGIT), roles(fields))
+    }
 }

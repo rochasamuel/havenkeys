@@ -97,8 +97,9 @@ object BankFieldClassifier {
             hints.any { AC_REAL.matches(it) || it in ANDROID_HINTS || it.startsWith("creditcard") }
     }
 
-    private fun isUsable(f: FieldFacts) = f.visible && f.enabled && FieldClassifier.isTextInput(f) &&
-        CardFieldClassifier.kindOf(f, strong = false) == null
+    /** bank.ts's isFillable: a readonly box is left out, so it never breaks a conta–dígito pair. */
+    private fun isUsable(f: FieldFacts) = f.visible && f.enabled && "readonly" !in f.htmlAttributes &&
+        FieldClassifier.isTextInput(f) && CardFieldClassifier.kindOf(f, strong = false) == null
 
     private fun isNumeric(f: FieldFacts): Boolean {
         val type = f.htmlAttributes["type"]?.lowercase()
