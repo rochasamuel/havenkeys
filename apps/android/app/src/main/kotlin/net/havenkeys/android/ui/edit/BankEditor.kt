@@ -1,6 +1,12 @@
 package net.havenkeys.android.ui.edit
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.InputTransformation
@@ -25,6 +31,7 @@ import net.havenkeys.android.ui.kit.GroupRow
 import net.havenkeys.android.ui.kit.GroupRowField
 import net.havenkeys.android.ui.kit.HavenTextField
 import net.havenkeys.android.ui.kit.InsetGroup
+import net.havenkeys.android.ui.theme.HavenTheme
 import uniffi.havenkeys_mobile.BankAccountType
 import uniffi.havenkeys_mobile.ItemEdit
 
@@ -151,7 +158,7 @@ private fun NumberPair(
         rememberDraftText(bank, labels.first, bank.splits, initial = { number.first }, onEdit = number.second)
     val digitText =
         rememberDraftText(bank, labels.second, bank.splits, initial = { digit.first }, onEdit = digit.second)
-    Row {
+    Row(Modifier.height(IntrinsicSize.Min)) {
         HavenTextField(
             numberText,
             stringResource(labels.first),
@@ -160,6 +167,8 @@ private fun NumberPair(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, autoCorrectEnabled = false),
             hint = hint,
         )
+        // A hairline marks the digit box as a field of its own, as the group's rows are marked.
+        Box(Modifier.fillMaxHeight().padding(vertical = 12.dp).width(1.dp).background(HavenTheme.colors.groupLine))
         HavenTextField(
             digitText,
             stringResource(R.string.bank_digit),
