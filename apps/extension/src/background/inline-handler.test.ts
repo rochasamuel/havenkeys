@@ -1490,7 +1490,7 @@ describe("bank menus", () => {
     });
   });
 
-  it("with nothing saved it stays out on focus, opens the empty bank row from the icon; locked gives the unlock row", async () => {
+  it("with nothing saved it stays out on focus, opens the empty bank row from the icon; locked gives the unlock row from the icon only", async () => {
     const { h } = setup(answer([]));
     expect(await h.handleContent(bankFrame(), { type: "cs_open_menu", kind: "bank" })).toEqual({ ok: false });
     expect(await h.handleContent(bankFrame(), { type: "cs_open_menu", kind: "bank", explicit: true })).toEqual({ ok: true, token: T1, rows: 1 });
@@ -1499,7 +1499,8 @@ describe("bank menus", () => {
     const { h: locked } = setup(() => {
       throw new BridgeError("locked", "x");
     });
-    expect(await locked.handleContent(bankFrame(), { type: "cs_open_menu", kind: "bank" })).toEqual({ ok: true, token: T1, rows: 1 });
+    expect(await locked.handleContent(bankFrame(), { type: "cs_open_menu", kind: "bank" })).toEqual({ ok: false });
+    expect(await locked.handleContent(bankFrame(), { type: "cs_open_menu", kind: "bank", explicit: true })).toEqual({ ok: true, token: T1, rows: 1 });
     expect(await locked.handleInline(1, { type: "menu_state", token: T1 })).toEqual({ ok: true, value: { state: "locked" } });
   });
 
@@ -1540,12 +1541,27 @@ describe("bank menus", () => {
     expect(p.sent.at(-1)?.msg).toMatchObject({ type: "bg_fill", fill: { kind: "bank", values, password: "bank-pw" }, submit: false });
   });
 
-  it("a bank pick whose reply carries no bank values fills nothing", async () => {
-    const noValues = (r: Request) =>
-      r.type === "fill_item" ? { type: "fill_item", username: null, password: "pw", bank: null, autoSubmit: false } : answer([bankMatch])(r);
-    const { h, sent } = setup(noValues);
+  it("a bank pick whose reply carries no bank values fills its password alone, and nothing without one", async () => {
+    const reply = (password: string | null) => (r: Request) =>
+      r.type === "fill_item" ? { type: "fill_item", username: null, password, bank: null, autoSubmit: false } : answer([bankMatch])(r);
+    const { h, sent } = setup(reply("pw"));
     await h.handleContent(bankFrame(), { type: "cs_open_menu", kind: "bank" });
-    expect((await h.handleInline(1, { type: "menu_pick", token: T1, itemId: BANK })).ok).toBe(false);
-    expect(sent.some((s) => s.msg.type === "bg_fill")).toBe(false);
+    expect(await h.handleInline(1, { type: "menu_pick", token: T1, itemId: BANK })).toEqual({ ok: true, value: null });
+    expect(sent.at(-1)?.msg).toMatchObject({ type: "bg_fill", fill: { kind: "login", username: null, password: "pw" }, submit: false });
+
+    const empty = setup(reply(null));
+    await empty.h.handleContent(bankFrame(), { type: "cs_open_menu", kind: "bank" });
+    expect((await empty.h.handleInline(1, { type: "menu_pick", token: T1, itemId: BANK })).ok).toBe(false);
+    expect(empty.sent.some((s) => s.msg.type === "bg_fill")).toBe(false);
+  });
+
+  it("a conta-only bank pick sends its conta and password", async () => {
+    const contaOnly = { ...values, branch: null, branchDigit: null };
+    const reply = (r: Request) =>
+      r.type === "fill_item" ? { type: "fill_item", username: null, password: "bank-pw", bank: contaOnly, autoSubmit: false } : answer([bankMatch])(r);
+    const { h, sent } = setup(reply);
+    await h.handleContent(bankFrame(), { type: "cs_open_menu", kind: "bank" });
+    await h.handleInline(1, { type: "menu_pick", token: T1, itemId: BANK });
+    expect(sent.at(-1)?.msg).toMatchObject({ type: "bg_fill", fill: { kind: "bank", values: contaOnly, password: "bank-pw" }, submit: false });
   });
 });

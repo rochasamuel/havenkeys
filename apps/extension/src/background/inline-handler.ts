@@ -654,8 +654,10 @@ export function createInlineHandler(deps: InlineDeps) {
       identity = await identityRow(frame, roles).catch(() => null);
       if (identity && identity.fills === 0) identity = null;
     }
-    // Nothing to offer: stay out of the page, unless the user asked for the menu.
-    if (!locked && kind !== "new_password" && items.length === 0 && passkeys.length === 0 && !identity && !explicit) return { ok: false };
+    // Nothing to offer, or a locked bank box: stay out of the page, unless
+    // the user asked for the menu (a bank box's icon, like its empty menu).
+    const nothing = !locked && kind !== "new_password" && items.length === 0 && passkeys.length === 0 && !identity;
+    if ((nothing || (locked && kind === "bank")) && !explicit) return { ok: false };
     const extra =
       kind === "login" && !locked && items.length > 0 && passkeys.length === 0 ? await passkeyHint(frame) : { hint: null, help: null };
     return register(frame, kind, locked, items, passkeys, extra, roles, identity);
@@ -951,8 +953,10 @@ export function createInlineHandler(deps: InlineDeps) {
           } else if (offered.kind === "bankAccount") {
             // Rust checks the item against the frame and the top page; a bank fill never submits.
             const c = await deps.client.request({ type: "fill_item", itemId: req.itemId, ...frameFields(m.frame) });
-            if (!c.bank) return { ok: false, message: t.errors.generic };
-            await pickFill(m.frame, m.token, { kind: "bank", values: c.bank, password: c.password }, null);
+            // Without a branch or an account, its password alone, as the popup does.
+            if (c.bank) await pickFill(m.frame, m.token, { kind: "bank", values: c.bank, password: c.password }, null);
+            else if (c.password !== null) await pickFill(m.frame, m.token, { kind: "login", username: null, password: c.password }, null);
+            else return { ok: false, message: t.errors.generic };
           } else {
             const c = await deps.client.request({ type: "fill_item", itemId: req.itemId, ...frameFields(m.frame) });
             // A login saved with "Sign in with" and no password: press the

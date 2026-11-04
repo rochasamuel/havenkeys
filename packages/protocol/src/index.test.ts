@@ -416,6 +416,10 @@ describe("bank accounts", () => {
     const ok = fill({ bank: values });
     expect(ok && "result" in ok && ok.result).toEqual({ type: "fill_item", username: null, password: "p", bank: values, autoSubmit: false });
     expect(fill({ bank: { ...values, branchDigit: null, accountDigit: null } })).not.toBeNull();
+    // Either number may be null (with its digit), never both.
+    const contaOnly = { ...values, branch: null, branchDigit: null };
+    expect(fill({ bank: contaOnly })).toMatchObject({ result: { bank: contaOnly } });
+    expect(fill({ bank: { ...values, account: null, accountDigit: null } })).not.toBeNull();
     const { accountDigit: _d, ...missing } = values;
     for (const bank of [
       { ...values, holderName: "x" },
@@ -425,6 +429,11 @@ describe("bank accounts", () => {
       { ...values, branch: "" },
       { ...values, branchDigit: "55" },
       { ...values, accountDigit: "123" },
+      { branch: null, branchDigit: null, account: null, accountDigit: null },
+      { ...values, branch: null },
+      { ...values, account: null },
+      { ...contaOnly, account: "1".repeat(21) },
+      { ...values, account: null, accountDigit: null, branch: "123456789" },
       null,
       "x",
     ]) expect(fill({ bank }), JSON.stringify(bank)).toBeNull();

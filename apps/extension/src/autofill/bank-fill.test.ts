@@ -16,6 +16,7 @@ describe("shapeBank", () => {
     ["12345", "6", text(6), "123456"],
     ["12345", "6", text(5), "12345"],
     ["12345", "6", { type: "number", maxLength: null, hasDigitBox: false }, "123456"],
+    ["12345", "X", { type: "number", maxLength: null, hasDigitBox: false }, "12345"],
     ["12345", "6", text(null, true), "12345"],
     ["1234", "X", text(6), "1234-X"],
     ["12345", null, text(7), "12345"],
@@ -90,6 +91,28 @@ describe("fillBank", () => {
     $("#ct").value = "777";
     expect(fillBank(document, $("#ag"), values, null, env)).toBe(1); // only the agência, still ours
     expect($("#ct").value).toBe("777");
+  });
+
+  it("fills_a_conta_only_item_into_its_conta_box_and_password", () => {
+    page(`<form>
+      <label for="ag">Agência</label><input id="ag" type="text" maxlength="4">
+      <label for="ct">Conta</label><input id="ct" type="text" maxlength="7">
+      <label for="p">Senha</label><input id="p" type="password">
+    </form>`);
+    const contaOnly: BankValues = { branch: null, branchDigit: null, account: "12345", accountDigit: "6" };
+    expect(fillBank(document, $("#ag"), contaOnly, "s3nha", env)).toBe(2);
+    expect([$("#ag").value, $("#ct").value, $("#p").value]).toEqual(["", "12345-6", "s3nha"]);
+  });
+
+  it("fills_a_branch_only_item_into_its_branch_boxes", () => {
+    page(`<form>
+      <label for="ag">Agência</label><input id="ag" type="text" maxlength="4">
+      <label for="dag">Dígito da agência</label><input id="dag" type="text" maxlength="1">
+      <label for="ct">Conta</label><input id="ct" type="text" maxlength="7">
+    </form>`);
+    const branchOnly: BankValues = { branch: "1234", branchDigit: "5", account: null, accountDigit: null };
+    expect(fillBank(document, $("#ct"), branchOnly, null, env)).toBe(2);
+    expect([$("#ag").value, $("#dag").value, $("#ct").value]).toEqual(["1234", "5", ""]);
   });
 
   it("never_submits", () => {

@@ -28,6 +28,14 @@ describe("bank messages", () => {
     expect(parseBackgroundMessage(fill)).toEqual(fill);
     const noPassword = { ...fill, fill: { kind: "bank", values: { ...values, branchDigit: null, accountDigit: "X" }, password: null } };
     expect(parseBackgroundMessage(noPassword)).toEqual(noPassword);
+    // Either number may be absent (null), with its digit.
+    for (const v of [
+      { ...values, branch: null, branchDigit: null },
+      { ...values, account: null, accountDigit: null },
+    ]) {
+      const one = { ...fill, fill: { kind: "bank", values: v, password: "pw" } };
+      expect(parseBackgroundMessage(one), JSON.stringify(v)).toEqual(one);
+    }
     for (const bad of [
       { ...fill, submit: true },
       { ...fill, totp: true },
@@ -40,6 +48,11 @@ describe("bank messages", () => {
       { ...fill, fill: { kind: "bank", values: { ...values, branchDigit: "55" }, password: "pw" } },
       { ...fill, fill: { kind: "bank", values: { ...values, accountDigit: "x" }, password: "pw" } },
       { ...fill, fill: { kind: "bank", values: { ...values, accountDigit: "123" }, password: "pw" } },
+      { ...fill, fill: { kind: "bank", values: { branch: null, branchDigit: null, account: null, accountDigit: null }, password: "pw" } },
+      { ...fill, fill: { kind: "bank", values: { ...values, branch: null }, password: "pw" } },
+      { ...fill, fill: { kind: "bank", values: { ...values, account: null }, password: "pw" } },
+      { ...fill, fill: { kind: "bank", values: { ...values, branch: null, branchDigit: null, account: "1".repeat(21) }, password: "pw" } },
+      { ...fill, fill: { kind: "bank", values: { ...values, account: null, accountDigit: null, branch: "123456789" }, password: "pw" } },
       { ...fill, fill: { kind: "bank", values, password: "x".repeat(4097) } },
       { ...fill, fill: { kind: "bank", values, password: 7 } },
       { ...fill, fill: { kind: "banks", values, password: "pw" } },

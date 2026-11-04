@@ -22,6 +22,8 @@ export interface BankBox {
 /** `value` and its check `digit` in one box: `NNNN-D`, `NNNND`, or the number alone. */
 export function shapeBank(value: string, digit: string | null, box: BankBox): string {
   if (digit === null || box.hasDigitBox) return value;
+  // A number box takes digits only: an `X` digit stays out.
+  if (box.type === "number" && !/^[0-9]+$/.test(digit)) return value;
   const room = (n: number) => box.maxLength === null || box.maxLength >= n;
   if (box.type !== "number" && room(value.length + 1 + digit.length)) return `${value}-${digit}`;
   return room(value.length + digit.length) ? `${value}${digit}` : value;
@@ -45,8 +47,9 @@ export function fillBank(root: ParentNode, picked: HTMLElement, values: BankValu
   const boxes = classifyBank(scope, env);
   const has = (role: BankRole) => boxes.some((b) => b.role === role);
   const valueFor = (role: BankRole, el: HTMLInputElement): string | null => {
-    const shape = (v: string, d: string | null, digitRole: BankRole) =>
-      shapeBank(v, d, { type: el.type, maxLength: el.maxLength < 0 ? null : el.maxLength, hasDigitBox: has(digitRole) });
+    // A number the item lacks leaves its box (and its digit's) alone.
+    const shape = (v: string | null, d: string | null, digitRole: BankRole) =>
+      v && shapeBank(v, d, { type: el.type, maxLength: el.maxLength < 0 ? null : el.maxLength, hasDigitBox: has(digitRole) });
     switch (role) {
       case "bankBranch":
         return shape(values.branch, values.branchDigit, "bankBranchDigit");

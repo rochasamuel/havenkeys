@@ -179,11 +179,11 @@ export interface BankSummary {
   accountLast3: string | null;
 }
 
-/** A bank account's numbers for one fill. */
+/** A bank account's numbers for one fill: a branch, an account or both; a digit only with its number. */
 export interface BankValues {
-  branch: string;
+  branch: string | null;
   branchDigit: string | null;
-  account: string;
+  account: string | null;
   accountDigit: string | null;
 }
 
@@ -447,9 +447,10 @@ function parseBankSummary(v: unknown): BankSummary | null {
 function parseBankValues(v: unknown): BankValues | null {
   if (!isObj(v) || !hasExactKeys(v, ["branch", "branchDigit", "account", "accountDigit"])) return null;
   const { branch, branchDigit, account, accountDigit } = v;
-  if (!isDigits(branch, 8) || !isDigits(account, 20)) return null;
-  if (branchDigit !== null && !isCheckDigit(branchDigit, 1)) return null;
-  if (accountDigit !== null && !isCheckDigit(accountDigit, 2)) return null;
+  if (branch === null && account === null) return null;
+  if ((branch !== null && !isDigits(branch, 8)) || (account !== null && !isDigits(account, 20))) return null;
+  if (branchDigit !== null && (branch === null || !isCheckDigit(branchDigit, 1))) return null;
+  if (accountDigit !== null && (account === null || !isCheckDigit(accountDigit, 2))) return null;
   return { branch, branchDigit, account, accountDigit };
 }
 

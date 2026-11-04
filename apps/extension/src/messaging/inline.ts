@@ -558,15 +558,19 @@ export function parseInlineRequest(msg: unknown): InlineRequest | null {
   }
 }
 
-/** The core's bank limits (bank.rs): branch 1-8 digits, account 1-20, check digits of 0-9 and X. */
+/**
+ * The core's bank limits (bank.rs): branch 1-8 digits, account 1-20, check
+ * digits of 0-9 and X. Either number may be null, not both; a digit only with its number.
+ */
 function parseBankValues(v: unknown): BankValues | null {
   const o = obj(v);
   if (!o || !keysAre(o, ["branch", "branchDigit", "account", "accountDigit"])) return null;
   const { branch, branchDigit, account, accountDigit } = o;
   const is = (x: unknown, re: RegExp): x is string => typeof x === "string" && re.test(x);
-  if (!is(branch, /^[0-9]{1,8}$/) || !is(account, /^[0-9]{1,20}$/)) return null;
-  if (branchDigit !== null && !is(branchDigit, /^[0-9X]$/)) return null;
-  if (accountDigit !== null && !is(accountDigit, /^[0-9X]{1,2}$/)) return null;
+  const opt = (x: unknown, re: RegExp): x is string | null => x === null || is(x, re);
+  if (!opt(branch, /^[0-9]{1,8}$/) || !opt(account, /^[0-9]{1,20}$/) || (branch === null && account === null)) return null;
+  if (!opt(branchDigit, /^[0-9X]$/) || (branchDigit !== null && branch === null)) return null;
+  if (!opt(accountDigit, /^[0-9X]{1,2}$/) || (accountDigit !== null && account === null)) return null;
   return { branch, branchDigit, account, accountDigit };
 }
 
