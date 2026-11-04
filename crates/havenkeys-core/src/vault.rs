@@ -1685,8 +1685,8 @@ impl VaultService {
 
     /// Username and password (a bank account: password and bank values)
     /// for filling the page. Denied unless the item's own website rules
-    /// match it. A fill is remembered for `UPGRADE_WINDOW_MS` as consent for
-    /// the site's passkey upgrade.
+    /// match it. A login's fill is remembered for `UPGRADE_WINDOW_MS` as
+    /// consent for the site's passkey upgrade.
     pub fn fill_for_page(
         &mut self,
         id: &Uuid,
@@ -1694,12 +1694,12 @@ impl VaultService {
         top_url: Option<&str>,
         now_ms: i64,
     ) -> Result<FillCredentials> {
-        let username = self
-            .authorize_for_page(id, page_url, top_url)?
-            .username
-            .clone();
+        let ov = self.authorize_for_page(id, page_url, top_url)?;
+        let is_login = ov.item_type == ItemType::Login;
+        let username = ov.username.clone();
         let creds = self.fill_reply(id, username)?;
-        if creds.password.is_some() || creds.bank.is_some() {
+        // Only a login's fill is consent for the site's passkey upgrade.
+        if is_login && creds.password.is_some() {
             self.record_fill(*id, page_url, now_ms)?;
         }
         Ok(creds)
@@ -2037,6 +2037,17 @@ impl VaultService {
         let mut update = None;
         let mut by_current = Vec::new();
         for c in candidates {
+            // A bank account has no username, so whatever the form captured
+            // (an agência or conta) its password alone makes the submission
+            // `Unchanged`; it is never updated from a form.
+            if c.kind == MatchKind::BankAccount {
+                if let Ok(ItemDetails::BankAccount(f)) = self.load_details(&c.id) {
+                    if f.password.is_some_and(|s| secrets_equal(&s, password)) {
+                        return Ok(SaveAction::Unchanged);
+                    }
+                }
+                continue;
+            }
             let same_user = normalize_username(c.username.as_deref()) == wanted;
             // A password-only form (no username captured) is "unchanged" if
             // it matches any login for the page.
@@ -2045,16 +2056,10 @@ impl VaultService {
             }
             let saved = match self.load_details(&c.id) {
                 Ok(ItemDetails::Login { password, .. }) => password,
-                Ok(ItemDetails::BankAccount(f)) => f.password,
                 _ => None,
             };
             if saved.as_ref().is_some_and(|s| secrets_equal(s, password)) {
                 return Ok(SaveAction::Unchanged);
-            }
-            // A bank account's password can only make a submission
-            // `Unchanged`: it is never updated from a form.
-            if c.kind != MatchKind::Login {
-                continue;
             }
             if let (Some(saved), Some(cur)) = (&saved, current) {
                 if secrets_equal(saved, cur) {
@@ -3281,5 +3286,47 @@ mod tests {
         };
         assert_eq!(f.app_bindings.len(), 1);
         assert_eq!(f.app_bindings[0].package, "com.itau");
+    }
+
+    #[test]
+    fn a_bank_fill_is_not_passkey_upgrade_consent() {
+        let mut v = crate::local::tests::unlocked_vault();
+        let page = "https://www.itau.com.br/";
+        let urls = vec![crate::model::UrlRule {
+            url: "https://www.itau.com.br".into(),
+            match_type: crate::model::MatchType::Domain,
+        }];
+        let mut add = |input: ItemInput| {
+            let staged = v.stage_create(input, 1).unwrap();
+            let id = staged.item_id;
+            v.commit_write(staged, 1).unwrap();
+            id
+        };
+        let login = add(ItemInput {
+            urls: urls.clone(),
+            password: SecretUpdate::Set(SecretString::from("pw")),
+            ..ItemInput::blank(ItemType::Login, "Login".into())
+        });
+        let bank = add(ItemInput {
+            urls,
+            password: SecretUpdate::Set(SecretString::from("bank-pw")),
+            bank: Some(crate::bank::BankAccountInput {
+                branch: Some("1234".into()),
+                account: SecretUpdate::Set(SecretString::from("12345")),
+                ..Default::default()
+            }),
+            ..ItemInput::blank(ItemType::BankAccount, "Bank".into())
+        });
+        let fills = |v: &VaultService| {
+            let s = v.session().unwrap();
+            s.recent_fills.iter().map(|f| f.item_id).collect::<Vec<_>>()
+        };
+        v.fill_for_page(&login, page, None, 2).unwrap();
+        assert_eq!(fills(&v), [login]);
+        for t in 3..3 + MAX_RECENT_FILLS as i64 {
+            let c = v.fill_for_page(&bank, page, None, t).unwrap();
+            assert!(c.bank.is_some());
+        }
+        assert_eq!(fills(&v), [login]);
     }
 }

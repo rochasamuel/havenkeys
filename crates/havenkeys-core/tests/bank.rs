@@ -4,7 +4,7 @@ mod common;
 
 use common::{activated_vault, login, note, secret, NOW};
 use havenkeys_core::app_target::AppIdentity;
-use havenkeys_core::bank::{BankAccountFields, BankAccountInput};
+use havenkeys_core::bank::{BankAccountFields, BankAccountInput, BankAccountType};
 use havenkeys_core::card::CardInput;
 use havenkeys_core::custom_field::{FieldInput, FieldValueInput, SectionInput};
 use havenkeys_core::model::{ItemInput, ItemType, MatchType, SecretUpdate, UrlRule};
@@ -16,6 +16,7 @@ fn itau() -> BankAccountInput {
     BankAccountInput {
         bank: Some("Itaú".into()),
         holder_name: Some(secret("Maria Souza")),
+        account_type: Some(BankAccountType::Checking),
         branch: Some("1234".into()),
         account: SecretUpdate::Set(secret("12345")),
         account_digit: SecretUpdate::Set(secret("6")),
@@ -318,9 +319,9 @@ fn bank_fill_returns_values_and_password_only() {
     assert!(c.username.is_none());
     assert_eq!(c.password.unwrap().expose(), "bank-pw");
     let b = c.bank.unwrap();
-    assert_eq!(b.branch, "1234");
+    assert_eq!(b.branch.as_deref(), Some("1234"));
     assert!(b.branch_digit.is_none());
-    assert_eq!(b.account.expose(), "12345");
+    assert_eq!(b.account.unwrap().expose(), "12345");
     assert_eq!(b.account_digit.unwrap().expose(), "6");
 
     // A login's reply has no bank values.
@@ -330,6 +331,65 @@ fn bank_fill_returns_values_and_password_only() {
         .unwrap()
         .bank
         .is_none());
+}
+
+#[test]
+fn bank_fill_carries_whichever_number_the_item_has() {
+    let (mut v, _) = activated_vault();
+    let conta_only = create(
+        &mut v,
+        ItemInput {
+            bank: Some(BankAccountInput {
+                branch: None,
+                ..itau()
+            }),
+            ..itau_bank("bank-pw")
+        },
+    );
+    let c = v.fill_for_page(&conta_only, ITAU, None, NOW).unwrap();
+    assert_eq!(c.password.unwrap().expose(), "bank-pw");
+    let b = c.bank.unwrap();
+    assert!(b.branch.is_none() && b.branch_digit.is_none());
+    assert_eq!(b.account.unwrap().expose(), "12345");
+    assert_eq!(b.account_digit.unwrap().expose(), "6");
+
+    let branch_only = create(
+        &mut v,
+        ItemInput {
+            bank: Some(BankAccountInput {
+                branch: Some("1234-5".into()),
+                account: SecretUpdate::Keep,
+                account_digit: SecretUpdate::Keep,
+                ..itau()
+            }),
+            ..itau_bank("bank-pw")
+        },
+    );
+    let b = v
+        .fill_for_page(&branch_only, ITAU, None, NOW)
+        .unwrap()
+        .bank
+        .unwrap();
+    assert_eq!(b.branch.as_deref(), Some("1234"));
+    assert_eq!(b.branch_digit.as_deref(), Some("5"));
+    assert!(b.account.is_none() && b.account_digit.is_none());
+
+    // Neither number: the password alone.
+    let neither = create(
+        &mut v,
+        ItemInput {
+            bank: Some(BankAccountInput {
+                branch: None,
+                account: SecretUpdate::Keep,
+                account_digit: SecretUpdate::Keep,
+                ..itau()
+            }),
+            ..itau_bank("bank-pw")
+        },
+    );
+    let c = v.fill_for_page(&neither, ITAU, None, NOW).unwrap();
+    assert!(c.bank.is_none());
+    assert_eq!(c.password.unwrap().expose(), "bank-pw");
 }
 
 #[test]
@@ -347,7 +407,7 @@ fn fill_for_app_serves_bank_to_bound_app_only() {
     let c = v.fill_for_app(&bank, &app, &[]).unwrap();
     assert!(c.username.is_none());
     assert_eq!(c.password.unwrap().expose(), "bank-pw");
-    assert_eq!(c.bank.unwrap().account.expose(), "12345");
+    assert_eq!(c.bank.unwrap().account.unwrap().expose(), "12345");
 
     let wrong = AppIdentity::new("com.itau", &[vec![2; 32]]).unwrap();
     assert!(v.matches_for_app(&wrong, &[], NOW).unwrap().is_empty());
@@ -376,6 +436,9 @@ fn check_login_unchanged_for_bank_password() {
     assert_eq!(check(Some(" "), "bank-pw"), SaveAction::Unchanged);
     assert_eq!(check(None, "other"), SaveAction::Add);
     assert_eq!(check(Some("maria"), "other"), SaveAction::Add);
+    // Whatever the form captured as a username (an agência, a conta).
+    assert_eq!(check(Some("maria"), "bank-pw"), SaveAction::Unchanged);
+    assert_eq!(check(Some("12345"), "bank-pw"), SaveAction::Unchanged);
     // A change-password form naming the bank's password never updates it.
     assert_eq!(
         v.check_login(ITAU, None, None, &secret("new"), Some(&secret("bank-pw")))
@@ -456,6 +519,9 @@ fn bitwarden_export_writes_a_bank_account_as_a_login() {
     assert_eq!(field("Agência")["value"], "1234");
     assert_eq!(field("Conta")["value"], "12345-6");
     assert_eq!(field("Conta")["type"], 1);
+    assert_eq!(field("Titular")["value"], "Maria Souza");
+    assert_eq!(field("Titular")["type"], 0);
+    assert_eq!(field("Tipo de conta")["value"], "corrente");
     assert_eq!(field("PIN")["value"], "4321");
     assert_eq!(summary.bank_accounts, 1);
 }
@@ -472,9 +538,29 @@ fn csv_export_writes_a_bank_account_as_a_login_row() {
     assert_eq!(&row[3], "bank-pw");
     assert_eq!(
         &row[4],
-        "agency note\nBank: Itaú\nAgência: 1234\nConta: 12345-6"
+        "agency note\nBank: Itaú\nAgência: 1234\nConta: 12345-6\nTitular: Maria Souza\nTipo: corrente"
     );
     assert_eq!(summary.bank_accounts, 1);
     assert_eq!(summary.items_left_out, 0);
     assert_eq!(summary.custom_fields_left_out, 1);
+}
+
+#[test]
+fn csv_export_leaves_out_an_absent_holder_and_type() {
+    use havenkeys_core::export::{render, ExportFormat};
+    let (mut v, _) = activated_vault();
+    let bare = BankAccountInput {
+        holder_name: None,
+        account_type: None,
+        ..itau()
+    };
+    create(&mut v, bank_input("B", bare));
+    let r = render(&v, ExportFormat::Csv, NOW).unwrap();
+    let csv = String::from_utf8(r.bytes.to_vec()).unwrap();
+    let row = ::csv::Reader::from_reader(csv.as_bytes())
+        .records()
+        .next()
+        .unwrap()
+        .unwrap();
+    assert_eq!(&row[4], "Bank: Itaú\nAgência: 1234\nConta: 12345-6");
 }

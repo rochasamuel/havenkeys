@@ -4,6 +4,7 @@
 //! spreadsheet; the export dialog says not to open it in one).
 
 use super::{count, for_each_item, ExportFormat, ExportSummary, Rendered};
+use crate::bank::DetailsLanguage::PtBr;
 use crate::error::{Error, Result};
 use crate::model::ItemDetails;
 use crate::secret::SecretString;
@@ -39,6 +40,8 @@ pub(super) fn render(vault: &VaultService) -> Result<Rendered> {
                         ("Bank", f.bank.clone().map(SecretString::new)),
                         ("Agência", f.branch_joined().map(SecretString::new)),
                         ("Conta", f.account_joined()),
+                        ("Titular", f.holder_name.clone()),
+                        ("Tipo", f.account_type.map(|t| t.label(PtBr).into())),
                     ];
                     (f.password, None, f.notes, bank.into())
                 }

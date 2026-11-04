@@ -35,6 +35,24 @@ pub enum BankAccountType {
     Other,
 }
 
+impl BankAccountType {
+    /// The type's name in `lang`, as details and exports write it.
+    pub fn label(self, lang: DetailsLanguage) -> &'static str {
+        use BankAccountType::*;
+        use DetailsLanguage::{En, PtBr};
+        match (lang, self) {
+            (En, Checking) => "checking",
+            (En, Savings) => "savings",
+            (En, Payment) => "payment",
+            (En, Other) => "other",
+            (PtBr, Checking) => "corrente",
+            (PtBr, Savings) => "poupança",
+            (PtBr, Payment) => "pagamento",
+            (PtBr, Other) => "outra",
+        }
+    }
+}
+
 /// The stored secret part of a bank account. Digits only in the numbers.
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -119,14 +137,13 @@ impl Drop for BankSummary {
     }
 }
 
-/// The numbers a fill or copy needs; only an item with a branch and an
-/// account has them.
+/// The numbers a fill needs; an item with a branch or an account has them.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BankValues {
-    pub branch: String,
+    pub branch: Option<String>,
     pub branch_digit: Option<String>,
-    pub account: SecretString,
+    pub account: Option<SecretString>,
     pub account_digit: Option<SecretString>,
 }
 
@@ -313,22 +330,11 @@ impl BankAccountFields {
     /// bank, `Agência 1234-5`, `Conta 12345-6 (corrente)` and `Titular …`,
     /// one per line, each only when it has a value.
     pub fn details(&self, lang: DetailsLanguage) -> Option<SecretString> {
-        use BankAccountType::*;
-        use DetailsLanguage::{En, PtBr};
         let (branch, account, holder) = match lang {
-            En => ("Branch", "Account", "Holder"),
-            PtBr => ("Agência", "Conta", "Titular"),
+            DetailsLanguage::En => ("Branch", "Account", "Holder"),
+            DetailsLanguage::PtBr => ("Agência", "Conta", "Titular"),
         };
-        let kind = self.account_type.map(|t| match (lang, t) {
-            (En, Checking) => "checking",
-            (En, Savings) => "savings",
-            (En, Payment) => "payment",
-            (En, Other) => "other",
-            (PtBr, Checking) => "corrente",
-            (PtBr, Savings) => "poupança",
-            (PtBr, Payment) => "pagamento",
-            (PtBr, Other) => "outra",
-        });
+        let kind = self.account_type.map(|t| t.label(lang));
         let account_line = self.account_joined().map(|n| match kind {
             Some(k) => format!("{account} {} ({k})", n.expose()),
             None => format!("{account} {}", n.expose()),
@@ -347,13 +353,17 @@ impl BankAccountFields {
         (!lines.is_empty()).then(|| SecretString::new(lines.join("\n")))
     }
 
-    /// `None` without a branch or an account.
+    /// `None` when the item has neither a branch nor an account. A digit
+    /// travels only with its number.
     pub fn values(&self) -> Option<BankValues> {
+        if self.branch.is_none() && self.account.is_none() {
+            return None;
+        }
         Some(BankValues {
-            branch: self.branch.clone()?,
-            branch_digit: self.branch_digit.clone(),
-            account: self.account.clone()?,
-            account_digit: self.account_digit.clone(),
+            branch: self.branch.clone(),
+            branch_digit: self.branch.as_ref().and(self.branch_digit.clone()),
+            account: self.account.clone(),
+            account_digit: self.account.as_ref().and(self.account_digit.clone()),
         })
     }
 }
@@ -457,14 +467,22 @@ mod tests {
     }
 
     #[test]
-    fn values_need_branch_and_account() {
+    fn values_need_branch_or_account() {
         let mut f = BankAccountFields {
-            branch: Some("1234".into()),
+            bank: Some("Itaú".into()),
+            password: Some(s("pw")),
             ..Default::default()
         };
         assert!(f.values().is_none());
+        f.branch = Some("1234".into());
+        let v = f.values().unwrap();
+        assert_eq!(v.branch.as_deref(), Some("1234"));
+        assert!(v.account.is_none());
+        f.branch = None;
         f.account = Some(s("12345"));
-        assert_eq!(f.values().unwrap().account.expose(), "12345");
+        let v = f.values().unwrap();
+        assert!(v.branch.is_none());
+        assert_eq!(v.account.unwrap().expose(), "12345");
     }
 
     #[test]

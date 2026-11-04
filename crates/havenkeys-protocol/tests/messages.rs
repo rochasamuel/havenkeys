@@ -1114,16 +1114,16 @@ fn bank_match_round_trips_and_is_validated() {
 
 #[test]
 fn bank_fill_round_trips_and_is_validated() {
-    let fill = |branch: &str, bd: Option<&str>, acct: &str, ad: Option<&str>| {
+    let fill = |branch: Option<&str>, bd: Option<&str>, acct: Option<&str>, ad: Option<&str>| {
         let r = Response::ok(
             1,
             ResultBody::FillItem {
                 username: None,
                 password: Some(WireSecret::new("pw".into())),
                 bank: Some(BankFill {
-                    branch: branch.into(),
+                    branch: branch.map(Into::into),
                     branch_digit: bd.map(Into::into),
-                    account: WireSecret::new(acct.into()),
+                    account: acct.map(|a| WireSecret::new(a.into())),
                     account_digit: ad.map(|d| WireSecret::new(d.into())),
                 }),
                 auto_submit: false,
@@ -1131,22 +1131,34 @@ fn bank_fill_round_trips_and_is_validated() {
         );
         Outgoing::from(r).to_bytes().unwrap().to_vec()
     };
-    let good = fill("1234", Some("5"), "123456", Some("X"));
+    let good = fill(Some("1234"), Some("5"), Some("123456"), Some("X"));
     let json = String::from_utf8(good.clone()).unwrap();
     assert!(json.contains(
         r#""bank":{"branch":"1234","branchDigit":"5","account":"123456","accountDigit":"X"}"#
     ));
     assert!(Outgoing::parse(&good).is_some());
-    assert!(Outgoing::parse(&fill("1", None, "1", None)).is_some());
+    assert!(Outgoing::parse(&fill(Some("1"), None, Some("1"), None)).is_some());
+    // Either number may be absent, sent as null.
+    let conta_only = fill(None, None, Some("12345"), Some("6"));
+    assert!(String::from_utf8(conta_only.clone())
+        .unwrap()
+        .contains(r#""branch":null"#));
+    assert!(Outgoing::parse(&conta_only).is_some());
+    assert!(Outgoing::parse(&fill(Some("1234"), Some("5"), None, None)).is_some());
     for bad in [
-        fill("", None, "1", None),
-        fill("123456789", None, "1", None),
-        fill("1234", Some("55"), "1", None),
-        fill("1234", Some("x"), "1", None),
-        fill("1234", None, "", None),
-        fill(&"1".repeat(21), None, &"1".repeat(21), None),
-        fill("1234", None, "12", Some("123")),
-        fill("1234", None, "12", Some("")),
+        fill(None, None, None, None),
+        fill(Some(""), None, Some("1"), None),
+        fill(Some("123456789"), None, Some("1"), None),
+        fill(Some("1234"), Some("55"), Some("1"), None),
+        fill(Some("1234"), Some("x"), Some("1"), None),
+        fill(Some("1234"), None, Some(""), None),
+        fill(Some("1"), None, Some(&"1".repeat(21)), None),
+        fill(None, None, Some(&"1".repeat(21)), None),
+        fill(Some("123456789"), None, None, None),
+        fill(Some("1234"), None, Some("12"), Some("123")),
+        fill(Some("1234"), None, Some("12"), Some("")),
+        fill(None, Some("5"), Some("12"), None),
+        fill(Some("1234"), None, None, Some("6")),
     ] {
         assert!(Outgoing::parse(&bad).is_none());
     }
@@ -1155,9 +1167,9 @@ fn bank_fill_round_trips_and_is_validated() {
 #[test]
 fn bank_values_never_print() {
     let f = BankFill {
-        branch: "1234".into(),
+        branch: Some("1234".into()),
         branch_digit: None,
-        account: WireSecret::new("987654".into()),
+        account: Some(WireSecret::new("987654".into())),
         account_digit: None,
     };
     assert!(!format!("{f:?}").contains("1234") && !format!("{f:?}").contains("987654"));

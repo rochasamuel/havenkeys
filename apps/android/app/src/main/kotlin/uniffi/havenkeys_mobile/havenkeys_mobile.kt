@@ -4852,11 +4852,11 @@ public object FfiConverterTypeBankDraft: FfiConverterRustBuffer<BankDraft> {
  * The numbers a bank form is filled with. `Debug` prints none of them.
  */
 data class BankFillRecord (
-    var `branch`: kotlin.String
+    var `branch`: kotlin.String?
     , 
     var `branchDigit`: kotlin.String?
     , 
-    var `account`: kotlin.String
+    var `account`: kotlin.String?
     , 
     var `accountDigit`: kotlin.String?
     
@@ -4875,24 +4875,24 @@ data class BankFillRecord (
 public object FfiConverterTypeBankFillRecord: FfiConverterRustBuffer<BankFillRecord> {
     override fun read(buf: ByteBuffer): BankFillRecord {
         return BankFillRecord(
-            FfiConverterString.read(buf),
             FfiConverterOptionalString.read(buf),
-            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
             FfiConverterOptionalString.read(buf),
         )
     }
 
     override fun allocationSize(value: BankFillRecord) = (
-            FfiConverterString.allocationSize(value.`branch`) +
+            FfiConverterOptionalString.allocationSize(value.`branch`) +
             FfiConverterOptionalString.allocationSize(value.`branchDigit`) +
-            FfiConverterString.allocationSize(value.`account`) +
+            FfiConverterOptionalString.allocationSize(value.`account`) +
             FfiConverterOptionalString.allocationSize(value.`accountDigit`)
     )
 
     override fun write(value: BankFillRecord, buf: ByteBuffer) {
-            FfiConverterString.write(value.`branch`, buf)
+            FfiConverterOptionalString.write(value.`branch`, buf)
             FfiConverterOptionalString.write(value.`branchDigit`, buf)
-            FfiConverterString.write(value.`account`, buf)
+            FfiConverterOptionalString.write(value.`account`, buf)
             FfiConverterOptionalString.write(value.`accountDigit`, buf)
     }
 }
@@ -5468,7 +5468,8 @@ public object FfiConverterTypeFieldChange: FfiConverterRustBuffer<FieldChange> {
 
 
 /**
- * A bank account's has no username, its password and `bank`.
+ * What a fill writes: a login's username and password, or a bank account's
+ * password and `bank` (a bank account has no username).
  */
 data class FillValues (
     var `username`: kotlin.String?

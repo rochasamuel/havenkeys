@@ -74,9 +74,9 @@ impl fmt::Debug for BankSummaryRecord {
 /// The numbers a bank form is filled with. `Debug` prints none of them.
 #[derive(uniffi::Record)]
 pub struct BankFillRecord {
-    pub branch: String,
+    pub branch: Option<String>,
     pub branch_digit: Option<String>,
-    pub account: String,
+    pub account: Option<String>,
     pub account_digit: Option<String>,
 }
 
@@ -98,7 +98,8 @@ pub struct AutofillMatch {
     pub bank: Option<BankSummaryRecord>,
 }
 
-/// A bank account's has no username, its password and `bank`.
+/// What a fill writes: a login's username and password, or a bank account's
+/// password and `bank` (a bank account has no username).
 #[derive(uniffi::Record)]
 pub struct FillValues {
     pub username: Option<String>,
@@ -149,7 +150,7 @@ fn to_values(c: FillCredentials) -> FillValues {
         bank: c.bank.map(|b| BankFillRecord {
             branch: b.branch,
             branch_digit: b.branch_digit,
-            account: text(b.account),
+            account: b.account.map(text),
             account_digit: b.account_digit.map(text),
         }),
     }
@@ -763,12 +764,12 @@ mod tests {
         assert_eq!(f.password.as_deref(), Some("senha-itau-1"));
         let b = f.bank.unwrap();
         assert_eq!(
-            (b.branch.as_str(), b.branch_digit.as_deref()),
-            ("1234", Some("5"))
+            (b.branch.as_deref(), b.branch_digit.as_deref()),
+            (Some("1234"), Some("5"))
         );
         assert_eq!(
-            (b.account.as_str(), b.account_digit.as_deref()),
-            ("12345", Some("6"))
+            (b.account.as_deref(), b.account_digit.as_deref()),
+            (Some("12345"), Some("6"))
         );
         let shown = format!("{b:?}");
         assert!(
@@ -823,7 +824,10 @@ mod tests {
         assert_eq!(once.values.username, None);
         assert_eq!(once.values.password.as_deref(), Some("senha-itau-1"));
         let b = once.values.bank.unwrap();
-        assert_eq!((b.branch.as_str(), b.account.as_str()), ("1234", "12345"));
+        assert_eq!(
+            (b.branch.as_deref(), b.account.as_deref()),
+            (Some("1234"), Some("12345"))
+        );
         assert_eq!(v.frequently_used(6).unwrap()[0].id, id);
         // Stored (as when online): the app then gets it through its binding.
         let staged = {

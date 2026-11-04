@@ -3,6 +3,7 @@
 //! always empty).
 
 use super::{count, for_each_item, ExportFormat, ExportSummary, Rendered};
+use crate::bank::DetailsLanguage;
 use crate::custom_field::{FieldSection, FieldValue};
 use crate::error::{Error, Result};
 use crate::import::common::format_utc_timestamp_ms;
@@ -269,6 +270,13 @@ fn item(ov: &ItemOverview, details: ItemDetails) -> Item {
             }
             if let Some(account) = f.account_joined() {
                 it.fields.push(field("Conta", account, true));
+            }
+            if let Some(holder) = f.holder_name.clone() {
+                it.fields.push(field("Titular", holder, false));
+            }
+            if let Some(t) = f.account_type {
+                let kind = t.label(DetailsLanguage::PtBr);
+                it.fields.push(field("Tipo de conta", kind.into(), false));
             }
             let mut uris = login_uris(ov);
             uris.extend(android_uris(&f.app_bindings));

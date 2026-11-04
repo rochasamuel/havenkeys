@@ -1160,10 +1160,12 @@ impl BankMatch {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BankFill {
-    pub branch: String,
+    #[serde(deserialize_with = "required")]
+    pub branch: Option<String>,
     #[serde(deserialize_with = "required")]
     pub branch_digit: Option<String>,
-    pub account: WireSecret,
+    #[serde(deserialize_with = "required")]
+    pub account: Option<WireSecret>,
     #[serde(deserialize_with = "required")]
     pub account_digit: Option<WireSecret>,
 }
@@ -1175,17 +1177,22 @@ impl fmt::Debug for BankFill {
 }
 
 impl BankFill {
+    /// A branch or an account, each 1–8 / 1–20 digits; a digit only with
+    /// its number.
     fn is_valid(&self) -> bool {
-        digits_ok(&self.branch, 1, 8)
+        let branch = self.branch.as_deref();
+        let account = self.account.as_ref().map(WireSecret::expose);
+        (branch.is_some() || account.is_some())
+            && branch.is_none_or(|b| digits_ok(b, 1, 8))
+            && account.is_none_or(|a| digits_ok(a, 1, 20))
             && self
                 .branch_digit
                 .as_deref()
-                .is_none_or(|d| check_digit_ok(d, 1))
-            && digits_ok(self.account.expose(), 1, 20)
+                .is_none_or(|d| branch.is_some() && check_digit_ok(d, 1))
             && self
                 .account_digit
                 .as_ref()
-                .is_none_or(|d| check_digit_ok(d.expose(), 2))
+                .is_none_or(|d| account.is_some() && check_digit_ok(d.expose(), 2))
     }
 }
 

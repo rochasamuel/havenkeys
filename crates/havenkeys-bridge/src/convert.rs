@@ -54,7 +54,7 @@ pub(crate) fn bank_fill(b: &BankValues) -> BankFill {
     BankFill {
         branch: b.branch.clone(),
         branch_digit: b.branch_digit.clone(),
-        account: secret(&b.account),
+        account: b.account.as_ref().map(secret),
         account_digit: b.account_digit.as_ref().map(secret),
     }
 }

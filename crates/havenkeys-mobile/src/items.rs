@@ -6,7 +6,7 @@ use crate::autofill::{unix_seconds, BankSummaryRecord};
 use crate::edit::{websites, Website};
 use crate::error::MobileResult;
 use crate::vault::MobileVault;
-use havenkeys_core::bank::{BankAccountType as CoreAccountType, BankSummary, DetailsLanguage};
+use havenkeys_core::bank::{BankAccountType as CoreAccountType, DetailsLanguage};
 use havenkeys_core::card::CardField;
 use havenkeys_core::custom_field::{FieldSection, FieldValue};
 use havenkeys_core::generator;
@@ -194,7 +194,8 @@ pub(crate) fn summary(o: &ItemOverview) -> ItemSummary {
     let (kind, subtitle) = match o.item_type {
         ItemType::Login => (ItemKind::Login, o.username.clone()),
         ItemType::SecureNote => (ItemKind::SecureNote, None),
-        ItemType::BankAccount => (ItemKind::BankAccount, o.bank.as_ref().and_then(bank_line)),
+        // The app writes a bank account's line in its own language from `bank`.
+        ItemType::BankAccount => (ItemKind::BankAccount, None),
         ItemType::Card => (
             ItemKind::Card,
             o.card
@@ -216,22 +217,6 @@ pub(crate) fn summary(o: &ItemOverview) -> ItemSummary {
         created_at: o.created_at,
         tags: o.tags.clone(),
         bank: o.bank.as_ref().map(BankSummaryRecord::from),
-    }
-}
-
-/// `Ag 1234 · •••45-6`, either part alone, or the bank's name.
-fn bank_line(b: &BankSummary) -> Option<String> {
-    let parts: Vec<String> = [
-        b.branch.as_ref().map(|br| format!("Ag {br}")),
-        b.account_last3.as_ref().map(|l| format!("•••{l}")),
-    ]
-    .into_iter()
-    .flatten()
-    .collect();
-    if parts.is_empty() {
-        b.bank.clone()
-    } else {
-        Some(parts.join(" · "))
     }
 }
 
@@ -964,7 +949,7 @@ mod tests {
         let id = crate::testing::seed_bank(&v, "Conta Itaú");
         let summary = v.list_items().unwrap().pop().unwrap();
         assert!(summary.kind == ItemKind::BankAccount);
-        assert_eq!(summary.subtitle.as_deref(), Some("Ag 1234 · •••45-6"));
+        assert_eq!(summary.subtitle, None);
         let bank = summary.bank.as_ref().unwrap();
         assert_eq!(
             (bank.branch.as_deref(), bank.account_last3.as_deref()),
