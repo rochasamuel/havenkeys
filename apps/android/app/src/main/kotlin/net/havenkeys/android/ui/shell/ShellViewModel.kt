@@ -23,6 +23,7 @@ enum class AddTile(@StringRes val label: Int, val icon: HavenIcon, val kind: Ite
     LOGIN(R.string.vault_new_login, HavenIcon.Globe, ItemKind.LOGIN),
     NOTE(R.string.vault_new_note, HavenIcon.Note, ItemKind.SECURE_NOTE),
     CARD(R.string.vault_new_card, HavenIcon.Card, ItemKind.CARD),
+    BANK(R.string.vault_new_bank, HavenIcon.Bank, ItemKind.BANK_ACCOUNT),
     GENERATOR(R.string.add_generate, HavenIcon.Dice, null),
 }
 

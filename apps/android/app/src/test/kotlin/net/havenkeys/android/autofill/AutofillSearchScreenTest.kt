@@ -24,6 +24,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import uniffi.havenkeys_mobile.AutofillKind
 import uniffi.havenkeys_mobile.AutofillMatch
+import uniffi.havenkeys_mobile.BankSummaryRecord
 
 @RunWith(RobolectricTestRunner::class)
 class AutofillSearchScreenTest {
@@ -118,5 +119,19 @@ class AutofillSearchScreenTest {
         search("git")
         rule.onNodeWithText(text(errorText("locked"))).assertExists()
         rule.onAllNodesWithText(text(R.string.vault_no_matches)).assertCountEquals(0)
+    }
+
+    @Test
+    fun aBankAccountShowsItsMaskedAccountNotAUsername() {
+        repo.matchList = Outcome.Ok(
+            listOf(
+                AutofillMatch(
+                    "b1", "Itaú", null, false, AutofillKind.BANK_ACCOUNT, BankSummaryRecord("Itaú", "1234", "45-6"),
+                ),
+            ),
+        )
+        show(answer = null)
+        search("ita")
+        rule.onNodeWithText("Branch 1234 · •••45-6", useUnmergedTree = true).assertExists()
     }
 }

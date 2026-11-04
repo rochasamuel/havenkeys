@@ -16,6 +16,7 @@ import androidx.autofill.inline.v1.InlineSuggestionUi
 import androidx.core.graphics.createBitmap
 import java.util.Locale
 import net.havenkeys.android.ui.kit.HavenIcon
+import net.havenkeys.android.ui.shell.bankSubtitle
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull

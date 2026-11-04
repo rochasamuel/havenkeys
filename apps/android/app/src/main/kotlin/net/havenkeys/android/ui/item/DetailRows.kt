@@ -8,6 +8,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
 import net.havenkeys.android.R
 import net.havenkeys.android.ui.components.MaskedValue
@@ -36,10 +38,19 @@ internal fun ShownRow(label: String, value: String, onCopy: () -> Unit) {
 /**
  * A hidden field: the fixed mask until the eye reveals it, then the value in
  * mono. The caller's RevealState holds [revealed] and clears it (30 s, leave,
- * background, lock); this row keeps nothing.
+ * background, lock); this row keeps nothing. [mask] replaces the fixed mask
+ * with one that shows a part (a bank account's `•••45-6`), read as [maskDescription].
  */
+@Suppress("LongParameterList") // the row, its two actions, and an optional mask that says what it hides
 @Composable
-internal fun SecretRow(label: String, revealed: String?, onReveal: () -> Unit, onCopy: () -> Unit) {
+internal fun SecretRow(
+    label: String,
+    revealed: String?,
+    onReveal: () -> Unit,
+    onCopy: () -> Unit,
+    mask: String? = null,
+    maskDescription: String? = null,
+) {
     GroupRow(
         trailing = {
             HavenIconButton(
@@ -51,8 +62,17 @@ internal fun SecretRow(label: String, revealed: String?, onReveal: () -> Unit, o
         },
     ) {
         HavenText(label, style = HavenTheme.type.label, color = HavenTheme.colors.muted)
-        // The label is read just above: the dots say only "Hidden".
-        if (revealed == null) MaskedValue(label = null) else RevealedValue(revealed)
+        when {
+            revealed != null -> RevealedValue(revealed)
+            mask != null -> HavenText(
+                mask,
+                Modifier.clearAndSetSemantics { contentDescription = maskDescription.orEmpty() },
+                style = HavenTheme.type.secret,
+                color = HavenTheme.colors.muted,
+            )
+            // The label is read just above: the dots say only "Hidden".
+            else -> MaskedValue(label = null)
+        }
     }
 }
 

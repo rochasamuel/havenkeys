@@ -26,6 +26,9 @@ import net.havenkeys.android.data.Outcome
 import net.havenkeys.android.data.VaultEventsHub
 import net.havenkeys.android.fakes.FakeSettingsRepository
 import net.havenkeys.android.fakes.FakeVaultRepository
+import net.havenkeys.android.fakes.bankRecord
+import net.havenkeys.android.fakes.bankSummary
+import uniffi.havenkeys_mobile.BankField
 import net.havenkeys.android.ui.components.errorText
 import net.havenkeys.android.ui.kit.setKit
 import net.havenkeys.android.ui.theme.HavenTheme
@@ -337,5 +340,68 @@ class ItemScreenTest {
         hub.locked("manual")
         rule.waitForIdle()
         rule.onAllNodesWithText("hunter2").assertCountEquals(0)
+    }
+
+    private fun showBank() {
+        vault.view = Outcome.Ok(ItemView(bankSummary(), emptyList()))
+        vault.bankAccount = Outcome.Ok(bankRecord())
+        vault.bankValues += mapOf(
+            BankField.ACCOUNT to "12345",
+            BankField.ACCOUNT_DIGIT to "6",
+            BankField.PASSWORD to "s3nha",
+        )
+        show()
+    }
+
+    private val account get() = text(R.string.field_bank_account)
+
+    @Test
+    fun aBankAccountShowsItsFieldsWithTheAccountMasked() {
+        showBank()
+        rule.onNode(hasText(text(R.string.field_bank_bank)) and hasText("Itaú")).assertExists()
+        rule.onNode(hasText(text(R.string.field_bank_branch)) and hasText("1234-5")).assertExists()
+        rule.onNode(hasText(text(R.string.field_bank_type)) and hasText(text(R.string.bank_type_checking)))
+            .assertExists()
+        rule.onNode(hasText(text(R.string.field_bank_holder)) and hasText("Maria Silva")).assertExists()
+        rule.onNodeWithContentDescription(text(R.string.bank_account_ending, "45-6"), useUnmergedTree = true)
+            .assertExists()
+        rule.onNodeWithText("itau.com.br", substring = true).assertExists()
+        rule.onAllNodesWithText("12345", substring = true).assertCountEquals(0)
+        assertTrue(vault.calls.none { it.startsWith("revealBank") })
+        // The account type has nothing to copy; the others do.
+        rule.onNodeWithContentDescription(text(R.string.copy, text(R.string.field_bank_type))).assertDoesNotExist()
+        rule.onNodeWithContentDescription(text(R.string.copy, text(R.string.field_bank_holder))).assertExists()
+    }
+
+    @Test
+    fun theEyeShowsTheAccountWithItsDigitUntilTheLock() {
+        showBank()
+        rule.onNodeWithContentDescription(text(R.string.reveal, account)).performClick()
+        rule.onNodeWithText("12345-6").assertExists()
+        hub.locked("manual")
+        rule.waitForIdle()
+        rule.onAllNodesWithText("12345-6").assertCountEquals(0)
+    }
+
+    @Test
+    fun copyingTheAccountCopiesItWithItsDigit() {
+        showBank()
+        rule.onNodeWithContentDescription(text(R.string.copy, account)).performClick()
+        rule.waitForIdle()
+        val clip = app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString()
+        assertEquals("12345-6", clip)
+        assertEquals(listOf("id"), vault.usesRecorded)
+    }
+
+    @Test
+    fun copyDetailsCopiesRustsTextInTheAppsLanguage() {
+        vault.details = Outcome.Ok("Itaú\nBranch 1234-5")
+        showBank()
+        rule.onNodeWithText(text(R.string.bank_copy_details)).performClick()
+        rule.waitForIdle()
+        assertTrue("bankDetails:en" in vault.calls)
+        val clip = app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString()
+        assertEquals("Itaú\nBranch 1234-5", clip)
+        rule.onNodeWithText(text(R.string.copied, text(R.string.bank_details), 30)).assertExists()
     }
 }

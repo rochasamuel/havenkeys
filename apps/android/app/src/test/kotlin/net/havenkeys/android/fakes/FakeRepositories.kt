@@ -7,6 +7,9 @@ import net.havenkeys.android.data.Outcome
 import net.havenkeys.android.data.SettingsRepository
 import net.havenkeys.android.data.VaultRepository
 import uniffi.havenkeys_mobile.AutofillMatch
+import uniffi.havenkeys_mobile.BankDraft
+import uniffi.havenkeys_mobile.BankField
+import uniffi.havenkeys_mobile.BankViewRecord
 import uniffi.havenkeys_mobile.BoundFill
 import uniffi.havenkeys_mobile.CredentialCaller
 import uniffi.havenkeys_mobile.DeviceInfo
@@ -183,6 +186,34 @@ class FakeVaultRepository : VaultRepository {
         calls += "update:$id"
         drafts += draft
         return updated
+    }
+
+    var bankAccount: Outcome<BankViewRecord> = Outcome.Failed("not_found")
+    /** Each hidden bank value; one missing is `not_found`. */
+    val bankValues = mutableMapOf<BankField, String>()
+    var details: Outcome<String> = Outcome.Failed("not_found")
+    var bankSaved: Outcome<String> = Outcome.Ok("bank-id")
+    val bankDrafts = mutableListOf<BankDraft>()
+
+    override suspend fun bankView(id: String): Outcome<BankViewRecord> {
+        calls += "bankView:$id"
+        return bankAccount
+    }
+
+    override suspend fun revealBank(id: String, field: BankField): Outcome<String> {
+        calls += "revealBank:$field"
+        return bankValues[field]?.let { Outcome.Ok(it) } ?: Outcome.Failed("not_found")
+    }
+
+    override suspend fun bankDetails(id: String, lang: String): Outcome<String> {
+        calls += "bankDetails:$lang"
+        return details
+    }
+
+    override suspend fun saveBank(draft: BankDraft): Outcome<String> {
+        calls += "saveBank"
+        bankDrafts += draft
+        return bankSaved
     }
 
     override suspend fun trash(id: String): Outcome<Boolean> {
@@ -560,3 +591,26 @@ class FakeCredentialRepository : CredentialRepository {
         return passwordValues
     }
 }
+
+/** Itaú's checking account, as `bankView` opens it: `Ag 1234-5`, an account ending `45-6`. */
+fun bankSummary(id: String = "id") = ItemSummary(
+    id, ItemKind.BANK_ACCOUNT, "Conta Itaú", "Ag 1234 · •••45-6", "itau.com.br", false, false, 0, 0,
+    tags = emptyList(), bank = uniffi.havenkeys_mobile.BankSummaryRecord("Itaú", "1234", "45-6"),
+)
+
+fun bankRecord(id: String = "id") = BankViewRecord(
+    summary = bankSummary(id),
+    bank = "Itaú",
+    holderName = "Maria Silva",
+    accountType = uniffi.havenkeys_mobile.BankAccountType.CHECKING,
+    branch = "1234",
+    branchDigit = "5",
+    hasAccount = true,
+    hasPassword = true,
+    hasNotes = false,
+    websites = listOf(
+        uniffi.havenkeys_mobile.Website("https://itau.com.br/", uniffi.havenkeys_mobile.MatchKind.DOMAIN),
+    ),
+    customFields = emptyList(),
+    revision = 4L,
+)

@@ -6091,6 +6091,12 @@ data class ItemSummary (
     var `createdAt`: kotlin.Long
     , 
     var `tags`: List<kotlin.String>
+    , 
+    /**
+     * A bank account's overview, for the app to word its row in the
+     * user's language; `None` for every other kind.
+     */
+    var `bank`: BankSummaryRecord? = null 
     
 ){
     
@@ -6117,6 +6123,7 @@ public object FfiConverterTypeItemSummary: FfiConverterRustBuffer<ItemSummary> {
             FfiConverterLong.read(buf),
             FfiConverterLong.read(buf),
             FfiConverterSequenceString.read(buf),
+            FfiConverterOptionalTypeBankSummaryRecord.read(buf),
         )
     }
 
@@ -6130,7 +6137,8 @@ public object FfiConverterTypeItemSummary: FfiConverterRustBuffer<ItemSummary> {
             FfiConverterBoolean.allocationSize(value.`hasPasskey`) +
             FfiConverterLong.allocationSize(value.`updatedAt`) +
             FfiConverterLong.allocationSize(value.`createdAt`) +
-            FfiConverterSequenceString.allocationSize(value.`tags`)
+            FfiConverterSequenceString.allocationSize(value.`tags`) +
+            FfiConverterOptionalTypeBankSummaryRecord.allocationSize(value.`bank`)
     )
 
     override fun write(value: ItemSummary, buf: ByteBuffer) {
@@ -6144,6 +6152,7 @@ public object FfiConverterTypeItemSummary: FfiConverterRustBuffer<ItemSummary> {
             FfiConverterLong.write(value.`updatedAt`, buf)
             FfiConverterLong.write(value.`createdAt`, buf)
             FfiConverterSequenceString.write(value.`tags`, buf)
+            FfiConverterOptionalTypeBankSummaryRecord.write(value.`bank`, buf)
     }
 }
 

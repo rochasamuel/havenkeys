@@ -52,6 +52,7 @@ class ItemListViewModelTest {
                 Category.PASSKEYS to 1,
                 Category.NOTES to 1,
                 Category.CARDS to 1,
+                Category.BANKS to 0,
             ),
             counts,
         )

@@ -48,6 +48,7 @@ internal fun creatableKind(arg: String): ItemKind? = when (arg) {
     "login" -> ItemKind.LOGIN
     "note" -> ItemKind.SECURE_NOTE
     "card" -> ItemKind.CARD
+    "bank" -> ItemKind.BANK_ACCOUNT
     else -> null
 }
 

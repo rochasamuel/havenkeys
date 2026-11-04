@@ -11,6 +11,7 @@ import net.havenkeys.android.data.Outcome
 import net.havenkeys.android.data.VaultEventsHub
 import net.havenkeys.android.fakes.FakeAccountRepository
 import net.havenkeys.android.fakes.FakeVaultRepository
+import net.havenkeys.android.fakes.bankRecord
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -18,6 +19,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import uniffi.havenkeys_mobile.BankField
 import uniffi.havenkeys_mobile.Change
 import uniffi.havenkeys_mobile.EditField
 import uniffi.havenkeys_mobile.FieldChange
@@ -172,5 +174,77 @@ class EditViewModelTest {
         val vm = EditViewModel(vault(), accounts, events, EditTarget.Existing("id"))
         events.locked("idle")
         assertNull(vm.state.value.edit)
+    }
+
+    private val bankEdit =
+        ItemEdit(ItemKind.BANK_ACCOUNT, "Conta Itaú", emptyList(), emptyList(), false, true, 4L, tags = emptyList())
+
+    private fun bankVault() = FakeVaultRepository().apply {
+        edit = Outcome.Ok(bankEdit)
+        bankAccount = Outcome.Ok(bankRecord())
+        bankValues[BankField.PASSWORD] = "s3nha"
+    }
+
+    @Test
+    fun aBankAccountOpensItsBankEditor() = runTest {
+        val vault = bankVault()
+        val state = EditViewModel(vault, accounts, events, EditTarget.Existing("id")).state.value
+        assertEquals(bankRecord(), state.bank)
+        assertTrue("bankView:id" in vault.calls)
+        // The password and notes are edited as a login's: hidden until Change.
+        assertEquals(
+            listOf(
+                EditField("password", FieldKind.SECRET, true, null),
+                EditField("notes", FieldKind.SECRET, false, null),
+            ),
+            state.edit?.fields,
+        )
+        assertFalse(state.toString().contains("Maria"))
+    }
+
+    @Test
+    fun aNewBankAccountStartsEmpty() = runTest {
+        val vault = bankVault()
+        val state = EditViewModel(vault, accounts, events, EditTarget.New(ItemKind.BANK_ACCOUNT)).state.value
+        assertTrue("template:BANK_ACCOUNT" in vault.calls)
+        assertFalse(vault.calls.any { it.startsWith("bankView") })
+        assertNull(state.bank)
+        assertEquals(listOf(false, false), state.edit?.fields?.map { it.present })
+    }
+
+    @Test
+    fun aBankAccountsPasswordIsReadAsABankValue() = runTest {
+        val vault = bankVault()
+        val vm = EditViewModel(vault, accounts, events, EditTarget.Existing("id"))
+        assertEquals(Outcome.Ok("s3nha"), vm.reveal("password"))
+        assertEquals(Outcome.Failed("not_found"), vm.reveal("notes"))
+        assertEquals(listOf("revealBank:PASSWORD", "revealBank:NOTES"), vault.calls.filter { "reveal" in it })
+    }
+
+    @Test
+    fun aBankAccountSavesThroughSaveBank() = runTest {
+        val vault = bankVault().apply { bankSaved = Outcome.Ok("id") }
+        val vm = EditViewModel(vault, accounts, events, EditTarget.Existing("id"))
+        val draft = EditorState(vm.state.value.edit!!, bank = vm.state.value.bank).toBankDraft()
+        vm.saveBank(draft)
+        assertEquals(EditResult.Saved("id"), vm.results.first())
+        assertEquals(listOf(draft), vault.bankDrafts)
+        assertFalse("update:id" in vault.calls)
+    }
+
+    @Test
+    fun aRefusedBankSaveKeepsTheEditorOpen() = runTest {
+        val vault = bankVault().apply { bankSaved = Outcome.Failed("invalid_input") }
+        val vm = EditViewModel(vault, accounts, events, EditTarget.Existing("id"))
+        vm.saveBank(EditorState(vm.state.value.edit!!, bank = vm.state.value.bank).toBankDraft())
+        assertEquals("invalid_input", vm.state.value.errorCode)
+        assertEquals(bankRecord(), vm.state.value.bank)
+    }
+
+    @Test
+    fun aLockClearsTheBankEditor() = runTest {
+        val vm = EditViewModel(bankVault(), accounts, events, EditTarget.Existing("id"))
+        events.locked("idle")
+        assertNull(vm.state.value.bank)
     }
 }

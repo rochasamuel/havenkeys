@@ -3,7 +3,7 @@
      names (HavenKeys, Secret Key, Recovery Sheet) stay in English in every
      locale. No string ever carries a secret. -->
 <resources>
-    <string name="app_name" translatable="false">HavenKeys</string>
+    <string name="app_name">HavenKeys</string>
 
     <!-- Errors, by MobileException.Failed code (ErrorText.kt) -->
     <string name="error_unlock_failed">Incorrect master password or damaged vault.</string>
@@ -37,7 +37,7 @@
     <string name="biometric_cancel">Use master password</string>
     <string name="unlock_busy">Unlocking…</string>
     <string name="unlock_secret_key">Secret Key</string>
-    <string name="unlock_secret_key_placeholder" translatable="false">H1-XXXX-XXXX-…</string>
+    <string name="unlock_secret_key_placeholder">H1-XXXX-XXXX-…</string>
     <string name="unlock_enter_password_and_key">Enter your master password and the Secret Key from your Recovery Sheet. This device remembers the Secret Key after you unlock.</string>
     <string name="biometric_enroll_title">Turn on unlock with fingerprint or face</string>
     <string name="biometric_enroll_cancel">Cancel</string>
@@ -51,6 +51,7 @@
     <string name="vault_filter_logins">Logins</string>
     <string name="vault_filter_notes">Secure notes</string>
     <string name="vault_filter_cards">Cards</string>
+    <string name="vault_filter_banks">Bank accounts</string>
     <string name="vault_filter_passkeys">Passkeys</string>
     <string name="vault_empty_hint">New items you add appear here.</string>
     <string name="vault_no_matches">No matches</string>
@@ -81,6 +82,26 @@
     <string name="field_card_code">Verification number</string>
     <string name="field_card_expiry">Expiry date</string>
     <string name="field_card_notes">Notes</string>
+    <string name="field_bank_bank">Bank</string>
+    <string name="field_bank_holder">Account holder</string>
+    <string name="field_bank_type">Account type</string>
+    <string name="field_bank_branch">Branch</string>
+    <string name="field_bank_account">Account</string>
+    <string name="bank_branch_digit">Branch digit</string>
+    <string name="bank_account_digit">Account digit</string>
+    <string name="bank_type_checking">Checking</string>
+    <string name="bank_type_savings">Savings</string>
+    <string name="bank_type_payment">Payment</string>
+    <string name="bank_type_other">Other</string>
+    <string name="bank_type_none">Not set</string>
+    <string name="bank_number">Number</string>
+    <string name="bank_digit">Digit</string>
+    <string name="bank_account_ending">Account ending %1$s</string>
+    <string name="bank_copy_details">Copy details</string>
+    <string name="bank_details">Bank details</string>
+    <string name="bank_keep_account">Leave empty to keep the saved number</string>
+    <!-- The language bank_details_text writes the details in: "en" or "pt-BR". -->
+    <string name="bank_details_lang">en</string>
     <string name="field_identity_first_name">First name</string>
     <string name="field_identity_middle_name">Middle name</string>
     <string name="field_identity_last_name">Last name</string>
@@ -246,6 +267,7 @@
     <string name="vault_new_login">Login</string>
     <string name="vault_new_note">Secure note</string>
     <string name="vault_new_card">Card</string>
+    <string name="vault_new_bank">Bank account</string>
     <string name="item_edit">Edit</string>
     <string name="item_delete">Delete</string>
     <string name="item_cancel">Cancel</string>
@@ -283,6 +305,8 @@
     <string name="edit_login">Edit login</string>
     <string name="edit_note">Edit secure note</string>
     <string name="edit_card">Edit card</string>
+    <string name="edit_new_bank">New bank account</string>
+    <string name="edit_bank">Edit bank account</string>
     <string name="edit_identity">Edit identity</string>
     <string name="edit_save">Save</string>
     <string name="edit_title">Title</string>
@@ -349,7 +373,7 @@
     <string name="autofill_setup_passkeys_old">Passkeys need Android 14 or later.</string>
     <string name="autofill_card_fallback">Card</string>
     <string name="autofill_card_expired">Expired</string>
-    <string name="autofill_bank_branch">Branch %1$s</string>
+    <string name="bank_branch_short">Branch %1$s</string>
     <string name="autofill_identity_fallback">Your identity</string>
     <string name="autofill_identity_with_docs">Fill %1$s too</string>
     <string name="autofill_identity_without_docs">Fill without documents</string>

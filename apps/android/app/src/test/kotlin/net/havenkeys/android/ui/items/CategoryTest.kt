@@ -16,19 +16,21 @@ class CategoryTest {
         item(ItemKind.SECURE_NOTE),
         item(ItemKind.CARD),
         item(ItemKind.IDENTITY),
+        item(ItemKind.BANK_ACCOUNT),
     )
 
     @Test
     fun eachCategoryKeepsItsKind() {
-        assertEquals(5, all.count(Category.ALL::keeps))
+        assertEquals(6, all.count(Category.ALL::keeps))
         assertEquals(2, all.count(Category.LOGINS::keeps))
         assertEquals(1, all.count(Category.PASSKEYS::keeps))
         assertEquals(1, all.count(Category.NOTES::keeps))
         assertEquals(1, all.count(Category.CARDS::keeps))
+        assertEquals(1, all.count(Category.BANKS::keeps))
     }
 
     @Test
-    fun onlyTheFiveCategoriesParse() {
+    fun onlyTheSixCategoriesParse() {
         Category.entries.forEach { assertEquals(it, Category.fromArg(it.arg)) }
         assertNull("the identity is on Home, not a list", Category.fromArg("identity"))
         assertNull(Category.fromArg("../vault"))

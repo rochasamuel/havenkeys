@@ -21,6 +21,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
@@ -30,11 +31,13 @@ import net.havenkeys.android.R
 import net.havenkeys.android.data.Outcome
 import net.havenkeys.android.ui.kit.DialogAction
 import net.havenkeys.android.ui.kit.HavenDialog
+import net.havenkeys.android.ui.kit.HavenIcon
 import net.havenkeys.android.ui.kit.ItemRow
 import net.havenkeys.android.ui.kit.RowLeading
 import net.havenkeys.android.ui.search.SearchField
 import net.havenkeys.android.ui.shell.EmptyLine
 import net.havenkeys.android.ui.shell.ErrorLine
+import net.havenkeys.android.ui.shell.bankSubtitle
 import net.havenkeys.android.ui.shell.insetGroup
 import net.havenkeys.android.ui.theme.HavenSpacing
 import net.havenkeys.android.ui.theme.HavenTheme
@@ -66,6 +69,7 @@ internal fun AutofillSearchScreen(
     val scope = rememberCoroutineScope()
     val focus = remember { FocusRequester() }
     val gutter = Modifier.padding(horizontal = HavenSpacing.gutter)
+    val context = LocalContext.current
     LaunchedEffect(focus) { focus.requestFocus() }
 
     Column(modifier.fillMaxSize().background(HavenTheme.colors.pane).safeDrawingPadding().imePadding()) {
@@ -80,8 +84,8 @@ internal fun AutofillSearchScreen(
             insetGroup(found.results, key = { it.id }) { match ->
                 ItemRow(
                     match.title,
-                    match.username,
-                    RowLeading.Monogram(match.title),
+                    if (match.isBank) bankSubtitle(context, match.bank) else match.username,
+                    if (match.isBank) RowLeading.Glyph(HavenIcon.Bank) else RowLeading.Monogram(match.title),
                     onClick = { if (!busy) picked = match },
                     hasCode = match.hasTotp,
                 )

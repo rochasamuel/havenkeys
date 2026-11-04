@@ -17,6 +17,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.input.KeyboardType
 import kotlinx.coroutines.launch
 import net.havenkeys.android.R
@@ -50,7 +52,10 @@ internal fun EditFields(editor: EditorState, edit: ItemEdit, values: FieldValues
         // The identity's title is its name, built by Rust.
         if (edit.kind != ItemKind.IDENTITY) InsetGroup { row { TitleEditor(editor) } }
         if (edit.kind == ItemKind.LOGIN) Websites(editor)
-        if (edit.fields.isNotEmpty()) {
+        val bank = editor.bank
+        if (bank != null) {
+            BankEditFields(bank, editor, edit, values)
+        } else if (edit.fields.isNotEmpty()) {
             InsetGroup {
                 edit.fields.forEach { field -> row { key(field.key) { FieldEditor(field, editor, values) } } }
             }
@@ -73,7 +78,7 @@ private fun TitleEditor(editor: EditorState) {
 }
 
 @Composable
-private fun FieldEditor(field: EditField, editor: EditorState, values: FieldValues) {
+internal fun FieldEditor(field: EditField, editor: EditorState, values: FieldValues) {
     val key = field.key
     val label = stringResource(fieldLabel(key))
     // Removal first: the old value is never shown for a field being removed.
@@ -209,9 +214,21 @@ private fun SetupKeyEditor(key: String, label: String, editor: EditorState, valu
     }
 }
 
-/** A present value that is not shown: the fixed mask (never its length) or "Set up.", with Change and Remove. */
+/**
+ * A present value that is not shown: the fixed mask (never its length) or
+ * "Set up.", with Change and Remove. [mask] shows a part instead (a bank
+ * account's `•••45-6`), read as [maskDescription].
+ */
+@Suppress("LongParameterList") // the row, its two actions, and an optional mask that says what it hides
 @Composable
-private fun HiddenRow(label: String, masked: Boolean, onChange: suspend () -> Unit, onRemove: () -> Unit) {
+internal fun HiddenRow(
+    label: String,
+    masked: Boolean,
+    onChange: suspend () -> Unit,
+    onRemove: () -> Unit,
+    mask: String? = null,
+    maskDescription: String? = null,
+) {
     val scope = rememberCoroutineScope()
     GroupRow(
         trailing = {
@@ -224,7 +241,14 @@ private fun HiddenRow(label: String, masked: Boolean, onChange: suspend () -> Un
         },
     ) {
         HavenText(label, style = HavenTheme.type.label, color = HavenTheme.colors.muted)
-        if (masked) {
+        if (mask != null) {
+            HavenText(
+                mask,
+                Modifier.clearAndSetSemantics { contentDescription = maskDescription.orEmpty() },
+                style = HavenTheme.type.secret,
+                color = HavenTheme.colors.muted,
+            )
+        } else if (masked) {
             // The label is read just above: the dots say only "Hidden".
             MaskedValue(label = null)
         } else {
@@ -238,7 +262,7 @@ private fun HiddenRow(label: String, masked: Boolean, onChange: suspend () -> Un
 }
 
 @Composable
-private fun RemovedRow(label: String, onUndo: () -> Unit) {
+internal fun RemovedRow(label: String, onUndo: () -> Unit) {
     GroupRow(
         trailing = { HavenButton(stringResource(R.string.edit_undo), onClick = onUndo, style = ButtonStyle.Quiet) },
     ) {

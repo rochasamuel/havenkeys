@@ -34,15 +34,18 @@ private fun matchLabel(match: MatchKind): Int = when (match) {
     MatchKind.EXACT -> R.string.edit_match_exact
 }
 
-/** A login's websites: each address with Remove, its match rule under it, then Add website. */
+/**
+ * A login's (or bank account's) websites: each address with Remove, its
+ * match rule under it, then Add website. [placeholder] fills an empty address.
+ */
 @Composable
-internal fun Websites(editor: EditorState) {
+internal fun Websites(editor: EditorState, placeholder: String? = null) {
     var choosing by remember { mutableStateOf<WebsiteRow?>(null) }
     Column {
         SectionHeader(stringResource(R.string.edit_websites))
         InsetGroup {
             editor.websites.forEach { site ->
-                row { key(site) { WebsiteEditor(site, onRemove = { editor.websites.remove(site) }) } }
+                row { key(site) { WebsiteEditor(site, placeholder, onRemove = { editor.websites.remove(site) }) } }
                 row { key(site) { MatchRow(site.match, onClick = { choosing = site }) } }
             }
             row {
@@ -65,13 +68,14 @@ internal fun Websites(editor: EditorState) {
 }
 
 @Composable
-private fun WebsiteEditor(site: WebsiteRow, onRemove: () -> Unit) {
+private fun WebsiteEditor(site: WebsiteRow, placeholder: String?, onRemove: () -> Unit) {
     val url = rememberDraftText(site, initial = { site.url }, onEdit = { site.url = it })
     Row(verticalAlignment = Alignment.CenterVertically) {
         HavenTextField(
             url,
             stringResource(R.string.field_website),
             Modifier.weight(1f),
+            placeholder = placeholder,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false),
         )
         HavenIconButton(HavenIcon.X, stringResource(R.string.edit_remove_website), onClick = onRemove)

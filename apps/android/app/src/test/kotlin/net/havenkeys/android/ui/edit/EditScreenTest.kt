@@ -25,6 +25,8 @@ import net.havenkeys.android.data.Outcome
 import net.havenkeys.android.data.VaultEventsHub
 import net.havenkeys.android.fakes.FakeAccountRepository
 import net.havenkeys.android.fakes.FakeVaultRepository
+import net.havenkeys.android.fakes.bankRecord
+import uniffi.havenkeys_mobile.Change
 import net.havenkeys.android.ui.kit.setKit
 import net.havenkeys.android.ui.theme.HavenTheme
 import org.junit.Assert.assertEquals
@@ -221,5 +223,50 @@ class EditScreenTest {
             .fetchSemanticsNode().config.getOrNull(SemanticsProperties.EditableText)?.text.orEmpty()
         assertTrue("the typed password came back", after.isEmpty())
         rule.onAllNodesWithText("hunter2").assertCountEquals(0)
+    }
+
+    private fun showBank(hasAccount: Boolean = true) {
+        vault.edit = Outcome.Ok(
+            ItemEdit(ItemKind.BANK_ACCOUNT, "Conta Itaú", emptyList(), emptyList(), false, true, 4L, emptyList()),
+        )
+        vault.bankAccount = Outcome.Ok(bankRecord().copy(hasAccount = hasAccount))
+        show()
+    }
+
+    private fun box(label: Int) = rule.onNode(hasSetTextAction() and hasText(text(label)))
+
+    @Test
+    fun aBankAccountOpensTheBankEditorAndSavesThroughSaveBank() {
+        showBank(hasAccount = false)
+        rule.onNodeWithText(text(R.string.edit_bank)).assertExists()
+        box(R.string.field_bank_bank).assert(hasText("Itaú"))
+        box(R.string.field_bank_account).performTextInput("12345-6")
+        box(R.string.bank_account_digit).assert(hasText("6"))
+        box(R.string.field_bank_account).assert(hasText("12345"))
+        rule.onNodeWithText(text(R.string.edit_save)).assertIsEnabled().performClick()
+        rule.waitForIdle()
+        val draft = vault.bankDrafts.single()
+        assertEquals(Change.Replace("12345") to Change.Replace("6"), draft.account to draft.accountDigit)
+        assertEquals(Change.Keep, draft.password)
+        assertTrue(vault.drafts.isEmpty())
+        assertEquals(listOf("bank-id"), done)
+    }
+
+    @Test
+    fun aSavedAccountShowsItsEndingAndIsKeptUntilChanged() {
+        showBank()
+        rule.onNodeWithContentDescription(
+            RuntimeEnvironment.getApplication().getString(R.string.bank_account_ending, "45-6"),
+            useUnmergedTree = true,
+        ).assertExists()
+        rule.onAllNodesWithText(text(R.string.bank_keep_account)).assertCountEquals(0)
+        rule.onAllNodesWithText(text(R.string.edit_change))[0].performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText(text(R.string.bank_keep_account), useUnmergedTree = true).assertExists()
+        rule.onNodeWithText(text(R.string.edit_save)).performClick()
+        rule.waitForIdle()
+        val draft = vault.bankDrafts.single()
+        assertEquals(Change.Keep to Change.Keep, draft.account to draft.accountDigit)
+        assertTrue(vault.calls.none { it.startsWith("revealBank") })
     }
 }

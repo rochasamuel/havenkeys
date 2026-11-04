@@ -36,7 +36,10 @@ class ShellViewModelTest {
     fun offlineTheItemTilesAreDimmedButNotTheGenerator() {
         val vm = vm()
         assertEquals(
-            mapOf(AddTile.LOGIN to false, AddTile.NOTE to false, AddTile.CARD to false, AddTile.GENERATOR to true),
+            mapOf(
+                AddTile.LOGIN to false, AddTile.NOTE to false, AddTile.CARD to false, AddTile.BANK to false,
+                AddTile.GENERATOR to true,
+            ),
             vm.tiles(),
         )
     }
@@ -55,7 +58,7 @@ class ShellViewModelTest {
     fun theIdentityIsNeverATile() {
         assertTrue(AddTile.entries.none { it.kind == ItemKind.IDENTITY })
         assertEquals(
-            listOf(ItemKind.LOGIN, ItemKind.SECURE_NOTE, ItemKind.CARD),
+            listOf(ItemKind.LOGIN, ItemKind.SECURE_NOTE, ItemKind.CARD, ItemKind.BANK_ACCOUNT),
             AddTile.entries.mapNotNull { it.kind },
         )
     }

@@ -45,6 +45,13 @@ import net.havenkeys.android.fakes.FakeAccountRepository
 import net.havenkeys.android.fakes.FakeAutofillRepository
 import net.havenkeys.android.fakes.FakeSettingsRepository
 import net.havenkeys.android.fakes.FakeVaultRepository
+import net.havenkeys.android.fakes.bankRecord
+import net.havenkeys.android.fakes.bankSummary
+import net.havenkeys.android.ui.shell.SummaryRow
+import net.havenkeys.android.ui.shell.insetGroup
+import androidx.compose.foundation.lazy.LazyColumn
+import uniffi.havenkeys_mobile.BankField
+import uniffi.havenkeys_mobile.BankSummaryRecord
 import net.havenkeys.android.ui.autofillsetup.AutofillSetupScreen
 import net.havenkeys.android.ui.edit.EditNavigation
 import net.havenkeys.android.ui.edit.EditScreen
@@ -110,6 +117,7 @@ private const val TYPING_MS = 500L
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(qualifiers = "w411dp-h891dp-xxhdpi")
+@Suppress("TooManyFunctions") // one fake-data screen helper per screen kind, plus the renderer
 class ScreenScreenshots {
     /** One rendered screen: its name, its content, and what the test does on it before the shot. */
     private class Shot(val name: String, val before: () -> Unit = {}, val content: @Composable () -> Unit)
@@ -463,4 +471,95 @@ class ScreenScreenshots {
             Shot("item") { Item() },
         ),
     )
+
+    /** A bank account's vault, its screen and editor (spec 2026-11-03-bank-account §6.2). */
+    private val banks = FakeVaultRepository().apply {
+        val itau = bankSummary("1")
+        view = Outcome.Ok(ItemView(itau, emptyList()))
+        bankAccount = Outcome.Ok(bankRecord("1").copy(hasNotes = true))
+        bankValues += mapOf(
+            BankField.ACCOUNT to "12345",
+            BankField.ACCOUNT_DIGIT to "6",
+            BankField.PASSWORD to "s3nha-itau",
+        )
+        val site = listOf(Website("https://itau.com.br/", MatchKind.DOMAIN))
+        edit = Outcome.Ok(
+            ItemEdit(ItemKind.BANK_ACCOUNT, "Conta Itaú", site, emptyList(), false, true, 4L, tags = emptyList()),
+        )
+        items = Outcome.Ok(
+            listOf(
+                itau,
+                itau.copy(id = "2", title = "Nubank", bank = BankSummaryRecord("Nubank", "0001", "78-9")),
+                itau.copy(id = "3", title = "Poupança BB", bank = BankSummaryRecord("Banco do Brasil", null, null)),
+            ),
+        )
+    }
+
+    private val revealAccount = {
+        val label = app.getString(R.string.field_bank_account)
+        rule.onNodeWithContentDescription(app.getString(R.string.reveal, label)).performClick()
+        rule.waitForIdle()
+    }
+
+    private val changeAccount = {
+        rule.onAllNodes(hasText(app.getString(R.string.edit_change)) and hasClickAction())[0].performClick()
+        rule.waitForIdle()
+    }
+
+    private val bankShots = listOf(
+        Shot("bank-list") {
+            val rows = (banks.items as Outcome.Ok).value
+            LazyColumn(Modifier.padding(top = 16.dp)) { insetGroup(rows, key = { it.id }) { SummaryRow(it, {}) } }
+        },
+        Shot("bank-item") { Item(banks) },
+        Shot("bank-item-revealed", before = revealAccount) { Item(banks) },
+        Shot("bank-editor") { Editor(banks) },
+        Shot("bank-editor-account", before = changeAccount) { Editor(banks) },
+        Shot("bank-editor-new") {
+            EditScreen(
+                remember {
+                    val repo = FakeVaultRepository().apply {
+                        edit = Outcome.Ok(
+                            ItemEdit(ItemKind.BANK_ACCOUNT, "", emptyList(), emptyList(), false, true, null, listOf()),
+                        )
+                    }
+                    EditViewModel(repo, accounts, events, EditTarget.New(ItemKind.BANK_ACCOUNT))
+                },
+                isNew = true,
+                online = true,
+                navigation = EditNavigation({}, {}, {}),
+            )
+        },
+        Shot(
+            "bank-autofill-search",
+            before = {
+                rule.onNode(hasSetTextAction()).performTextInput("ita")
+                rule.waitForIdle()
+                ShadowLooper.idleMainLooper(SETTLE_MS, TimeUnit.MILLISECONDS)
+                rule.mainClock.advanceTimeBy(TYPING_MS)
+            },
+        ) {
+            val repo = remember {
+                FakeAutofillRepository().apply {
+                    matchList = Outcome.Ok(
+                        listOf(
+                            AutofillMatch(
+                                "b1", "Conta Itaú", null, false, AutofillKind.BANK_ACCOUNT,
+                                BankSummaryRecord("Itaú", "1234", "45-6"),
+                            ),
+                            AutofillMatch("m1", "Itaú (old login)", "12345-6", false, AutofillKind.LOGIN),
+                        ),
+                    )
+                }
+            }
+            AutofillSearchScreen(repo::search, CallerApp("com.itau", "Itaú"), onConfirmed = { null })
+        },
+    )
+
+    @Test
+    fun bankAccountScreens() = render("bank", bankShots)
+
+    @Test
+    @Config(qualifiers = "pt-rBR-w360dp-h640dp-xxhdpi")
+    fun bankAccountScreensInPortugueseOnASmallPhone() = render("bank-pt-360", bankShots)
 }

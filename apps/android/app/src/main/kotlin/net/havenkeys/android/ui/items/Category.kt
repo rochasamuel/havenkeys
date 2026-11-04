@@ -13,6 +13,7 @@ enum class Category(val arg: String, @StringRes val label: Int, val icon: HavenI
     PASSKEYS("passkeys", R.string.vault_filter_passkeys, HavenIcon.Key),
     NOTES("notes", R.string.vault_filter_notes, HavenIcon.Note),
     CARDS("cards", R.string.vault_filter_cards, HavenIcon.Card),
+    BANKS("banks", R.string.vault_filter_banks, HavenIcon.Bank),
     ;
 
     fun keeps(item: ItemSummary): Boolean = when (this) {
@@ -21,6 +22,7 @@ enum class Category(val arg: String, @StringRes val label: Int, val icon: HavenI
         PASSKEYS -> item.kind == ItemKind.LOGIN && item.hasPasskey
         NOTES -> item.kind == ItemKind.SECURE_NOTE
         CARDS -> item.kind == ItemKind.CARD
+        BANKS -> item.kind == ItemKind.BANK_ACCOUNT
     }
 
     companion object {

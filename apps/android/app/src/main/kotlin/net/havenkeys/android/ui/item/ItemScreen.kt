@@ -110,12 +110,14 @@ fun ItemScreen(
         ) {
             state.view?.let { view ->
                 ItemHeader(view.summary)
+                val bank = state.bank
+                if (bank != null) CopyDetails(actions)
                 ItemTags(view.summary.tags)
                 if (state.health.isNotEmpty()) {
                     // Vault health's checks for this login, under its title, before its fields.
                     HealthChips(state.health, state.reusedIn, state.duplicates, Modifier.padding(bottom = 16.dp))
                 }
-                ItemFields(view, actions)
+                if (bank != null) BankFields(bank, actions) else ItemFields(view.fields, actions)
             }
             state.errorCode?.let { ErrorLine(it) }
         }
@@ -159,10 +161,10 @@ private fun ItemTags(tags: List<String>) {
  * wrong row.
  */
 @Composable
-private fun ItemFields(view: ItemView, actions: FieldActions) {
-    fieldGroups(view.fields).forEachIndexed { i, group ->
+internal fun ItemFields(fields: List<ViewField>, actions: FieldActions, afterGroup: Boolean = false) {
+    fieldGroups(fields).forEachIndexed { i, group ->
         val title = group.first().section?.title?.takeUnless { it.isBlank() }
-        val gap = Modifier.padding(top = if (i == 0) 0.dp else 16.dp)
+        val gap = Modifier.padding(top = if (i == 0 && !afterGroup) 0.dp else 16.dp)
         if (title != null) SectionHeader(title, gap) else Spacer(gap)
         InsetGroup {
             group.forEach { field -> row { key(field.key) { FieldRow(field, actions) } } }
@@ -210,14 +212,17 @@ private fun ItemActions(view: ItemView?, online: Boolean, onEdit: () -> Unit, on
 }
 
 /** What a field (and the item) can do; every value passes through here without being kept. */
-private class FieldActions(
+internal class FieldActions(
     val viewModel: ItemViewModel,
     private val clipboard: SensitiveClipboard,
     private val toasts: ToastState,
     private val scope: CoroutineScope,
     private val resources: Resources,
 ) {
-    fun reveal(key: String, into: RevealState) {
+    fun reveal(key: String, into: RevealState) = revealWith(into) { viewModel.reveal(key) }
+
+    /** Shows what [fetch] answers in [into], or hides it if shown. */
+    fun revealWith(into: RevealState, fetch: suspend () -> Outcome<String>) {
         if (into.value != null) {
             into.clear()
             return
@@ -225,7 +230,7 @@ private class FieldActions(
         // A clear while Rust answers (the app stopped, the row left) wins: the late answer is dropped.
         val asked = into.generation
         scope.launch {
-            when (val r = viewModel.reveal(key)) {
+            when (val r = fetch()) {
                 is Outcome.Ok -> into.showIfCurrent(asked, r.value)
                 is Outcome.Failed -> fail(r.code)
             }
@@ -240,9 +245,12 @@ private class FieldActions(
         }
     }
 
-    fun copyField(key: String, label: String) {
+    fun copyField(key: String, label: String) = copyWith(label) { viewModel.reveal(key) }
+
+    /** Copies what [fetch] answers, named [label] in the toast. */
+    fun copyWith(label: String, fetch: suspend () -> Outcome<String>) {
         scope.launch {
-            when (val r = viewModel.reveal(key)) {
+            when (val r = fetch()) {
                 is Outcome.Ok -> copy(label, r.value)
                 is Outcome.Failed -> fail(r.code)
             }
@@ -281,6 +289,11 @@ private class FieldActions(
         clipboard.copy(label, value, seconds)
         viewModel.copied()
         toasts.show(resources.getString(R.string.copied, label, seconds))
+    }
+
+    /** The bank account's transfer details, written by Rust in the app's language. */
+    fun copyDetails() = copyWith(resources.getString(R.string.bank_details)) {
+        viewModel.bankDetails(resources.getString(R.string.bank_details_lang))
     }
 
     private fun fail(code: String) = toasts.show(resources.getString(errorText(code)), ToastTone.Alert)

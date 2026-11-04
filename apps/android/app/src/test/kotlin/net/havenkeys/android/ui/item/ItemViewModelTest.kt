@@ -15,6 +15,8 @@ import net.havenkeys.android.data.Outcome
 import net.havenkeys.android.data.VaultEventsHub
 import net.havenkeys.android.fakes.FakeSettingsRepository
 import net.havenkeys.android.fakes.FakeVaultRepository
+import net.havenkeys.android.fakes.bankRecord
+import net.havenkeys.android.fakes.bankSummary
 import net.havenkeys.android.fakes.settings
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -22,6 +24,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
+import uniffi.havenkeys_mobile.BankField
 import uniffi.havenkeys_mobile.FieldKind
 import uniffi.havenkeys_mobile.HealthCountsView
 import uniffi.havenkeys_mobile.HealthIssueView
@@ -201,5 +204,54 @@ class ItemViewModelTest {
             trashed = Outcome.Ok(false)
         }
         assertEquals(Outcome.Ok(false), vm(vault).trash())
+    }
+
+    private fun bankVault() = FakeVaultRepository().apply {
+        view = Outcome.Ok(ItemView(bankSummary(), emptyList()))
+        bankAccount = Outcome.Ok(bankRecord())
+        bankValues += mapOf(BankField.ACCOUNT to "12345", BankField.ACCOUNT_DIGIT to "6", BankField.PASSWORD to "s3nha")
+    }
+
+    @Test
+    fun aBankAccountOpensWithItsBankViewAndNoHiddenValue() = runTest {
+        val vault = bankVault()
+        val state = vm(vault).state.value
+        assertEquals(bankRecord(), state.bank)
+        assertTrue("bankView:id" in vault.calls)
+        assertFalse(vault.calls.any { it.startsWith("revealBank") })
+        assertFalse("the state is never printed with a value", state.toString().contains("Maria"))
+    }
+
+    @Test
+    fun aBankViewThatFailsShowsItsCode() = runTest {
+        val vault = bankVault().apply { bankAccount = Outcome.Failed("denied") }
+        val state = vm(vault).state.value
+        assertNull(state.bank)
+        assertEquals("denied", state.errorCode)
+    }
+
+    @Test
+    fun theAccountIsRevealedWithItsDigit() = runTest {
+        val vault = bankVault()
+        assertEquals(Outcome.Ok("12345-6"), vm(vault).bankAccount())
+        vault.bankValues.remove(BankField.ACCOUNT_DIGIT)
+        assertEquals("an account without a digit has none", Outcome.Ok("12345"), vm(vault).bankAccount())
+        vault.bankValues.clear()
+        assertEquals(Outcome.Failed("not_found"), vm(vault).bankAccount())
+    }
+
+    @Test
+    fun aLockClearsTheBankView() = runTest {
+        val vm = vm(bankVault())
+        events.locked("user")
+        assertNull(vm.state.value.bank)
+        assertNull(vm.state.value.view)
+    }
+
+    @Test
+    fun copyDetailsAsksRustInTheAppsLanguage() = runTest {
+        val vault = bankVault().apply { details = Outcome.Ok("Itaú\nAgência 1234-5") }
+        assertEquals(Outcome.Ok("Itaú\nAgência 1234-5"), vm(vault).bankDetails("pt-BR"))
+        assertTrue("bankDetails:pt-BR" in vault.calls)
     }
 }

@@ -2,7 +2,7 @@
 //! (title, username, websites); every sealed value comes from `reveal`, one
 //! field per call, so a screen holds a secret only after the user asked.
 
-use crate::autofill::unix_seconds;
+use crate::autofill::{unix_seconds, BankSummaryRecord};
 use crate::edit::{websites, Website};
 use crate::error::MobileResult;
 use crate::vault::MobileVault;
@@ -101,6 +101,10 @@ pub struct ItemSummary {
     pub updated_at: i64,
     pub created_at: i64,
     pub tags: Vec<String>,
+    /// A bank account's overview, for the app to word its row in the
+    /// user's language; `None` for every other kind.
+    #[uniffi(default = None)]
+    pub bank: Option<BankSummaryRecord>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, uniffi::Enum)]
@@ -211,6 +215,7 @@ pub(crate) fn summary(o: &ItemOverview) -> ItemSummary {
         updated_at: o.updated_at,
         created_at: o.created_at,
         tags: o.tags.clone(),
+        bank: o.bank.as_ref().map(BankSummaryRecord::from),
     }
 }
 
@@ -960,6 +965,11 @@ mod tests {
         let summary = v.list_items().unwrap().pop().unwrap();
         assert!(summary.kind == ItemKind::BankAccount);
         assert_eq!(summary.subtitle.as_deref(), Some("Ag 1234 · •••45-6"));
+        let bank = summary.bank.as_ref().unwrap();
+        assert_eq!(
+            (bank.branch.as_deref(), bank.account_last3.as_deref()),
+            (Some("1234"), Some("45-6"))
+        );
         let view = v.bank_view(id).unwrap();
         assert_eq!(view.summary.title, "Conta Itaú");
         assert_eq!(view.bank.as_deref(), Some("Itaú"));

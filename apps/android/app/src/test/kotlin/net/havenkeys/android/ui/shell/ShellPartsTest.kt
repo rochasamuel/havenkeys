@@ -26,6 +26,8 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import net.havenkeys.android.fakes.bankSummary
+import org.robolectric.RuntimeEnvironment
 import uniffi.havenkeys_mobile.ItemKind
 import uniffi.havenkeys_mobile.ItemSummary
 
@@ -33,6 +35,8 @@ import uniffi.havenkeys_mobile.ItemSummary
 class ShellPartsTest {
     @get:Rule
     val rule = createComposeRule()
+
+    private val app = RuntimeEnvironment.getApplication()
 
     private fun summary(
         kind: ItemKind,
@@ -48,13 +52,21 @@ class ShellPartsTest {
         assertEquals(RowLeading.Glyph(HavenIcon.Note, soft = true), summary(ItemKind.SECURE_NOTE).leading())
         assertEquals(RowLeading.Glyph(HavenIcon.Card), summary(ItemKind.CARD).leading())
         assertEquals(RowLeading.Glyph(HavenIcon.IdCard), summary(ItemKind.IDENTITY).leading())
+        assertEquals(RowLeading.Glyph(HavenIcon.Bank), summary(ItemKind.BANK_ACCOUNT).leading())
     }
 
     @Test
     fun theSecondLineIsTheSubtitleElseTheWebsite() {
-        assertEquals("sam", summary(ItemKind.LOGIN, subtitle = "sam", website = "github.com").secondLine())
-        assertEquals("github.com", summary(ItemKind.LOGIN, website = "github.com").secondLine())
-        assertNull(summary(ItemKind.SECURE_NOTE).secondLine())
+        assertEquals("sam", summary(ItemKind.LOGIN, subtitle = "sam", website = "github.com").secondLine(app))
+        assertEquals("github.com", summary(ItemKind.LOGIN, website = "github.com").secondLine(app))
+        assertNull(summary(ItemKind.SECURE_NOTE).secondLine(app))
+    }
+
+    @Test
+    fun aBankAccountsSecondLineIsWordedInTheAppsLanguage() {
+        // Rust's subtitle is Portuguese; the row words it from the overview.
+        assertEquals("Branch 1234 · •••45-6", bankSummary().secondLine(app))
+        assertEquals("itau.com.br", bankSummary().copy(bank = null, subtitle = null).secondLine(app))
     }
 
     @Test

@@ -5,6 +5,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import net.havenkeys.android.fakes.bankRecord
+import uniffi.havenkeys_mobile.BankAccountType
 import uniffi.havenkeys_mobile.Change
 import uniffi.havenkeys_mobile.EditField
 import uniffi.havenkeys_mobile.FieldKind
@@ -264,5 +266,105 @@ class EditorStateTest {
         editor.load("password", "hunter2")
         editor.type("password", "hunter3")
         assertFalse(editor.toString().contains("hunter"))
+    }
+
+    private fun bankEditor(saved: Boolean = true) = EditorState(
+        ItemEdit(
+            ItemKind.BANK_ACCOUNT, if (saved) "Conta Itaú" else "", emptyList(),
+            listOf(
+                EditField("password", FieldKind.SECRET, saved, null),
+                EditField("notes", FieldKind.SECRET, false, null),
+            ),
+            false, true, if (saved) 4L else null, tags = emptyList(),
+        ),
+        bank = if (saved) bankRecord() else null,
+    )
+
+    @Test
+    fun anUntouchedBankAccountKeepsItsHiddenValues() {
+        val editor = bankEditor()
+        assertFalse(editor.dirty)
+        val draft = editor.toBankDraft()
+        assertEquals("id", draft.id)
+        assertEquals(4L, draft.baseRevision)
+        assertEquals(
+            listOf("Itaú", "Maria Silva", "1234", "5"),
+            listOf(draft.bank, draft.holderName, draft.branch, draft.branchDigit),
+        )
+        assertEquals(BankAccountType.CHECKING, draft.accountType)
+        assertEquals(
+            List(4) { Change.Keep },
+            listOf(draft.account, draft.accountDigit, draft.password, draft.notes),
+        )
+    }
+
+    @Test
+    fun aNewBankAccountHasNoId() {
+        val draft = bankEditor(saved = false).toBankDraft()
+        assertNull(draft.id)
+        assertNull(draft.bank)
+        assertNull(draft.accountType)
+    }
+
+    @Test
+    fun pastingANumberWithItsDigitSplitsIt() {
+        val editor = bankEditor()
+        val bank = requireNotNull(editor.bank)
+        bank.typeAccount("12.345-x")
+        assertEquals("12345" to "X", bank.account to bank.accountDigit)
+        assertEquals(1, bank.splits)
+        // The split-off digit replaces the saved one: Rust refuses two.
+        bank.typeBranch("9876-0")
+        assertEquals("9876" to "0", bank.branch to bank.branchDigit)
+        val draft = editor.toBankDraft()
+        assertEquals(Change.Replace("12345") to Change.Replace("X"), draft.account to draft.accountDigit)
+        assertEquals("9876" to "0", draft.branch to draft.branchDigit)
+        assertTrue(editor.dirty)
+    }
+
+    @Test
+    fun aNumberThatDoesNotFitItsBoxesIsNotSplit() {
+        val bank = requireNotNull(bankEditor().bank)
+        bank.typeBranch("123456789-0")
+        assertEquals("123456789-0" to "5", bank.branch to bank.branchDigit)
+        bank.typeAccount("12345-678")
+        assertEquals("12345-678" to "", bank.account to bank.accountDigit)
+        bank.typeAccount("12345-")
+        assertEquals(0, bank.splits)
+    }
+
+    @Test
+    fun aNewAccountReplacesBothAndADigitAloneKeepsTheAccount() {
+        val editor = bankEditor()
+        val bank = requireNotNull(editor.bank)
+        bank.accountDigit = "7"
+        assertEquals(Change.Keep to Change.Replace("7"), editor.toBankDraft().let { it.account to it.accountDigit })
+        bank.accountDigit = ""
+        bank.typeAccount("99999")
+        val draft = editor.toBankDraft()
+        assertEquals(Change.Replace("99999") to Change.Remove, draft.account to draft.accountDigit)
+    }
+
+    @Test
+    fun removingTheAccountRemovesItsDigit() {
+        val editor = bankEditor()
+        val bank = requireNotNull(editor.bank)
+        bank.accountRemoved = true
+        assertTrue(editor.dirty)
+        assertEquals(Change.Remove to Change.Remove, editor.toBankDraft().let { it.account to it.accountDigit })
+    }
+
+    @Test
+    fun theBanksTextAndTypeAreSentInFull() {
+        val editor = bankEditor()
+        val bank = requireNotNull(editor.bank)
+        bank.holder = "  "
+        bank.accountType = null
+        assertTrue(editor.dirty)
+        val draft = editor.toBankDraft()
+        assertNull(draft.holderName)
+        assertNull(draft.accountType)
+        editor.type("password", "nova-senha")
+        assertEquals(Change.Replace("nova-senha"), editor.toBankDraft().password)
     }
 }

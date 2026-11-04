@@ -16,6 +16,8 @@ import net.havenkeys.android.data.VaultEventsHub
 import net.havenkeys.android.data.VaultRepository
 import net.havenkeys.android.data.clipboardClearSeconds
 import net.havenkeys.android.ui.health.chipCounts
+import uniffi.havenkeys_mobile.BankField
+import uniffi.havenkeys_mobile.BankViewRecord
 import uniffi.havenkeys_mobile.HealthKind
 import uniffi.havenkeys_mobile.ItemKind
 import uniffi.havenkeys_mobile.ItemView
@@ -32,7 +34,12 @@ data class ItemUiState(
     val health: List<HealthKind> = emptyList(),
     val reusedIn: Int? = null,
     val duplicates: Int? = null,
-)
+    /** A bank account's screen: its bank, holder and agência, never its account or password. */
+    val bank: BankViewRecord? = null,
+) {
+    // `view` holds a username and `bank` a holder's name.
+    override fun toString() = "ItemUiState(…)"
+}
 
 class ItemViewModel(
     private val vault: VaultRepository,
@@ -59,6 +66,23 @@ class ItemViewModel(
     /** One field's value, for the caller to show or copy; never stored here. */
     suspend fun reveal(key: String): Outcome<String> = vault.reveal(id, key)
 
+    /** One of a bank account's hidden values, for the caller to show or copy; never stored here. */
+    suspend fun revealBank(field: BankField): Outcome<String> = vault.revealBank(id, field)
+
+    /** The account and its digit as people write them, `12345-6`; never stored here. */
+    suspend fun bankAccount(): Outcome<String> {
+        val account = vault.revealBank(id, BankField.ACCOUNT)
+        if (account !is Outcome.Ok) return account
+        return when (val digit = vault.revealBank(id, BankField.ACCOUNT_DIGIT)) {
+            is Outcome.Ok -> Outcome.Ok("${account.value}-${digit.value}")
+            // An account without a digit has none to add.
+            is Outcome.Failed -> if (digit.code == NOT_FOUND) account else digit
+        }
+    }
+
+    /** The transfer details to copy, in [lang] (`en` or `pt-BR`). */
+    suspend fun bankDetails(lang: String): Outcome<String> = vault.bankDetails(id, lang)
+
     /** The screen copied one of this item's fields: Home's "Frequently used" counts it. */
     // The Outcome is ignored on purpose: recording never fails a copy.
     suspend fun copied() {
@@ -84,11 +108,15 @@ class ItemViewModel(
     private fun load() {
         viewModelScope.launch {
             val view = vault.view(id)
-            _state.value = when (view) {
-                is Outcome.Ok -> ItemUiState(view = view.value)
-                is Outcome.Failed -> ItemUiState(errorCode = view.code)
+            val kind = (view as? Outcome.Ok)?.value?.summary?.kind
+            // A bank account's fields come from its own view.
+            val bank = if (kind == ItemKind.BANK_ACCOUNT) vault.bankView(id) else null
+            _state.value = when {
+                view is Outcome.Failed -> ItemUiState(errorCode = view.code)
+                bank is Outcome.Failed -> ItemUiState(errorCode = bank.code)
+                else -> ItemUiState(view = (view as Outcome.Ok).value, bank = (bank as? Outcome.Ok)?.value)
             }
-            if (view is Outcome.Ok && view.value.summary.kind == ItemKind.LOGIN) loadHealth()
+            if (kind == ItemKind.LOGIN) loadHealth()
         }
     }
 
@@ -104,5 +132,6 @@ class ItemViewModel(
 
     private companion object {
         const val TICK_MS = 1_000L
+        const val NOT_FOUND = "not_found"
     }
 }

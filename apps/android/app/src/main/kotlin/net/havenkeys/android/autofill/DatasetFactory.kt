@@ -10,8 +10,9 @@ import android.view.autofill.AutofillId
 import android.view.autofill.AutofillValue
 import android.view.inputmethod.InlineSuggestionsRequest
 import net.havenkeys.android.R
+import net.havenkeys.android.ui.kit.HavenIcon
+import net.havenkeys.android.ui.shell.bankSubtitle
 import uniffi.havenkeys_mobile.AutofillMatch
-import uniffi.havenkeys_mobile.BankSummaryRecord
 import uniffi.havenkeys_mobile.FillValues
 
 /**
@@ -107,7 +108,8 @@ class DatasetFactory(
         val auth = if (gated) autofillSender(context, mode, plan.match.id) else null
         val datasetId = if (auth == null) DatasetIds.of(plan.match.id) else null
         val title = plan.match.title
-        return rows.dataset(fields, title, subtitle, auth, datasetId = datasetId, chipIcon = { monogram(title) })
+        val chipIcon: ChipIcon = if (plan.match.isBank) ({ glyph(HavenIcon.Bank) }) else ({ monogram(title) })
+        return rows.dataset(fields, title, subtitle, auth, datasetId = datasetId, chipIcon = chipIcon)
     }
 
     private fun filled(values: FillValues) = form?.let { FillPlanner.entries(it, screen.fields, values) }.orEmpty()
@@ -166,20 +168,10 @@ class DatasetFactory(
 }
 
 /** A row's second line: "One-time code" on a code step, a bank account's branch and account, a login's username. */
-private fun Context.subtitleOf(match: AutofillMatch, otpOnly: Boolean): String? = when {
+internal fun Context.subtitleOf(match: AutofillMatch, otpOnly: Boolean): String? = when {
     otpOnly -> getString(R.string.autofill_code)
     match.isBank -> bankSubtitle(this, match.bank)
     else -> match.username
-}
-
-/** `Ag 1234 · •••45-6` (English `Branch 1234 · …`), either part alone, or the bank's name. */
-internal fun bankSubtitle(context: Context, bank: BankSummaryRecord?): String? {
-    bank ?: return null
-    val parts = listOfNotNull(
-        bank.branch?.let { context.getString(R.string.autofill_bank_branch, it) },
-        bank.accountLast3?.let { "•••$it" },
-    )
-    return if (parts.isEmpty()) bank.bank else parts.joinToString(" · ")
 }
 
 /** What Android's save sheet says on a look-alike page; its Save button stays "save anyway". */

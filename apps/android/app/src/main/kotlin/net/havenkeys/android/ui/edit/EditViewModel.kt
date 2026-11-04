@@ -17,6 +17,11 @@ import net.havenkeys.android.data.VaultEventsHub
 import net.havenkeys.android.data.VaultRepository
 import net.havenkeys.android.ui.items.readerOrder
 import net.havenkeys.android.ui.items.tagUse
+import uniffi.havenkeys_mobile.BankDraft
+import uniffi.havenkeys_mobile.BankField
+import uniffi.havenkeys_mobile.BankViewRecord
+import uniffi.havenkeys_mobile.EditField
+import uniffi.havenkeys_mobile.FieldKind
 import uniffi.havenkeys_mobile.GeneratorOptions
 import uniffi.havenkeys_mobile.ItemDraft
 import uniffi.havenkeys_mobile.ItemEdit
@@ -58,8 +63,10 @@ data class EditUiState(
      * the editor's suggestions and the spelling a typed tag takes.
      */
     val vaultTags: List<String> = emptyList(),
+    /** A bank account's bank, holder, type and agência, for its editor; never its account or password. */
+    val bank: BankViewRecord? = null,
 ) {
-    // `edit` holds the username.
+    // `edit` holds the username, `bank` a holder's name.
     override fun toString() = "EditUiState(…)"
 }
 
@@ -92,9 +99,14 @@ class EditViewModel(
     }
 
     /** One current value, for the screen to put in its draft; never kept here. */
-    suspend fun reveal(key: String): Outcome<String> = when (target) {
-        is EditTarget.Existing -> vault.reveal(target.id, key)
-        is EditTarget.New -> Outcome.Failed("not_found")
+    suspend fun reveal(key: String): Outcome<String> {
+        val id = (target as? EditTarget.Existing)?.id
+        val bank = _state.value.edit?.kind == ItemKind.BANK_ACCOUNT
+        return when {
+            id == null -> null
+            bank -> BANK_SECRETS[key]?.let { vault.revealBank(id, it) }
+            else -> vault.reveal(id, key)
+        } ?: Outcome.Failed("not_found")
     }
 
     /** A camera frame for the one-time code field: an `otpauth://totp` link, or null. */
@@ -105,17 +117,29 @@ class EditViewModel(
         is Outcome.Failed -> g
     }
 
-    fun save(draft: ItemDraft) {
+    fun save(draft: ItemDraft) = saving {
+        when (target) {
+            is EditTarget.New -> vault.create(draft)
+            is EditTarget.Existing -> when (val r = vault.update(target.id, draft)) {
+                is Outcome.Ok -> Outcome.Ok(target.id)
+                is Outcome.Failed -> r
+            }
+        }
+    }
+
+    /** Saves [editor]'s draft: a bank account whole, through its own call. */
+    fun saveDraft(editor: EditorState) =
+        if (editor.bank != null) saveBank(editor.toBankDraft()) else save(editor.toDraft())
+
+    /** A bank account is saved whole, through its own call. */
+    fun saveBank(draft: BankDraft) = saving { vault.saveBank(draft) }
+
+    /** Sends one save at a time: [send] answers the saved item's id. */
+    private fun saving(send: suspend () -> Outcome<String>) {
         if (_state.value.saving) return
         _state.update { it.copy(saving = true, errorCode = null) }
         viewModelScope.launch {
-            val result = when (target) {
-                is EditTarget.New -> vault.create(draft)
-                is EditTarget.Existing -> when (val r = vault.update(target.id, draft)) {
-                    is Outcome.Ok -> Outcome.Ok(target.id)
-                    is Outcome.Failed -> r
-                }
-            }
+            val result = send()
             when {
                 result is Outcome.Ok -> {
                     _state.update { it.copy(saving = false) }
@@ -148,15 +172,42 @@ class EditViewModel(
             val others = (vault.list() as? Outcome.Ok)?.value.orEmpty()
                 .filter { target !is EditTarget.Existing || it.id != target.id }
             val vaultTags = tagsByUse(others)
-            _state.value = when (edit) {
-                is Outcome.Ok -> EditUiState(edit = edit.value, generation = generation, vaultTags = vaultTags)
-                is Outcome.Failed -> EditUiState(generation = generation, errorCode = edit.code)
+            val isBank = (edit as? Outcome.Ok)?.value?.kind == ItemKind.BANK_ACCOUNT
+            val bank = if (target is EditTarget.Existing && isBank) {
+                vault.bankView(target.id)
+            } else {
+                null
+            }
+            _state.value = when {
+                edit is Outcome.Failed -> EditUiState(generation = generation, errorCode = edit.code)
+                bank is Outcome.Failed -> EditUiState(generation = generation, errorCode = bank.code)
+                else -> EditUiState(
+                    edit = bankSecrets((edit as Outcome.Ok).value, (bank as? Outcome.Ok)?.value),
+                    generation = generation,
+                    vaultTags = vaultTags,
+                    bank = (bank as? Outcome.Ok)?.value,
+                )
             }
         }
     }
 
     private companion object {
         const val CONFLICT = "item_changed_elsewhere"
+
+        /** The bank values its editor reads as a login's: hidden until Change. */
+        val BANK_SECRETS = mapOf("password" to BankField.PASSWORD, "notes" to BankField.NOTES)
+
+        /** A bank account's [edit] (Rust lists no field) with its password and notes, edited as a login's. */
+        fun bankSecrets(edit: ItemEdit, bank: BankViewRecord?): ItemEdit = if (edit.kind != ItemKind.BANK_ACCOUNT) {
+            edit
+        } else {
+            edit.copy(
+                fields = listOf(
+                    EditField("password", FieldKind.SECRET, bank?.hasPassword == true, null),
+                    EditField("notes", FieldKind.SECRET, bank?.hasNotes == true, null),
+                ),
+            )
+        }
         val GENERATOR = GeneratorOptions(24u, true, true, true, true, false)
     }
 }

@@ -56,6 +56,7 @@ class RoutesTest {
         assertEquals("new/login", Routes.new(ItemKind.LOGIN))
         assertEquals(ItemKind.SECURE_NOTE, creatableKind("note"))
         assertEquals(ItemKind.CARD, creatableKind("card"))
+        assertEquals(ItemKind.BANK_ACCOUNT, creatableKind(Routes.new(ItemKind.BANK_ACCOUNT).removePrefix("new/")))
         assertNull("the identity is never created", creatableKind("identity"))
         assertNull(creatableKind("../vault"))
     }

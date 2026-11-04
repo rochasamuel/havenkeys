@@ -1,5 +1,8 @@
 package net.havenkeys.android.data
 
+import uniffi.havenkeys_mobile.BankDraft
+import uniffi.havenkeys_mobile.BankField
+import uniffi.havenkeys_mobile.BankViewRecord
 import uniffi.havenkeys_mobile.Generated
 import uniffi.havenkeys_mobile.GeneratorOptions
 import uniffi.havenkeys_mobile.HealthKind
@@ -39,6 +42,18 @@ interface VaultRepository {
     /** Online only; the new item's id. */
     suspend fun create(draft: ItemDraft): Outcome<String>
     suspend fun update(id: String, draft: ItemDraft): Outcome<Unit>
+
+    /** A bank account's screen and editor: everything but its account, digit, password and notes. */
+    suspend fun bankView(id: String): Outcome<BankViewRecord>
+
+    /** One of a bank account's hidden values; `not_found` when it has none. */
+    suspend fun revealBank(id: String, field: BankField): Outcome<String>
+
+    /** The transfer details to copy, in [lang] (`en` or `pt-BR`). */
+    suspend fun bankDetails(id: String, lang: String): Outcome<String>
+
+    /** Online only; creates or changes a bank account and returns its id. */
+    suspend fun saveBank(draft: BankDraft): Outcome<String>
     /** Delete moves the item to the Trash; `false` when it was deleted for good (its details did not open). */
     suspend fun trash(id: String): Outcome<Boolean>
     suspend fun restore(id: String): Outcome<Unit>
@@ -94,6 +109,10 @@ class RustVaultRepository(private val vault: MobileVault) : VaultRepository {
     override suspend fun template(kind: ItemKind) = rust { vault.itemTemplate(kind) }
     override suspend fun create(draft: ItemDraft) = rust { vault.createItem(draft) }
     override suspend fun update(id: String, draft: ItemDraft) = rust { vault.updateItem(id, draft) }
+    override suspend fun bankView(id: String) = rust { vault.bankView(id) }
+    override suspend fun revealBank(id: String, field: BankField) = rust { vault.revealBankField(id, field) }
+    override suspend fun bankDetails(id: String, lang: String) = rust { vault.bankDetailsText(id, lang) }
+    override suspend fun saveBank(draft: BankDraft) = rust { vault.saveBank(draft) }
     override suspend fun trash(id: String) = rust { vault.trashItem(id) }
     override suspend fun restore(id: String) = rust { vault.restoreItem(id) }
     override suspend fun purge(id: String) = rust { vault.purgeItem(id) }

@@ -45,8 +45,8 @@ class EditNavigation(
 /** Where the fields get values from: Rust, through the ViewModel, never kept there. */
 internal class FieldValues(val viewModel: EditViewModel, val loading: SnapshotStateList<String>)
 
-/** A fresh draft of [edit], knowing the vault's tag spellings; none while there is nothing to edit. */
-private fun draftOf(edit: ItemEdit?, vaultTags: List<String>): EditorState? = edit?.let { EditorState(it, vaultTags) }
+/** A fresh draft of [state]'s item, knowing the vault's tag spellings; none while there is nothing to edit. */
+private fun draftOf(state: EditUiState): EditorState? = state.edit?.let { EditorState(it, state.vaultTags, state.bank) }
 
 /**
  * Create or edit one item. The draft ([EditorState]) is remembered here per
@@ -64,7 +64,7 @@ fun EditScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val edit = state.edit
-    val editor = remember(state.generation, edit) { draftOf(edit, state.vaultTags) }
+    val editor = remember(state.generation, edit) { draftOf(state) }
     val loading = rememberTextLoads(editor, edit, viewModel)
     var confirmDiscard by remember { mutableStateOf(false) }
     val leave = { if (editor?.dirty == true) confirmDiscard = true else navigation.onBack() }
@@ -86,7 +86,7 @@ fun EditScreen(
                         // A tag still being typed joins the draft; one Rust would refuse
                         // keeps the editor open, its field saying why.
                         focus.clearFocus()
-                        editor?.takeIf { it.commitTypedTag() }?.let { viewModel.save(it.toDraft()) }
+                        editor?.takeIf { it.commitTypedTag() }?.let { viewModel.saveDraft(it) }
                     },
                     // The bar pads 4dp: 12 more puts Save's edge on the fields' 16dp gutter.
                     Modifier.padding(start = 4.dp, end = 12.dp),
@@ -143,7 +143,8 @@ private fun rememberTextLoads(
 
 @StringRes
 private fun screenTitle(kind: ItemKind, isNew: Boolean): Int = when (kind) {
-    ItemKind.LOGIN, ItemKind.BANK_ACCOUNT -> if (isNew) R.string.edit_new_login else R.string.edit_login
+    ItemKind.LOGIN -> if (isNew) R.string.edit_new_login else R.string.edit_login
+    ItemKind.BANK_ACCOUNT -> if (isNew) R.string.edit_new_bank else R.string.edit_bank
     ItemKind.SECURE_NOTE -> if (isNew) R.string.edit_new_note else R.string.edit_note
     ItemKind.CARD -> if (isNew) R.string.edit_new_card else R.string.edit_card
     ItemKind.IDENTITY -> R.string.edit_identity

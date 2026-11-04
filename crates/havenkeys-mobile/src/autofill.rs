@@ -9,6 +9,7 @@ use crate::items::parse_id;
 use crate::vault::MobileVault;
 use havenkeys_core::app_target::{classify, AppIdentity, FillTarget};
 use havenkeys_core::asset_links::{candidate_hosts, AssetLinksCache};
+use havenkeys_core::bank::BankSummary;
 use havenkeys_core::local::LocalSlot;
 use havenkeys_core::model::{ItemType, SecretField};
 use havenkeys_core::vault::{FillCredentials, MatchKind, Suggestion};
@@ -126,11 +127,17 @@ pub(crate) fn to_match(s: &Suggestion) -> AutofillMatch {
             MatchKind::Login => AutofillKind::Login,
             MatchKind::BankAccount => AutofillKind::BankAccount,
         },
-        bank: s.bank.as_ref().map(|b| BankSummaryRecord {
+        bank: s.bank.as_ref().map(BankSummaryRecord::from),
+    }
+}
+
+impl From<&BankSummary> for BankSummaryRecord {
+    fn from(b: &BankSummary) -> Self {
+        Self {
             bank: b.bank.clone(),
             branch: b.branch.clone(),
             account_last3: b.account_last3.clone(),
-        }),
+        }
     }
 }
 

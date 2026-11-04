@@ -32,6 +32,8 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import net.havenkeys.android.ui.theme.HavenSpacing
@@ -44,6 +46,8 @@ import net.havenkeys.android.ui.theme.HavenTheme
  * TalkBack reads the label and the typed text as one node; an error is
  * the field's error. The keyboard is asked not to learn what is typed.
  * [hint] is a muted line under the value, read with the field; an error takes its place.
+ * [spokenLabel] is what TalkBack reads for a short visible label ("Digit" →
+ * "Account digit").
  */
 @Composable
 fun HavenTextField(
@@ -58,6 +62,7 @@ fun HavenTextField(
     lineLimits: TextFieldLineLimits = TextFieldLineLimits.SingleLine,
     inputTransformation: InputTransformation? = null,
     hint: String? = null,
+    spokenLabel: String? = null,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
@@ -75,7 +80,7 @@ fun HavenTextField(
             interactionSource = interaction,
             cursorBrush = SolidColor(colors.brass),
             decorator = TextFieldDecorator { field ->
-                FieldRow(label, error, focused, hint) {
+                FieldRow(label, error, focused, hint, spokenLabel = spokenLabel) {
                     Box {
                         if (placeholder != null && state.text.isEmpty()) {
                             HavenText(
@@ -101,6 +106,7 @@ internal fun FieldRow(
     focused: Boolean,
     hint: String? = null,
     trailing: (@Composable () -> Unit)? = null,
+    spokenLabel: String? = null,
     field: @Composable () -> Unit,
 ) {
     val colors = HavenTheme.colors
@@ -125,6 +131,7 @@ internal fun FieldRow(
             // node, so TalkBack reads it with the typed text (a contentDescription would replace the text).
             HavenText(
                 label,
+                spokenLabel?.let { Modifier.clearAndSetSemantics { text = AnnotatedString(it) } } ?: Modifier,
                 style = HavenTheme.type.label,
                 color = if (error != null) colors.danger else colors.muted,
             )
