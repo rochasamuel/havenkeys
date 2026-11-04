@@ -11,6 +11,7 @@ import android.view.autofill.AutofillValue
 import android.view.inputmethod.InlineSuggestionsRequest
 import net.havenkeys.android.R
 import net.havenkeys.android.ui.kit.HavenIcon
+import net.havenkeys.android.ui.shell.bankSpoken
 import net.havenkeys.android.ui.shell.bankSubtitle
 import uniffi.havenkeys_mobile.AutofillMatch
 import uniffi.havenkeys_mobile.FillValues
@@ -107,9 +108,11 @@ class DatasetFactory(
         val mode = if (otpOnly) MODE_TOTP else MODE_FILL
         val auth = if (gated) autofillSender(context, mode, plan.match.id) else null
         val datasetId = if (auth == null) DatasetIds.of(plan.match.id) else null
-        val title = plan.match.title
-        val chipIcon: ChipIcon = if (plan.match.isBank) ({ glyph(HavenIcon.Bank) }) else ({ monogram(title) })
-        return rows.dataset(fields, title, subtitle, auth, datasetId = datasetId, chipIcon = chipIcon)
+        val match = plan.match
+        val spoken = if (match.isBank && !otpOnly) bankSpoken(context, match.bank) else null
+        return rows.dataset(
+            fields, match.title, subtitle, auth, datasetId = datasetId, chipIcon = match.chipIcon, spoken = spoken,
+        )
     }
 
     private fun filled(values: FillValues) = form?.let { FillPlanner.entries(it, screen.fields, values) }.orEmpty()
@@ -166,6 +169,10 @@ class DatasetFactory(
         const val SAVE_KIND_CARD = "card"
     }
 }
+
+/** A bank account's chip shows the bank glyph; a login's, its title's initial. */
+private val AutofillMatch.chipIcon: ChipIcon
+    get() = if (isBank) ({ glyph(HavenIcon.Bank) }) else ({ monogram(title) })
 
 /** A row's second line: "One-time code" on a code step, a bank account's branch and account, a login's username. */
 internal fun Context.subtitleOf(match: AutofillMatch, otpOnly: Boolean): String? = when {

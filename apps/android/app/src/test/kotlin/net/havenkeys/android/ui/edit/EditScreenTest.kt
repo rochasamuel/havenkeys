@@ -269,4 +269,45 @@ class EditScreenTest {
         assertEquals(Change.Keep to Change.Keep, draft.account to draft.accountDigit)
         assertTrue(vault.calls.none { it.startsWith("revealBank") })
     }
+
+    /** Review (task 13): typing `12345-67` split at the 6, saving account `123457` with digit `6`. */
+    @Test
+    fun typingANumberWithADashNeverSplitsIt() {
+        showBank(hasAccount = false)
+        "12345-67".forEach { box(R.string.field_bank_account).performTextInput(it.toString()) }
+        // No split: the box keeps what was typed until the user fixes it; Rust checks it on save.
+        box(R.string.field_bank_account).assert(hasText("12345-67"))
+        rule.onNodeWithText(text(R.string.edit_save)).performClick()
+        rule.waitForIdle()
+        val draft = vault.bankDrafts.single()
+        assertEquals(Change.Replace("12345-67") to Change.Remove, draft.account to draft.accountDigit)
+    }
+
+    @Test
+    fun theEditorListsTheFieldsInTheDetailsOrder() {
+        showBank()
+        val order = listOf(
+            R.string.field_bank_bank, R.string.field_bank_branch, R.string.field_bank_account,
+            R.string.field_bank_type, R.string.field_bank_holder, R.string.field_password,
+        ).map { rule.onNode(hasText(text(it), substring = false)).fetchSemanticsNode().boundsInRoot.top }
+        assertEquals(order.sorted(), order)
+    }
+
+    @Test
+    fun keepLeavesAnOpenedAccountAsSaved() {
+        showBank()
+        rule.onAllNodesWithText(text(R.string.edit_change))[0].performClick()
+        box(R.string.field_bank_account).performTextInput("9")
+        rule.onAllNodesWithText(text(R.string.bank_keep_account)).assertCountEquals(0)
+        rule.onNodeWithText(text(R.string.bank_keep)).performClick()
+        rule.waitForIdle()
+        rule.onNodeWithContentDescription(
+            RuntimeEnvironment.getApplication().getString(R.string.bank_account_ending, "45-6"),
+            useUnmergedTree = true,
+        ).assertExists()
+        rule.onNodeWithText(text(R.string.edit_save)).performClick()
+        rule.waitForIdle()
+        val draft = vault.bankDrafts.single()
+        assertEquals(Change.Keep to Change.Keep, draft.account to draft.accountDigit)
+    }
 }

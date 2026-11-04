@@ -27,6 +27,8 @@ import java.text.BreakIterator
 import net.havenkeys.android.R
 import net.havenkeys.android.ui.theme.HavenSpacing
 import net.havenkeys.android.ui.theme.HavenTheme
+import net.havenkeys.android.ui.components.maskedSpans
+import androidx.compose.ui.semantics.contentDescription
 
 /** Test seam: marks the glyph a tile draws, so a test can tell the blank-title key from an initial. */
 internal fun tileGlyphTag(icon: HavenIcon): String = "item-tile-glyph-${icon.name}"
@@ -53,6 +55,8 @@ fun ItemRow(
     hasPasskey: Boolean = false,
     hasCode: Boolean = false,
     note: String? = null,
+    /** What TalkBack hears for [subtitle] when its text would read badly ("Account ending 45-6" for `•••45-6`). */
+    subtitleDescription: String? = null,
 ) {
     val colors = HavenTheme.colors
     ReportRowTextStart(HavenSpacing.rowX + HavenSpacing.tile + TileGap)
@@ -76,7 +80,8 @@ fun ItemRow(
             )
             if (subtitle != null) {
                 HavenText(
-                    subtitle,
+                    maskedSpans(subtitle),
+                    subtitleDescription?.let { Modifier.clearAndSetSemantics { contentDescription = it } } ?: Modifier,
                     style = HavenTheme.type.rowSubtitle,
                     color = colors.muted,
                     maxLines = 1,

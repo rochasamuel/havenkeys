@@ -37,6 +37,7 @@ import net.havenkeys.android.ui.kit.RowLeading
 import net.havenkeys.android.ui.search.SearchField
 import net.havenkeys.android.ui.shell.EmptyLine
 import net.havenkeys.android.ui.shell.ErrorLine
+import net.havenkeys.android.ui.shell.bankSpoken
 import net.havenkeys.android.ui.shell.bankSubtitle
 import net.havenkeys.android.ui.shell.insetGroup
 import net.havenkeys.android.ui.theme.HavenSpacing
@@ -88,6 +89,7 @@ internal fun AutofillSearchScreen(
                     if (match.isBank) RowLeading.Glyph(HavenIcon.Bank) else RowLeading.Monogram(match.title),
                     onClick = { if (!busy) picked = match },
                     hasCode = match.hasTotp,
+                    subtitleDescription = if (match.isBank) bankSpoken(context, match.bank) else null,
                 )
             }
         }

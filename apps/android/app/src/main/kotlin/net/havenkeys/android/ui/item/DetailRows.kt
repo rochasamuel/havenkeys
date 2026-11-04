@@ -8,8 +8,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
 import net.havenkeys.android.R
 import net.havenkeys.android.ui.components.MaskedValue
@@ -23,6 +21,7 @@ import net.havenkeys.android.ui.kit.HavenText
 import net.havenkeys.android.ui.kit.ProgressRing
 import net.havenkeys.android.ui.theme.HavenTheme
 import uniffi.havenkeys_mobile.TotpNow
+import net.havenkeys.android.ui.components.MaskedEnding
 
 /** The ring turns ember for the last seconds of a code. */
 private const val ENDING_SECONDS = 5
@@ -64,12 +63,7 @@ internal fun SecretRow(
         HavenText(label, style = HavenTheme.type.label, color = HavenTheme.colors.muted)
         when {
             revealed != null -> RevealedValue(revealed)
-            mask != null -> HavenText(
-                mask,
-                Modifier.clearAndSetSemantics { contentDescription = maskDescription.orEmpty() },
-                style = HavenTheme.type.secret,
-                color = HavenTheme.colors.muted,
-            )
+            mask != null -> MaskedEnding(mask, maskDescription.orEmpty())
             // The label is read just above: the dots say only "Hidden".
             else -> MaskedValue(label = null)
         }

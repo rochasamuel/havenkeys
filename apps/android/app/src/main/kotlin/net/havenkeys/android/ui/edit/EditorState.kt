@@ -64,8 +64,9 @@ internal const val MAX_ACCOUNT = 20
 internal const val MAX_ACCOUNT_DIGIT = 2
 
 /**
- * A `12345-6` typed or pasted into a number box, as its number and check
- * digit (spaces and dots dropped, `x` as `X`), when both fit their boxes.
+ * A pasted `12345-6` as its number and check digit (spaces and dots
+ * dropped, `x` as `X`), when the number is digits, the check digit is
+ * `0-9` or `X`, and both fit their boxes.
  */
 internal fun splitDigit(text: String, max: Int, digitMax: Int): Pair<String, String>? {
     val compact = text.filterNot { it.isWhitespace() || it == '.' }.uppercase()
@@ -73,7 +74,9 @@ internal fun splitDigit(text: String, max: Int, digitMax: Int): Pair<String, Str
     if (dash < 0) return null
     val number = compact.substring(0, dash)
     val digit = compact.substring(dash + 1)
-    return (number to digit).takeIf { digit.isNotEmpty() && number.length <= max && digit.length <= digitMax }
+    val valid = number.length in 1..max && number.all { it in '0'..'9' } &&
+        digit.length in 1..digitMax && digit.all { it in '0'..'9' || it == 'X' }
+    return (number to digit).takeIf { valid }
 }
 
 private fun String.orNull(): String? = trim().ifEmpty { null }
@@ -102,24 +105,40 @@ class BankBoxes(view: BankViewRecord?) {
     var accountDigit by mutableStateOf("")
     var accountRemoved by mutableStateOf(false)
 
-    /** Bumped by every split: the number and digit boxes start again from here. */
+    /** Bumped by every split: the digit boxes start again from here. */
     var splits by mutableIntStateOf(0)
         private set
 
-    /** The agência box changed; a `1234-5` fills its digit box too. */
-    fun typeBranch(text: String) {
-        val split = splitDigit(text, MAX_BRANCH, MAX_BRANCH_DIGIT) ?: return run { branch = text }
-        branch = split.first
-        branchDigit = split.second
-        splits++
-    }
+    /** Bumped by Keep: the account's boxes start again, empty. */
+    var resets by mutableIntStateOf(0)
+        private set
 
-    /** The conta box changed; a `12345-6` fills its digit box too. */
-    fun typeAccount(text: String) {
-        val split = splitDigit(text, MAX_ACCOUNT, MAX_ACCOUNT_DIGIT) ?: return run { account = text }
-        account = split.first
-        accountDigit = split.second
-        splits++
+    /**
+     * A paste into the agência box: a `1234-5` fills the digit box and
+     * leaves `1234` (returned) in its own; null when it does not split.
+     * Typing never splits.
+     */
+    fun pasteBranch(text: String): String? =
+        splitDigit(text, MAX_BRANCH, MAX_BRANCH_DIGIT)?.let { (number, digit) ->
+            branchDigit = digit
+            splits++
+            number
+        }
+
+    /** A paste into the conta box, as [pasteBranch]. */
+    fun pasteAccount(text: String): String? =
+        splitDigit(text, MAX_ACCOUNT, MAX_ACCOUNT_DIGIT)?.let { (number, digit) ->
+            accountDigit = digit
+            splits++
+            number
+        }
+
+    /** Back to the saved account, as it was before Change. */
+    fun keepAccount() {
+        account = ""
+        accountDigit = ""
+        accountOpen = false
+        resets++
     }
 
     /** The desktop's rule: a new account replaces both; an empty one keeps what is saved. */

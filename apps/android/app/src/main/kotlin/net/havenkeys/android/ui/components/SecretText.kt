@@ -2,6 +2,7 @@ package net.havenkeys.android.ui.components
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -57,5 +58,43 @@ fun RevealedValue(value: String, modifier: Modifier = Modifier, style: TextStyle
         modifier,
         style = style,
         color = HavenTheme.colors.textStrong,
+    )
+}
+
+/**
+ * A partly masked value as every screen draws it (`•••45-6`, `•••• 1234`):
+ * each run of dots in the house masked style, in [dots] colour, and the
+ * rest in the surrounding text style. Mono is only for revealed values.
+ */
+@Composable
+fun maskedSpans(text: String, dots: Color = Color.Unspecified): AnnotatedString {
+    val masked = HavenTheme.type.masked
+    val style = SpanStyle(
+        color = dots,
+        fontFamily = masked.fontFamily,
+        fontWeight = masked.fontWeight,
+        letterSpacing = masked.letterSpacing,
+    )
+    return buildAnnotatedString {
+        DOT_RUNS.findAll(text).forEach { run ->
+            if (run.value[0] == '•') withStyle(style) { append(run.value) } else append(run.value)
+        }
+    }
+}
+
+private val DOT_RUNS = Regex("•+|[^•]+")
+
+/**
+ * A hidden value that shows its ending ([mask] is `•••45-6`): muted dots,
+ * the ending as a value. TalkBack hears [description] ("Account ending 45-6").
+ */
+@Composable
+fun MaskedEnding(mask: String, description: String, modifier: Modifier = Modifier) {
+    HavenText(
+        maskedSpans(mask, dots = HavenTheme.colors.muted),
+        modifier.clearAndSetSemantics { contentDescription = description },
+        style = HavenTheme.type.value,
+        color = HavenTheme.colors.textStrong,
+        maxLines = 1,
     )
 }

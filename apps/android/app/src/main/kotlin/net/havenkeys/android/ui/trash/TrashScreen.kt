@@ -19,6 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -46,6 +47,7 @@ import net.havenkeys.android.ui.shell.LargeTitle
 import net.havenkeys.android.ui.shell.insetGroup
 import net.havenkeys.android.ui.shell.leading
 import net.havenkeys.android.ui.shell.secondLine
+import net.havenkeys.android.ui.shell.spokenLine
 import net.havenkeys.android.ui.theme.HavenSpacing
 import net.havenkeys.android.ui.theme.HavenTheme
 
@@ -181,6 +183,7 @@ private fun TrashList(state: TrashUiState, online: Boolean, padding: PaddingValu
             ItemRow(
                 title = row.summary.title,
                 subtitle = row.summary.secondLine(),
+                subtitleDescription = row.summary.spokenLine(LocalContext.current),
                 leading = row.summary.leading(),
                 onClick = { onOpen(row.id) },
                 hasPasskey = row.summary.hasPasskey,

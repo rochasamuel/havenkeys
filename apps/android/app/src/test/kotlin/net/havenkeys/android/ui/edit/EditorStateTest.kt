@@ -310,11 +310,13 @@ class EditorStateTest {
     fun pastingANumberWithItsDigitSplitsIt() {
         val editor = bankEditor()
         val bank = requireNotNull(editor.bank)
-        bank.typeAccount("12.345-x")
-        assertEquals("12345" to "X", bank.account to bank.accountDigit)
+        // The box keeps what the paste returns; the digit box takes the rest.
+        assertEquals("12345", bank.pasteAccount("12.345-x"))
+        bank.account = "12345"
+        assertEquals("X", bank.accountDigit)
         assertEquals(1, bank.splits)
         // The split-off digit replaces the saved one: Rust refuses two.
-        bank.typeBranch("9876-0")
+        bank.branch = requireNotNull(bank.pasteBranch("9876-0"))
         assertEquals("9876" to "0", bank.branch to bank.branchDigit)
         val draft = editor.toBankDraft()
         assertEquals(Change.Replace("12345") to Change.Replace("X"), draft.account to draft.accountDigit)
@@ -323,14 +325,28 @@ class EditorStateTest {
     }
 
     @Test
-    fun aNumberThatDoesNotFitItsBoxesIsNotSplit() {
+    fun aPasteThatDoesNotFitOrIsNotANumberIsNotSplit() {
         val bank = requireNotNull(bankEditor().bank)
-        bank.typeBranch("123456789-0")
-        assertEquals("123456789-0" to "5", bank.branch to bank.branchDigit)
-        bank.typeAccount("12345-678")
-        assertEquals("12345-678" to "", bank.account to bank.accountDigit)
-        bank.typeAccount("12345-")
-        assertEquals(0, bank.splits)
+        for (text in listOf("123456789-0", "1234-56", "12a4-5", "1234-y", "-5", "1234-")) {
+            assertNull(text, bank.pasteBranch(text))
+        }
+        assertNull(bank.pasteAccount("12345-678"))
+        assertNull(bank.pasteAccount("123456789012345678901-6"))
+        assertEquals("5" to 0, bank.branchDigit to bank.splits)
+    }
+
+    @Test
+    fun keepReturnsToTheSavedAccount() {
+        val editor = bankEditor()
+        val bank = requireNotNull(editor.bank)
+        bank.accountOpen = true
+        bank.account = "99999"
+        bank.accountDigit = "1"
+        bank.keepAccount()
+        assertFalse(bank.accountOpen)
+        assertEquals(1, bank.resets)
+        assertEquals(Change.Keep to Change.Keep, editor.toBankDraft().let { it.account to it.accountDigit })
+        assertFalse(editor.dirty)
     }
 
     @Test
@@ -340,7 +356,7 @@ class EditorStateTest {
         bank.accountDigit = "7"
         assertEquals(Change.Keep to Change.Replace("7"), editor.toBankDraft().let { it.account to it.accountDigit })
         bank.accountDigit = ""
-        bank.typeAccount("99999")
+        bank.account = "99999"
         val draft = editor.toBankDraft()
         assertEquals(Change.Replace("99999") to Change.Remove, draft.account to draft.accountDigit)
     }

@@ -62,7 +62,8 @@ internal class Rows(private val context: Context, private val inlineRequest: Inl
     private var position = 0
     private val icons by lazy { ChipIcons(context) }
 
-    fun menu(title: String, subtitle: String?, @DrawableRes icon: Int? = null) =
+    /** [spoken]: what TalkBack reads for [subtitle] when its text would read badly (`•••45-6`). */
+    fun menu(title: String, subtitle: String?, @DrawableRes icon: Int? = null, spoken: String? = null) =
         RemoteViews(context.packageName, R.layout.autofill_item).apply {
         icon?.let {
             setImageViewResource(R.id.autofill_icon, it)
@@ -73,23 +74,31 @@ internal class Rows(private val context: Context, private val inlineRequest: Inl
             setViewVisibility(R.id.autofill_subtitle, View.GONE)
         } else {
             setTextViewText(R.id.autofill_subtitle, subtitle)
+            spoken?.let { setContentDescription(R.id.autofill_subtitle, it) }
         }
     }
 
     /** [icon] is drawn only when the keyboard has room for the chip. */
-    fun inline(title: String, subtitle: String?, icon: ChipIcon? = null): InlinePresentation? {
+    fun inline(title: String, subtitle: String?, icon: ChipIcon? = null, spoken: String? = null): InlinePresentation? {
         val index = position++
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) inlineAt(index, title, subtitle, icon) else null
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            inlineAt(index, title, subtitle, icon, spoken)
+        } else {
+            null
+        }
     }
 
     @RequiresApi(Build.VERSION_CODES.R)
-    private fun inlineAt(index: Int, title: String, subtitle: String?, icon: ChipIcon?): InlinePresentation? =
-        specFor(index)?.let { InlinePresentation(chip(title, subtitle, icon?.invoke(icons)), it, false) }
+    private fun inlineAt(index: Int, title: String, subtitle: String?, icon: ChipIcon?, spoken: String?) =
+        specFor(index)?.let {
+            val description = listOfNotNull(title, spoken ?: subtitle).joinToString(" ")
+            InlinePresentation(chip(title, subtitle, icon?.invoke(icons), description), it, false)
+        }
 
     /**
      * Null when there is no field to fill: Android refuses a dataset without
      * one. [chipIcon] defaults to [icon]; [chip] false keeps the row out of
-     * the keyboard.
+     * the keyboard. [spoken] is what TalkBack reads for the subtitle.
      */
     fun dataset(
         fields: List<Pair<AutofillId, AutofillValue?>>,
@@ -100,10 +109,11 @@ internal class Rows(private val context: Context, private val inlineRequest: Inl
         datasetId: String? = null,
         chipIcon: ChipIcon? = icon?.let { res -> { Icon.createWithResource(context, res) } },
         chip: Boolean = true,
+        spoken: String? = null,
     ): Dataset? {
         if (fields.isEmpty()) return null
-        val menu = menu(title, subtitle, icon)
-        val inline = if (chip) inline(title, subtitle, chipIcon) else null
+        val menu = menu(title, subtitle, icon, spoken)
+        val inline = if (chip) inline(title, subtitle, chipIcon, spoken) else null
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val builder = Dataset.Builder(presentations(menu, inline))
             fields.forEach { (id, value) -> builder.setField(id, value?.let { Field.Builder().setValue(it).build() }) }
@@ -133,7 +143,7 @@ internal class Rows(private val context: Context, private val inlineRequest: Inl
         if (ids.isEmpty()) return null
         val title = context.getString(R.string.autofill_unlock)
         val menu = menu(title, null)
-        val inline = inline(title, null) { app() }
+        val inline = inline(title, null, icon = { app() })
         val sender = autofillSender(context, DatasetFactory.MODE_UNLOCK, null)
         val builder = FillResponse.Builder()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

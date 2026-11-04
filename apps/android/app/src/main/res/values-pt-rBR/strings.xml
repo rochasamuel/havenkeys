@@ -90,6 +90,10 @@
     <string name="bank_number">Número</string>
     <string name="bank_digit">Dígito</string>
     <string name="bank_account_ending">Conta terminada em %1$s</string>
+    <string name="bank_branch_spoken">Agência %1$s</string>
+    <string name="card_ending">Cartão terminado em %1$s</string>
+    <string name="bank_keep">Manter</string>
+    <string name="bank_keep_description">Manter a conta salva</string>
     <string name="bank_copy_details">Copiar dados</string>
     <string name="bank_details">Dados bancários</string>
     <string name="bank_keep_account">Deixe vazio para manter o número salvo</string>

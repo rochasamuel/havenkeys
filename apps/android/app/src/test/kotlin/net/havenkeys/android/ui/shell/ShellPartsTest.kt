@@ -6,6 +6,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -67,6 +68,15 @@ class ShellPartsTest {
         // Rust's subtitle is Portuguese; the row words it from the overview.
         assertEquals("Branch 1234 · •••45-6", bankSummary().secondLine(app))
         assertEquals("itau.com.br", bankSummary().copy(bank = null, subtitle = null).secondLine(app))
+    }
+
+    @Test
+    fun aMaskedSecondLineIsSpokenInWords() {
+        assertEquals("Branch 1234, Account ending 45 6", bankSummary().spokenLine(app))
+        assertEquals("Card ending 1234", summary(ItemKind.CARD, subtitle = "•••• 1234").spokenLine(app))
+        assertNull(summary(ItemKind.LOGIN, subtitle = "sam").spokenLine(app))
+        rule.setKit { SummaryRow(bankSummary(), onOpen = {}) }
+        rule.onNode(hasClickAction()).assert(hasContentDescription("Branch 1234, Account ending 45 6"))
     }
 
     @Test

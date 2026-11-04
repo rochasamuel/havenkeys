@@ -44,6 +44,28 @@ internal fun bankSubtitle(context: Context, bank: BankSummaryRecord?): String? {
     return if (parts.isEmpty()) bank.bank else parts.joinToString(" · ")
 }
 
+/** "Branch 1234, Account ending 45 6": what TalkBack reads for [bankSubtitle]; null when it shows neither part. */
+internal fun bankSpoken(context: Context, bank: BankSummaryRecord?): String? = bank?.let {
+    listOfNotNull(
+        it.branch?.let { b -> context.getString(R.string.bank_branch_spoken, b) },
+        it.accountLast3?.let { end -> context.getString(R.string.bank_account_ending, spokenDigits(end)) },
+    ).joinToString(", ").ifEmpty { null }
+}
+
+/** `45-6` read as "45 6", not "45 minus 6". */
+private fun spokenDigits(ending: String): String = ending.replace('-', ' ')
+
+/** What TalkBack hears for a masked second line: a bank account's or a card's ending in words. */
+internal fun ItemSummary.spokenLine(context: Context): String? = when (kind) {
+    ItemKind.BANK_ACCOUNT -> bankSpoken(context, bank)
+    ItemKind.CARD -> subtitle?.takeIf { it.startsWith(CARD_MASK) }
+        ?.let { context.getString(R.string.card_ending, it.removePrefix(CARD_MASK)) }
+    else -> null
+}
+
+/** How Rust masks a card's number in its subtitle. */
+private const val CARD_MASK = "•••• "
+
 /** One vault item as a kit row: overview fields only (Android spec §9.4). */
 @Composable
 fun SummaryRow(
@@ -54,6 +76,7 @@ fun SummaryRow(
     ItemRow(
         title = summary.title,
         subtitle = summary.secondLine(),
+        subtitleDescription = summary.spokenLine(LocalContext.current),
         leading = summary.leading(),
         onClick = { onOpen(summary.id) },
         modifier = modifier,

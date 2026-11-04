@@ -8,6 +8,7 @@ import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -132,6 +133,6 @@ class AutofillSearchScreenTest {
         )
         show(answer = null)
         search("ita")
-        rule.onNodeWithText("Branch 1234 · •••45-6", useUnmergedTree = true).assertExists()
+        rule.onNodeWithContentDescription("Branch 1234, Account ending 45 6", useUnmergedTree = true).assertExists()
     }
 }

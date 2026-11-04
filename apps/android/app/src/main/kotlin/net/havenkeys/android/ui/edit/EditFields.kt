@@ -17,8 +17,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.input.KeyboardType
 import kotlinx.coroutines.launch
 import net.havenkeys.android.R
@@ -40,6 +38,7 @@ import uniffi.havenkeys_mobile.EditField
 import uniffi.havenkeys_mobile.FieldKind
 import uniffi.havenkeys_mobile.ItemEdit
 import uniffi.havenkeys_mobile.ItemKind
+import net.havenkeys.android.ui.components.MaskedEnding
 
 /** Long text the user edits: multi-line, and not masked once opened. */
 private val longText = setOf("notes", "content", "card.notes", "identity.notes")
@@ -242,12 +241,7 @@ internal fun HiddenRow(
     ) {
         HavenText(label, style = HavenTheme.type.label, color = HavenTheme.colors.muted)
         if (mask != null) {
-            HavenText(
-                mask,
-                Modifier.clearAndSetSemantics { contentDescription = maskDescription.orEmpty() },
-                style = HavenTheme.type.secret,
-                color = HavenTheme.colors.muted,
-            )
+            MaskedEnding(mask, maskDescription.orEmpty())
         } else if (masked) {
             // The label is read just above: the dots say only "Hidden".
             MaskedValue(label = null)
