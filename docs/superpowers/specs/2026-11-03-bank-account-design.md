@@ -1,6 +1,6 @@
 # Bank Account item and agência/conta fill — Design
 
-Status: draft, 2026-11-03. Roadmap item B6 (`docs/autofill-roadmap.md`).
+Status: implemented (2026-11-04). Roadmap item B6 (`docs/autofill-roadmap.md`).
 Builds on the card item (`2026-09-29-card-item-design.md`), the shared field
 words (`2026-10-19-shared-field-words-design.md`) and the Android direct fill
 (`2026-10-01-android-app-design.md` §7.6). Amends CLAUDE.md (a note, §7.4).
@@ -165,11 +165,13 @@ instead of a username.
 a bank account:
 
 ```text
-BankValues { branch, branchDigit?, account, accountDigit? }
+BankValues { branch?, branchDigit?, account?, accountDigit? }
 ```
 
-A bank account's reply has `username: None`, its password and its bank
-values. A login's reply is unchanged. Nothing else of the item leaves Rust:
+Each number is optional, and a digit travels only with its number; an item
+with neither a branch nor an account has no `BankValues` and fills its
+password alone. A bank account's reply has `username: None`, its password and
+its bank values. A login's reply is unchanged. Nothing else of the item leaves Rust:
 not the holder name, notes or custom fields.
 
 ### 4.6 Input and edits
@@ -288,13 +290,13 @@ Fill rules are the login fill's:
   like the empty login menu (it would intrude on donation and checkout forms
   with an agência box). It opens only from the field icon, and then shows
   "No bank account saved for this site — add one in HavenKeys". Locked: the
-  usual unlock row.
+  usual unlock row, also only from the field icon.
 * On a password box, the login menu lists the site's logins, then its bank
   accounts. Picking one fills that form's password, and its bank boxes if
   it has any.
-* The popup lists the site's bank accounts after its logins with Fill, as
-  a login's row. The popup has no password copy, as for logins. While the
-  account is frozen there is no Fill and no copy.
+* The popup lists the site's bank accounts after its logins, each with Fill
+  only, as a login's row: no copy of the password or of any number. While
+  the account is frozen a bank account is listed without Fill.
 * `fill_item` needs no protocol change beyond the reply's `bank` field and
   the suggestion's `kind`/`bank`. The native host's size limits and
   validation apply as today.
@@ -332,7 +334,9 @@ Fill rules are the login fill's:
   * each command is added in the four places `commands.test.ts` checks.
 * Sidebar: a **Bank accounts** entry with a count, after Cards. **New → Bank
   account**.
-* List row: the glyph, the title and `Ag 1234 · Conta •••45-6`.
+* List row: the glyph, the title and `Ag 1234 · Conta •••45-6` (English
+  "Branch 1234 · Account •••45-6"), without the bank's name, which shows only
+  when neither number is saved.
 * Detail, showing the fields that have values, in this order (the editor
   uses the same order):
   * bank;
@@ -346,7 +350,9 @@ Fill rules are the login fill's:
   * custom fields.
 
   Copy buttons sit on bank, holder, agência, conta and password (not on the
-  type), plus a **Copy details** action. Reveals hide after 30 s and on lock.
+  type), plus a **Copy details** action: a text Rust composes in the app's
+  language from the bank, `Agência 1234-5`, `Conta 12345-6 (corrente)` and
+  the holder. Reveals hide after 30 s and on lock.
 * Editor:
   * title;
   * bank;
@@ -390,9 +396,12 @@ Fill rules are the login fill's:
 * **Bitwarden JSON import**: Bitwarden has no bank type; nothing changes.
 * **Plaintext exports**:
   * Bitwarden JSON writes a bank account as a login with its URIs and
-    password, and custom fields for bank, agência and conta (so another
-    manager can still fill the password);
-  * CSV writes the same columns as a login, plus the bank fields in notes;
+    password, and custom fields for bank, agência, conta, "Titular" (the
+    holder) and "Tipo de conta" (the type), so another manager can still
+    fill the password;
+  * CSV writes the same columns as a login, plus `Bank:`, `Agência:`,
+    `Conta:`, `Titular:` and `Tipo:` note lines, each only when it has a
+    value;
   * both follow §38.
 
 ## 7. Security
@@ -531,3 +540,28 @@ Every device needs updating before a bank account is created (§4.7).
   box only with no `maxlength` or 1-2; the first box of a one-time-code run
   is never a digit; boxes with a bank role are refused by the login and
   identity classifiers.
+* Polish (Android and desktop review): one mask style, `•••45-6`, wherever
+  the account's ending shows; TalkBack hears a bank row's second line as
+  words ("Branch 1234, Account ending 45 6"), not the masked text; an empty
+  digit box shows a muted placeholder (`0` on the phone, "Digit"/"Dígito" on
+  the desktop); the list line stays without the bank's name, which shows only
+  when neither number is saved.
+
+### Final fix wave (2026-11-04)
+
+* §4.5: `branch` and `account` are each optional, end to end (core,
+  protocol, extension, mobile record, Android). A bank account fills the
+  boxes it has values for; one with neither fills its password alone, from
+  the menu as from the popup and Android.
+* §5.3: a locked bank menu opens only from the field icon, as the empty one
+  does.
+* §4.4/§5.2: a bank account's saved password makes a submission `Unchanged`
+  whatever the form captured as a username; a bank account is never
+  `Update`d from a form.
+* §5.2: a `type=number` box never gets an `X` check digit appended.
+* A bank fill is not consent for a passkey upgrade (only a login's fill is).
+* §6.3: plaintext exports carry the holder and the account type.
+* The mobile `ItemSummary.subtitle` is `None` for a bank account; Android
+  writes the line in its own language from `ItemSummary.bank`.
+* An older extension rejects a desktop's `find_matches` reply with a bank
+  match: extension and desktop update together (`native-messaging.md`).

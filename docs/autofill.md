@@ -1562,15 +1562,17 @@ Roles: `bankBranch`, `bankBranchDigit`, `bankAccount`, `bankAccountDigit`.
 2. **Account.** A `BANK_ACCOUNT` word, no `BANK_NEGATIVE` phrase, and a
    branch box in the same group. Conta never counts on its own, so "Entrar
    na sua conta" stays a login.
-3. **Digit.** A `BANK_DIGIT` word with no `maxlength` or `maxlength` 1-2, or
-   a `maxlength` of 1-2, placed right after a branch or account box; it takes
-   that box's digit role. The first box of a one-time-code run (the next box
-   also has `maxlength` 1, or the OTP score passes the threshold) is not a
-   digit.
-4. **Never bank.** Password, one-time-code, hidden, disabled and read-only
-   boxes, and boxes with a card or identity claim. An `autocomplete` token
-   that names no real autofill field (`nope`, `off`, `chrome-off`) is
-   neutral; a real one (`username`, `cc-number`, `given-name`) refuses.
+3. **Digit.** A box placed right after a branch or account box, with a
+   `maxlength` of 1–2, or a `BANK_DIGIT` word on a box with no `maxlength`;
+   it takes that box's digit role. A longer box ("Conta com dígito",
+   `maxlength` 8) is the number itself.
+4. **Never bank.** Password, hidden, disabled and read-only boxes, and boxes
+   with a card or identity claim. An `autocomplete` token that names no real
+   autofill field (`nope`, `off`, `chrome-off`) is neutral; a real one
+   (`username`, `cc-number`, `given-name`, `one-time-code`) refuses the box.
+   A box that only looks like part of a one-time code (the first of a run of
+   `maxlength` 1 boxes, or an OTP score past the threshold) is refused only
+   the digit role: it may still be a branch or account box.
 
 The login and identity classifiers refuse a box that has a bank role, so an
 agência never becomes a username. Itaú's "Código do operador" and CPF boxes
