@@ -136,6 +136,24 @@ impl fmt::Debug for BankValues {
     }
 }
 
+/// The language of [`BankAccountFields::details`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DetailsLanguage {
+    En,
+    PtBr,
+}
+
+impl DetailsLanguage {
+    /// `"en"` or `"pt-BR"`, exactly.
+    pub fn parse(tag: &str) -> Result<Self> {
+        match tag {
+            "en" => Ok(Self::En),
+            "pt-BR" => Ok(Self::PtBr),
+            _ => Err(Error::InvalidInput("unsupported language")),
+        }
+    }
+}
+
 /// Drop spaces and dots, and upper-case an `x`.
 fn compact(raw: &str) -> String {
     raw.chars()
@@ -274,8 +292,8 @@ impl BankAccountFields {
         }
     }
 
-    /// The branch with its digit, `1234-5`, as the plaintext exports write it.
-    pub(crate) fn branch_joined(&self) -> Option<String> {
+    /// The branch with its digit, `1234-5`, as copies and exports write it.
+    pub fn branch_joined(&self) -> Option<String> {
         Some(join_digit(
             self.branch.as_deref()?,
             self.branch_digit.as_deref(),
@@ -283,12 +301,50 @@ impl BankAccountFields {
     }
 
     /// The account with its digit, `12345-6`.
-    pub(crate) fn account_joined(&self) -> Option<SecretString> {
+    pub fn account_joined(&self) -> Option<SecretString> {
         let digit = self.account_digit.as_ref().map(SecretString::expose);
         Some(SecretString::new(join_digit(
             self.account.as_ref()?.expose(),
             digit,
         )))
+    }
+
+    /// What someone needs to send money to this account, in `lang`: the
+    /// bank, `Agência 1234-5`, `Conta 12345-6 (corrente)` and `Titular …`,
+    /// one per line, each only when it has a value.
+    pub fn details(&self, lang: DetailsLanguage) -> Option<SecretString> {
+        use BankAccountType::*;
+        use DetailsLanguage::{En, PtBr};
+        let (branch, account, holder) = match lang {
+            En => ("Branch", "Account", "Holder"),
+            PtBr => ("Agência", "Conta", "Titular"),
+        };
+        let kind = self.account_type.map(|t| match (lang, t) {
+            (En, Checking) => "checking",
+            (En, Savings) => "savings",
+            (En, Payment) => "payment",
+            (En, Other) => "other",
+            (PtBr, Checking) => "corrente",
+            (PtBr, Savings) => "poupança",
+            (PtBr, Payment) => "pagamento",
+            (PtBr, Other) => "outra",
+        });
+        let account_line = self.account_joined().map(|n| match kind {
+            Some(k) => format!("{account} {} ({k})", n.expose()),
+            None => format!("{account} {}", n.expose()),
+        });
+        let lines: Vec<String> = [
+            self.bank.clone(),
+            self.branch_joined().map(|b| format!("{branch} {b}")),
+            account_line,
+            self.holder_name
+                .as_ref()
+                .map(|h| format!("{holder} {}", h.expose())),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        (!lines.is_empty()).then(|| SecretString::new(lines.join("\n")))
     }
 
     /// `None` without a branch or an account.
@@ -429,6 +485,65 @@ mod tests {
             for v in ["Itaú", "Maria", "1234", "98765", "hunter2"] {
                 assert!(!text.contains(v), "{text}");
             }
+        }
+    }
+
+    #[test]
+    fn details_list_every_part_in_the_language() {
+        let f = BankAccountFields {
+            bank: Some("Itaú".into()),
+            holder_name: Some(s("Maria Silva")),
+            account_type: Some(BankAccountType::Checking),
+            branch: Some("1234".into()),
+            branch_digit: Some("5".into()),
+            account: Some(s("12345")),
+            account_digit: Some(s("6")),
+            ..Default::default()
+        };
+        let text = |lang| f.details(lang).unwrap().expose().to_owned();
+        assert_eq!(
+            text(DetailsLanguage::PtBr),
+            "Itaú\nAgência 1234-5\nConta 12345-6 (corrente)\nTitular Maria Silva"
+        );
+        assert_eq!(
+            text(DetailsLanguage::En),
+            "Itaú\nBranch 1234-5\nAccount 12345-6 (checking)\nHolder Maria Silva"
+        );
+    }
+
+    #[test]
+    fn details_leave_out_missing_parts() {
+        let f = BankAccountFields {
+            account: Some(s("98765")),
+            ..Default::default()
+        };
+        assert_eq!(
+            f.details(DetailsLanguage::PtBr).unwrap().expose(),
+            "Conta 98765"
+        );
+        let f = BankAccountFields {
+            bank: Some("Nubank".into()),
+            branch: Some("0001".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            f.details(DetailsLanguage::En).unwrap().expose(),
+            "Nubank\nBranch 0001"
+        );
+        assert!(BankAccountFields::default()
+            .details(DetailsLanguage::En)
+            .is_none());
+    }
+
+    #[test]
+    fn details_language_is_strict() {
+        assert_eq!(DetailsLanguage::parse("en").unwrap(), DetailsLanguage::En);
+        assert_eq!(
+            DetailsLanguage::parse("pt-BR").unwrap(),
+            DetailsLanguage::PtBr
+        );
+        for bad in ["pt", "pt-br", "EN", ""] {
+            assert!(DetailsLanguage::parse(bad).is_err(), "{bad}");
         }
     }
 

@@ -8,7 +8,7 @@
 use crate::commands::{copy_from_vault, CopyResult};
 use crate::state::{AppState, CmdResult};
 use crate::tray::UiLanguage;
-use havenkeys_core::bank::{BankAccountFields, BankAccountType};
+use havenkeys_core::bank::{BankAccountFields, BankAccountType, DetailsLanguage};
 use havenkeys_core::custom_field::{self, SectionView};
 use havenkeys_core::{Error, SecretString};
 use serde::{Deserialize, Serialize};
@@ -40,7 +40,7 @@ pub enum RevealField {
 }
 
 /// The values that can be copied; the numbers go with their check digit.
-/// `Details` is the transfer details, one per line (see `details`).
+/// `Details` is the transfer details, one per line (core `details`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum CopyField {
@@ -52,10 +52,6 @@ pub enum CopyField {
     Details,
 }
 
-fn join(number: &str, digit: Option<&str>) -> String {
-    digit.map_or_else(|| number.to_owned(), |d| format!("{number}-{d}"))
-}
-
 fn reveal_value(f: &BankAccountFields, field: RevealField) -> Option<SecretString> {
     match field {
         RevealField::Account => f.account.clone(),
@@ -64,64 +60,20 @@ fn reveal_value(f: &BankAccountFields, field: RevealField) -> Option<SecretStrin
     }
 }
 
-/// What someone needs to send money to this account, in the UI's language:
-/// the bank, `Agência 1234-5`, `Conta 12345-6 (corrente)` and `Titular …`,
-/// one per line, each only when it has a value.
-fn details(f: &BankAccountFields, lang: UiLanguage) -> Option<SecretString> {
-    use BankAccountType::*;
-    let (branch, account, holder) = match lang {
-        UiLanguage::En => ("Branch", "Account", "Holder"),
-        UiLanguage::PtBr => ("Agência", "Conta", "Titular"),
-    };
-    let kind = f.account_type.map(|t| match (lang, t) {
-        (UiLanguage::En, Checking) => "checking",
-        (UiLanguage::En, Savings) => "savings",
-        (UiLanguage::En, Payment) => "payment",
-        (UiLanguage::En, Other) => "other",
-        (UiLanguage::PtBr, Checking) => "corrente",
-        (UiLanguage::PtBr, Savings) => "poupança",
-        (UiLanguage::PtBr, Payment) => "pagamento",
-        (UiLanguage::PtBr, Other) => "outra",
-    });
-    let account_line = f.account.as_ref().map(|a| {
-        let number = join(
-            a.expose(),
-            f.account_digit.as_ref().map(SecretString::expose),
-        );
-        match kind {
-            Some(k) => format!("{account} {number} ({k})"),
-            None => format!("{account} {number}"),
-        }
-    });
-    let lines: Vec<String> = [
-        f.bank.clone(),
-        f.branch
-            .as_deref()
-            .map(|b| format!("{branch} {}", join(b, f.branch_digit.as_deref()))),
-        account_line,
-        f.holder_name
-            .as_ref()
-            .map(|h| format!("{holder} {}", h.expose())),
-    ]
-    .into_iter()
-    .flatten()
-    .collect();
-    (!lines.is_empty()).then(|| SecretString::new(lines.join("\n")))
+fn language(lang: UiLanguage) -> DetailsLanguage {
+    match lang {
+        UiLanguage::En => DetailsLanguage::En,
+        UiLanguage::PtBr => DetailsLanguage::PtBr,
+    }
 }
 
 fn copy_value(f: &BankAccountFields, field: CopyField, lang: UiLanguage) -> Option<SecretString> {
     match field {
         CopyField::Bank => f.bank.clone().map(SecretString::new),
         CopyField::HolderName => f.holder_name.clone(),
-        CopyField::Details => details(f, lang),
-        CopyField::Branch => Some(SecretString::new(join(
-            f.branch.as_deref()?,
-            f.branch_digit.as_deref(),
-        ))),
-        CopyField::Account => Some(SecretString::new(join(
-            f.account.as_ref()?.expose(),
-            f.account_digit.as_ref().map(SecretString::expose),
-        ))),
+        CopyField::Details => f.details(language(lang)),
+        CopyField::Branch => f.branch_joined().map(SecretString::new),
+        CopyField::Account => f.account_joined(),
         CopyField::Password => f.password.clone(),
     }
 }
@@ -235,42 +187,20 @@ mod tests {
     }
 
     #[test]
-    fn details_list_every_part_in_the_ui_language() {
+    fn details_follow_the_ui_language() {
         let mut f = fields(Some("5"), Some("6"));
         f.bank = Some("Itaú".into());
-        f.holder_name = Some(SecretString::from("Maria Silva"));
-        f.account_type = Some(BankAccountType::Checking);
-        let text = |lang| details(&f, lang).unwrap().expose().to_owned();
+        let text = |lang| {
+            copy_value(&f, CopyField::Details, lang)
+                .unwrap()
+                .expose()
+                .to_owned()
+        };
         assert_eq!(
             text(UiLanguage::PtBr),
-            "Itaú\nAgência 1234-5\nConta 12345-6 (corrente)\nTitular Maria Silva"
+            "Itaú\nAgência 1234-5\nConta 12345-6"
         );
-        assert_eq!(
-            text(UiLanguage::En),
-            "Itaú\nBranch 1234-5\nAccount 12345-6 (checking)\nHolder Maria Silva"
-        );
-    }
-
-    #[test]
-    fn details_leave_out_missing_parts() {
-        let f = BankAccountFields {
-            account: Some(SecretString::from("98765")),
-            ..Default::default()
-        };
-        assert_eq!(
-            details(&f, UiLanguage::PtBr).unwrap().expose(),
-            "Conta 98765"
-        );
-        let f = BankAccountFields {
-            bank: Some("Nubank".into()),
-            branch: Some("0001".into()),
-            ..Default::default()
-        };
-        assert_eq!(
-            details(&f, UiLanguage::En).unwrap().expose(),
-            "Nubank\nBranch 0001"
-        );
-        assert!(details(&BankAccountFields::default(), UiLanguage::En).is_none());
+        assert_eq!(text(UiLanguage::En), "Itaú\nBranch 1234-5\nAccount 12345-6");
     }
 
     #[test]
