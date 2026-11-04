@@ -17,9 +17,7 @@ data class IdentityForm(val fields: List<IdentityField>, val webDomain: String?,
  */
 object IdentityFormFinder {
     fun find(fields: List<FieldFacts>): IdentityForm? {
-        val roles = fields.associate {
-            it.index to if (it.visible && it.enabled) IdentityFieldClassifier.roleOf(it) else null
-        }
+        val roles = rolesOf(fields)
         val anchor = fields.firstOrNull { it.focused } ?: fields.firstOrNull { roles[it.index] != null }
         val found = anchor?.let { a ->
             fields.filter { it.webDomain == a.webDomain && it.webScheme == a.webScheme }
@@ -34,6 +32,15 @@ object IdentityFormFinder {
             IdentityForm(found.map { (i, r) -> IdentityField(i, r.role) }, anchor.webDomain, anchor.webScheme)
         } else {
             null
+        }
+    }
+
+    /** Agência and conta boxes are a bank account's, never the identity's (a tel agência is no phone). */
+    private fun rolesOf(fields: List<FieldFacts>): Map<Int, IdentityRoleOf?> {
+        val bank = BankFieldClassifier.roles(fields)
+        return fields.associate {
+            val usable = it.visible && it.enabled && it.index !in bank
+            it.index to if (usable) IdentityFieldClassifier.roleOf(it) else null
         }
     }
 

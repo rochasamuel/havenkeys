@@ -10,6 +10,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import uniffi.havenkeys_mobile.AutofillKind
 import uniffi.havenkeys_mobile.AutofillMatch
+import uniffi.havenkeys_mobile.BankFillRecord
+import uniffi.havenkeys_mobile.BankSummaryRecord
 import uniffi.havenkeys_mobile.FillValues
 import uniffi.havenkeys_mobile.TargetFacts
 import uniffi.havenkeys_mobile.TargetKind
@@ -249,6 +251,71 @@ class FillPlannerTest {
         val plan = FillPlanner.plan(null, target, unlocked = true, repo, saveable = true) as FillPlan.Offer
         assertEquals("github.com", plan.lookalikeOf)
         assertTrue(plan.save)
+    }
+
+    private val bankMatch = AutofillMatch(
+        "b1", "Itaú", null, false, AutofillKind.BANK_ACCOUNT, BankSummaryRecord("Itaú", "1234", "45-6"),
+    )
+    private val bankValues = FillValues(null, "s3cret", BankFillRecord("1234", null, "12345", "6"))
+
+    /** Agência, conta and dígito (Bradesco), then the password; [focus] is focused. */
+    private fun bankScreen(focus: Int): List<FieldFacts> = listOf(
+        field(html = mapOf("type" to "number", "maxlength" to "4", "label" to "Agência")),
+        field(html = mapOf("type" to "number", "maxlength" to "7", "label" to "Conta")),
+        field(html = mapOf("type" to "number", "maxlength" to "1", "label" to "Dígito")),
+        field(html = mapOf("type" to "password", "label" to "Senha")),
+    ).mapIndexed { i, f -> f.copy(focused = i == focus) }
+
+    @Test
+    fun bankDatasetCarriesEveryBankBoxAndPassword() = runTest {
+        val fields = bankScreen(focus = 0)
+        val form = requireNotNull(LoginFormFinder.find(fields))
+        val repo = FakeAutofillRepository().apply {
+            matchList = Outcome.Ok(listOf(match, bankMatch))
+            confirm = false
+            values = Outcome.Ok(bankValues)
+        }
+        val plan = FillPlanner.plan(form, target, unlocked = true, repo) as FillPlan.Offer
+        assertEquals("a bank box lists bank accounts first", listOf("b1", "id1"), plan.datasets.map { it.match.id })
+        val ids = fields.map { it.index }
+        assertEquals(ids, FillPlanner.fieldsOf(form, bankMatch))
+        val entries = FillPlanner.entries(form, fields, bankValues)
+        assertEquals(ids.zip(listOf("1234", "12345", "6", "s3cret")), entries)
+    }
+
+    @Test
+    fun loginOnBankBoxPutsUsernameInFocusedBox() = runTest {
+        val fields = bankScreen(focus = 1)
+        val form = requireNotNull(LoginFormFinder.find(fields))
+        assertEquals(listOf(fields[1].index, fields[3].index), FillPlanner.fieldsOf(form, match))
+        val entries = FillPlanner.entries(form, fields, FillValues("12345", "s3cret"))
+        assertEquals(listOf(fields[1].index to "12345", fields[3].index to "s3cret"), entries)
+    }
+
+    @Test
+    fun aPasswordBoxListsLoginsThenBankAccounts() = runTest {
+        val form = requireNotNull(LoginFormFinder.find(bankScreen(focus = 3)))
+        val repo = FakeAutofillRepository().apply {
+            matchList = Outcome.Ok(listOf(bankMatch, match))
+            confirm = true
+        }
+        val plan = FillPlanner.plan(form, target, unlocked = true, repo) as FillPlan.Offer
+        assertEquals(listOf("id1", "b1"), plan.datasets.map { it.match.id })
+        val alone = FillPlanner.plan(login.copy(usernames = emptyList()), target, true, repo) as FillPlan.Offer
+        assertEquals(listOf("id1", "b1"), alone.datasets.map { it.match.id })
+    }
+
+    @Test
+    fun aUsernameOrCodeStepIsOfferedNoBankAccount() = runTest {
+        val repo = FakeAutofillRepository().apply {
+            matchList = Outcome.Ok(listOf(match, bankMatch))
+            confirm = true
+        }
+        val usernameOnly = login.copy(passwords = emptyList())
+        for (form in listOf(usernameOnly, otp)) {
+            val plan = FillPlanner.plan(form, target, true, repo) as FillPlan.Offer
+            assertEquals(listOf("id1"), plan.datasets.map { it.match.id })
+        }
     }
 
     /** A form with nothing to offer still gets an answer: HavenKeys' pinned icon, which reads nothing. */

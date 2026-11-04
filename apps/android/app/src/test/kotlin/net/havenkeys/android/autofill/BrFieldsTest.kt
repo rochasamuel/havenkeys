@@ -33,10 +33,11 @@ class BrFieldsTest {
         for (i in 0 until records.length()) {
             val r = records.getJSONObject(i)
             val f = facts(r)
-            for (c in listOf("login", "identity", "card")) {
+            val g = bankFacts(r)
+            for (c in listOf("login", "identity", "card", "bank")) {
                 val expected = r.getString(c)
                 if (expected == "skip") continue
-                val got = actual(f, c)
+                val got = actual(f, g, c)
                 val isGap = key(r, c) in gaps
                 if ((got == expected) == isGap) {
                     wrong += JSONObject()
@@ -71,10 +72,27 @@ class BrFieldsTest {
         )
     }
 
-    private fun actual(f: FieldFacts, classifier: String): String = when (classifier) {
+    /** The bank group facts the record's page has (none, by default). */
+    private fun bankFacts(r: JSONObject): BankGroupFacts {
+        val c = r.optJSONObject("context")
+        val prev = c?.optString("prevRole")?.takeIf { it.isNotEmpty() && it != "null" }
+        return BankGroupFacts(
+            groupHasBranch = c?.optBoolean("groupHasBranch") ?: false,
+            groupHasAccount = c?.optBoolean("groupHasAccount") ?: false,
+            prevRole = prev?.let { p -> BankRole.entries.single { bankName(it) == p } },
+        )
+    }
+
+    private fun actual(f: FieldFacts, g: BankGroupFacts, classifier: String): String = when (classifier) {
         "card" -> CardFieldClassifier.kindOf(f, strong = false)?.kind?.name?.let(::camel) ?: "none"
         "identity" -> IdentityFieldClassifier.roleOf(f)?.role?.name?.let(::camel) ?: "none"
-        else -> when (FieldClassifier.classify(f).role) {
+        "bank" -> BankFieldClassifier.roleOf(f, g)?.let(::bankName) ?: "none"
+        else -> loginRole(f, g)
+    }
+
+    /** The login classifier refuses a bank box, as [loginRolesOf] does. */
+    private fun loginRole(f: FieldFacts, g: BankGroupFacts): String =
+        if (BankFieldClassifier.roleOf(f, g) != null) "none" else when (FieldClassifier.classify(f).role) {
             FieldRole.USERNAME -> "username"
             FieldRole.PASSWORD -> "password"
             FieldRole.NEW_PASSWORD -> "new-password"
@@ -82,7 +100,9 @@ class BrFieldsTest {
             FieldRole.OTP -> "otp"
             FieldRole.UNKNOWN -> "none"
         }
-    }
+
+    /** `BRANCH_DIGIT` → `bankBranchDigit`, the fixture's names. */
+    private fun bankName(role: BankRole) = camel("BANK_${role.name}")
 
     /** `CARDHOLDER_NAME` → `cardholderName`, the fixture's (protocol's) names. */
     private fun camel(name: String) = name.lowercase().split('_')

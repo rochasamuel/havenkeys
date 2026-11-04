@@ -349,6 +349,7 @@
     <string name="autofill_setup_passkeys_old">Passkeys need Android 14 or later.</string>
     <string name="autofill_card_fallback">Card</string>
     <string name="autofill_card_expired">Expired</string>
+    <string name="autofill_bank_branch">Branch %1$s</string>
     <string name="autofill_identity_fallback">Your identity</string>
     <string name="autofill_identity_with_docs">Fill %1$s too</string>
     <string name="autofill_identity_without_docs">Fill without documents</string>

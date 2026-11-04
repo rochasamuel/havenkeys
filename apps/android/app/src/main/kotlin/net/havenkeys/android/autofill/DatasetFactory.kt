@@ -11,6 +11,7 @@ import android.view.autofill.AutofillValue
 import android.view.inputmethod.InlineSuggestionsRequest
 import net.havenkeys.android.R
 import uniffi.havenkeys_mobile.AutofillMatch
+import uniffi.havenkeys_mobile.BankSummaryRecord
 import uniffi.havenkeys_mobile.FillValues
 
 /**
@@ -26,7 +27,7 @@ class DatasetFactory(
     inlineRequest: InlineSuggestionsRequest?,
 ) {
     private val rows = Rows(context, inlineRequest)
-    private val usernameId = form?.usernames.orEmpty().idIn(screen)
+    private val usernameId = form?.usernameTarget?.let(screen.ids::getOrNull)
     private val passwordId = form?.passwords.orEmpty().idIn(screen)
     private val otpId = form?.otps.orEmpty().idIn(screen)
     private val otpOnly = form?.otpOnly == true
@@ -37,7 +38,7 @@ class DatasetFactory(
         is FillPlan.Offer -> offerResponse(plan)
     }
 
-    /** The answer to a tapped "fill" or search row: only this login's two values. */
+    /** The answer to a tapped "fill" or search row: only this item's values (a login's two, or a bank account's). */
     fun loginDataset(values: FillValues): Dataset? =
         rows.dataset(filled(values), context.getString(R.string.app_name), null, null)
 
@@ -50,7 +51,7 @@ class DatasetFactory(
     )
 
     private fun unlockResponse(): FillResponse? {
-        val fields = form?.let { it.usernames + it.passwords + it.otps }.orEmpty()
+        val fields = form?.let { it.usernames + it.passwords + it.otps + it.bank.map(BankBox::index) }.orEmpty()
         return rows.unlockResponse(fields.mapNotNull(screen.ids::getOrNull))
     }
 
@@ -93,11 +94,12 @@ class DatasetFactory(
     }
 
     private fun datasetOf(plan: DatasetPlan): Dataset? {
-        val subtitle = if (otpOnly) context.getString(R.string.autofill_code) else plan.match.username
+        val subtitle = context.subtitleOf(plan.match, otpOnly)
         val gated = plan.values == null && plan.totp == null
         val fields = when {
             gated && otpOnly -> listOfNotNull(otpId).map { it to null }
-            gated -> listOfNotNull(usernameId, passwordId).map { it to null }
+            gated -> form?.let { FillPlanner.fieldsOf(it, plan.match) }.orEmpty()
+                .mapNotNull(screen.ids::getOrNull).map { it to null }
             plan.totp != null -> listOfNotNull(otpId?.let { it to AutofillValue.forText(plan.totp) })
             else -> filled(requireNotNull(plan.values))
         }
@@ -108,10 +110,8 @@ class DatasetFactory(
         return rows.dataset(fields, title, subtitle, auth, datasetId = datasetId, chipIcon = { monogram(title) })
     }
 
-    private fun filled(values: FillValues) = listOfNotNull(
-        usernameId?.let { id -> values.username?.let { id to AutofillValue.forText(it) } },
-        passwordId?.let { id -> values.password?.let { id to AutofillValue.forText(it) } },
-    )
+    private fun filled(values: FillValues) = form?.let { FillPlanner.entries(it, screen.fields, values) }.orEmpty()
+        .mapNotNull { (index, value) -> screen.ids.getOrNull(index)?.let { it to AutofillValue.forText(value) } }
 
     /**
      * The look-alike warning row: every login field, no value, so Android
@@ -163,6 +163,23 @@ class DatasetFactory(
         const val EXTRA_SAVE_KIND = "net.havenkeys.android.autofill.SAVE_KIND"
         const val SAVE_KIND_CARD = "card"
     }
+}
+
+/** A row's second line: "One-time code" on a code step, a bank account's branch and account, a login's username. */
+private fun Context.subtitleOf(match: AutofillMatch, otpOnly: Boolean): String? = when {
+    otpOnly -> getString(R.string.autofill_code)
+    match.isBank -> bankSubtitle(this, match.bank)
+    else -> match.username
+}
+
+/** `Ag 1234 · •••45-6` (English `Branch 1234 · …`), either part alone, or the bank's name. */
+internal fun bankSubtitle(context: Context, bank: BankSummaryRecord?): String? {
+    bank ?: return null
+    val parts = listOfNotNull(
+        bank.branch?.let { context.getString(R.string.autofill_bank_branch, it) },
+        bank.accountLast3?.let { "•••$it" },
+    )
+    return if (parts.isEmpty()) bank.bank else parts.joinToString(" · ")
 }
 
 /** What Android's save sheet says on a look-alike page; its Save button stays "save anyway". */

@@ -20,7 +20,7 @@ object SaveFormFinder {
      * is one, only fields in its frame count.
      */
     fun find(fields: List<FieldFacts>, login: LoginForm?): SaveForm? {
-        val roles = fields.map { FieldClassifier.classify(it) }
+        val roles = loginRolesOf(fields)
         fun inFrame(i: Int) = login == null ||
             (fields[i].webDomain == login.webDomain && fields[i].webScheme == login.webScheme)
         val news = fields.indices.filter { roles[it].role == FieldRole.NEW_PASSWORD && inFrame(it) }

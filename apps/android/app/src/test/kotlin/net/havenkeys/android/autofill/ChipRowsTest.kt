@@ -1,6 +1,7 @@
 package net.havenkeys.android.autofill
 
 import android.content.res.ColorStateList
+import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.drawable.Icon
 import android.util.Size
@@ -13,6 +14,7 @@ import android.widget.inline.InlinePresentationSpec
 import androidx.autofill.inline.UiVersions
 import androidx.autofill.inline.v1.InlineSuggestionUi
 import androidx.core.graphics.createBitmap
+import java.util.Locale
 import net.havenkeys.android.ui.kit.HavenIcon
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -22,6 +24,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.GraphicsMode
+import uniffi.havenkeys_mobile.BankSummaryRecord
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -70,6 +73,18 @@ class ChipRowsTest {
             drawable.intrinsicWidth to drawable.intrinsicHeight
         }
         assertEquals(1, sizes.toSet().size)
+    }
+
+    @Test
+    fun bankChipShowsMaskedAccount() {
+        val ptBr = Configuration(app.resources.configuration).apply { setLocale(Locale("pt", "BR")) }
+        val pt = app.createConfigurationContext(ptBr)
+        val itau = BankSummaryRecord("Itaú", "1234", "45-6")
+        assertEquals("Ag 1234 · •••45-6", bankSubtitle(pt, itau))
+        assertEquals("Branch 1234 · •••45-6", bankSubtitle(app, itau))
+        assertEquals("•••45-6", bankSubtitle(pt, itau.copy(branch = null)))
+        assertEquals("Itaú", bankSubtitle(pt, itau.copy(branch = null, accountLast3 = null)))
+        assertNull(bankSubtitle(pt, null))
     }
 
     // Gboard's chip style tints the start icon one flat colour; a picture keeps its own.

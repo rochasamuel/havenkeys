@@ -2963,42 +2963,6 @@
    "reason": "the label also says \"conta\" (an identity negative word); outside B5"
   },
   {
-   "site": "Itaú",
-   "id": "idl-more-access-input-account",
-   "label_text": "Conta",
-   "platform": "android",
-   "classifier": "login",
-   "got": "username",
-   "reason": "bank field: B6 (Bank Account item)"
-  },
-  {
-   "site": "Itaú",
-   "id": "idl-login-sensibility-input-agency",
-   "label_text": "Agência",
-   "platform": "android",
-   "classifier": "login",
-   "got": "username",
-   "reason": "bank field: B6 (Bank Account item)"
-  },
-  {
-   "site": "Itaú",
-   "id": "idl-login-sensibility-input-account",
-   "label_text": "Conta",
-   "platform": "android",
-   "classifier": "login",
-   "got": "username",
-   "reason": "bank field: B6 (Bank Account item)"
-  },
-  {
-   "site": "Itaú",
-   "id": "idl-menu-account",
-   "label_text": "Conta",
-   "platform": "android",
-   "classifier": "login",
-   "got": "username",
-   "reason": "bank field: B6 (Bank Account item)"
-  },
-  {
    "site": "Nubank",
    "id": "inputtext_cpf",
    "label_text": "Informe seu CPF",
@@ -3033,15 +2997,6 @@
    "classifier": "login",
    "got": "password",
    "reason": "Android decides new vs current password per form (LoginFormFinder), not per field"
-  },
-  {
-   "site": "TETO Brasil doação (checkout substitute)",
-   "id": "person_payment_attributes_bank_account",
-   "label_text": "Conta",
-   "platform": "android",
-   "classifier": "login",
-   "got": "username",
-   "reason": "bank field: B6 (Bank Account item)"
   },
   {
    "site": "Nuvem Pago checkout (Nuvemshop)",

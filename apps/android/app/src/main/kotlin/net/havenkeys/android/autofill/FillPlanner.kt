@@ -2,6 +2,7 @@ package net.havenkeys.android.autofill
 
 import net.havenkeys.android.data.AutofillRepository
 import net.havenkeys.android.data.Outcome
+import uniffi.havenkeys_mobile.AutofillKind
 import uniffi.havenkeys_mobile.AutofillMatch
 import uniffi.havenkeys_mobile.FillValues
 import uniffi.havenkeys_mobile.TargetFacts
@@ -40,7 +41,12 @@ data class DatasetPlan(val match: AutofillMatch, val values: FillValues?, val to
 /** A code-only step (the second page of a sign-in): offered the codes, never the login. */
 val LoginForm.otpOnly: Boolean get() = otps.isNotEmpty() && passwords.isEmpty() && usernames.isEmpty()
 
-val LoginForm.hasLoginFields: Boolean get() = usernames.isNotEmpty() || passwords.isNotEmpty()
+val LoginForm.hasLoginFields: Boolean get() = usernames.isNotEmpty() || passwords.isNotEmpty() || bank.isNotEmpty()
+
+/** A form a bank account fills: one with bank boxes or a password, not a username or code step. */
+val LoginForm.takesBank: Boolean get() = !otpOnly && (bank.isNotEmpty() || passwords.isNotEmpty())
+
+val AutofillMatch.isBank: Boolean get() = kind == AutofillKind.BANK_ACCOUNT
 
 /**
  * What to offer for one fill request. Every answer comes from Rust: the
@@ -115,8 +121,12 @@ object FillPlanner {
         repo: AutofillRepository,
     ): List<DatasetPlan> {
         val direct = !repo.confirmBeforeFilling()
+        // A bank box lists the bank accounts first, any other box the logins
+        // first (spec 2026-11-03-bank-account §5.3, §5.4).
+        val bankFirst = form.focusedOnBank
         return matches
-            .filter { !form.otpOnly || it.hasTotp }
+            .filter { if (it.isBank) form.takesBank else !form.otpOnly || it.hasTotp }
+            .sortedBy { it.isBank != bankFirst }
             .take(MAX_DATASETS)
             .mapNotNull { match ->
                 when {
@@ -125,6 +135,25 @@ object FillPlanner {
                     else -> repo.fill(match.id, target).valueOrNull()?.let { DatasetPlan(match, it, null) }
                 }
             }
+    }
+
+    /**
+     * The fields a dataset for [match] covers, by index: a bank account's
+     * boxes and the password; a login's username (in a focused bank box,
+     * see [LoginForm.usernameTarget]) and password.
+     */
+    fun fieldsOf(form: LoginForm, match: AutofillMatch): List<Int> = if (match.isBank) {
+        form.bank.map { it.index } + form.passwords.take(1)
+    } else {
+        listOfNotNull(form.usernameTarget, form.passwords.firstOrNull())
+    }
+
+    /** What [values] put into [form], by field index, each bank number shaped to its box. */
+    fun entries(form: LoginForm, fields: List<FieldFacts>, values: FillValues): List<Pair<Int, String>> {
+        val bank = values.bank?.let { BankShapes.values(form.bank, fields.associateBy { it.index }, it) }.orEmpty()
+        val username = form.usernameTarget?.let { i -> values.username?.let { i to it } }
+        val password = form.passwords.firstOrNull()?.let { i -> values.password?.let { i to it } }
+        return listOfNotNull(username) + bank + listOfNotNull(password)
     }
 
     private fun <T> Outcome<T>.valueOrNull(): T? = (this as? Outcome.Ok)?.value

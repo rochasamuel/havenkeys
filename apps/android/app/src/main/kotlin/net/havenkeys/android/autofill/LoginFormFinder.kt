@@ -8,7 +8,17 @@ data class LoginForm(
     val webDomain: String?,
     val webScheme: String?,
     val focused: Int?,
-)
+    /** Agência, conta and their digits: a bank account's boxes, never a login's. */
+    val bank: List<BankBox> = emptyList(),
+) {
+    val focusedOnBank: Boolean get() = bank.any { it.index == focused }
+
+    /**
+     * Where a login's username goes: the focused bank box (an old bank login
+     * holds the agência or conta, spec 2026-11-03-bank-account §5.4), else the username field.
+     */
+    val usernameTarget: Int? get() = focused?.takeIf { focusedOnBank } ?: usernames.firstOrNull()
+}
 
 object LoginFormFinder {
     private val LOGIN_ROLES = setOf(FieldRole.USERNAME, FieldRole.PASSWORD, FieldRole.OTP)
@@ -16,19 +26,24 @@ object LoginFormFinder {
 
     /** Null when there is nothing M1 fills (no field, or only a sign-up form). */
     fun find(fields: List<FieldFacts>): LoginForm? {
-        val roles = fields.map { FieldClassifier.classify(it) }
+        val bank = BankFieldClassifier.roles(fields)
+        val roles = loginRolesOf(fields, bank)
         fun positionsOf(role: FieldRole) = fields.indices.filter { roles[it].role == role }
+        fun isBank(i: Int) = fields[i].index in bank
         val usernames = positionsOf(FieldRole.USERNAME)
         val passwords = loginPasswords(roles, usernames.isNotEmpty())
         val focused = fields.indexOfFirst { it.focused }.takeIf { it >= 0 }
         val otps = positionsOf(FieldRole.OTP).ifEmpty {
-            listOfNotNull(splitCodeStart(fields, focused).takeIf { usernames.isEmpty() && passwords.isEmpty() })
+            // A bank's one-character dígito box is no code.
+            val start = splitCodeStart(fields, focused?.takeUnless(::isBank))
+            listOfNotNull(start.takeIf { usernames.isEmpty() && passwords.isEmpty() })
         }
         val signUp = passwords.isEmpty() && otps.isEmpty() && fields.indices.any { roles[it].role in NEW_ROLES }
-        // The field the user focused decides the frame when it is a login
-        // field; otherwise the password's, the code's, then the username's.
-        val anchor = focused?.takeIf { roles[it].role in LOGIN_ROLES }
-            ?: passwords.firstOrNull() ?: otps.firstOrNull() ?: usernames.firstOrNull()
+        // The field the user focused decides the frame when it is a login or
+        // bank field; otherwise the password's, the code's, the username's, then a bank box's.
+        val bankAt = fields.indices.filter(::isBank)
+        val anchor = focused?.takeIf { roles[it].role in LOGIN_ROLES || isBank(it) }
+            ?: listOf(passwords, otps, usernames, bankAt).firstNotNullOfOrNull { it.firstOrNull() }
         if (signUp || anchor == null) return null
 
         // Only fields in the anchor's frame: a field in another site's
@@ -37,7 +52,8 @@ object LoginFormFinder {
         fun inFrame(i: Int) = fields[i].webDomain == frame.webDomain && fields[i].webScheme == frame.webScheme
 
         val framePasswords = passwords.filter(::inFrame)
-        val username = usernameOf(usernames.filter(::inFrame), framePasswords.firstOrNull(), focused, fields, roles)
+        val username =
+            usernameOf(usernames.filter(::inFrame), framePasswords.firstOrNull(), focused, fields, roles, bank)
 
         return LoginForm(
             usernames = listOfNotNull(username).map { fields[it].index },
@@ -46,6 +62,7 @@ object LoginFormFinder {
             webDomain = frame.webDomain,
             webScheme = frame.webScheme,
             focused = focused?.takeIf(::inFrame)?.let { fields[it].index },
+            bank = bankAt.filter(::inFrame).map { fields[it].index }.map { BankBox(it, bank.getValue(it)) },
         )
     }
 
@@ -86,12 +103,14 @@ object LoginFormFinder {
      * classified one, the nearest visible text field before the password
      * when nothing rules it out.
      */
+    @Suppress("LongParameterList")
     private fun usernameOf(
         usernames: List<Int>,
         password: Int?,
         focused: Int?,
         fields: List<FieldFacts>,
         roles: List<Classification>,
+        bank: Map<Int, BankRole>,
     ): Int? {
         val candidates = usernames.filter { password == null || it < password }
         val classified = candidates.firstOrNull { it == focused }
@@ -101,7 +120,7 @@ object LoginFormFinder {
         val nearest = (password - 1 downTo 0).firstOrNull {
             val f = fields[it]
             f.webDomain == frame.webDomain && f.webScheme == frame.webScheme &&
-                f.visible && f.enabled && FieldClassifier.isTextInput(f)
+                f.visible && f.enabled && FieldClassifier.isTextInput(f) && f.index !in bank
         }
         return nearest?.takeIf {
             roles[it].role == FieldRole.UNKNOWN && FieldClassifier.couldBeUsername(fields[it])

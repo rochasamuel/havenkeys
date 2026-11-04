@@ -228,6 +228,10 @@ private val CODE_MASK = Regex("[-_•0]{4,8}")
 private const val OTP_MIN_LENGTH = SharedWords.OTP_MIN_LENGTH
 private const val OTP_MAX_LENGTH = SharedWords.OTP_MAX_LENGTH
 
+/** Every field's login role: a bank box (agência, conta) is never a login's (bank.ts). */
+fun loginRolesOf(fields: List<FieldFacts>, bank: Map<Int, BankRole> = BankFieldClassifier.roles(fields)) =
+    fields.map { if (it.index in bank) Classification(FieldRole.UNKNOWN, 0) else FieldClassifier.classify(it) }
+
 /** A visible, enabled text input that is not a card field: a card field only ever gets cards. */
 private fun isLoginCandidate(f: FieldFacts): Boolean =
     f.visible && f.enabled && FieldClassifier.isTextInput(f) && CardFieldClassifier.kindOf(f, strong = false) == null

@@ -340,6 +340,7 @@
     <string name="autofill_setup_passkeys_old">Chaves de acesso exigem Android 14 ou mais recente.</string>
     <string name="autofill_card_fallback">Cartão</string>
     <string name="autofill_card_expired">Vencido</string>
+    <string name="autofill_bank_branch">Ag %1$s</string>
     <string name="autofill_identity_fallback">Sua identidade</string>
     <string name="autofill_identity_with_docs">Preencher %1$s também</string>
     <string name="autofill_identity_without_docs">Preencher sem documentos</string>

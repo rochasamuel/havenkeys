@@ -166,7 +166,7 @@ class StructureParser {
         private const val MAX_ATTRIBUTES_READ = 64
         private val HTML_ATTRIBUTES = setOf(
             "type", "name", "id", "autocomplete", "placeholder", "aria-label", "label", "inputmode", "maxlength",
-            "title", "pattern",
+            "title", "pattern", "readonly",
         )
 
         /**
