@@ -16,6 +16,7 @@ class BankShapesTest {
             Triple("12345" to "6", text(6), "123456"),
             Triple("12345" to "6", text(5), "12345"),
             Triple("12345" to "6", BoxFacts("number", null, false), "123456"),
+            Triple("12345" to "X", BoxFacts("number", null, false), "12345"),
             Triple("12345" to "6", text(null, hasDigitBox = true), "12345"),
             Triple("1234" to "X", text(6), "1234-X"),
             Triple("12345" to null, text(7), "12345"),

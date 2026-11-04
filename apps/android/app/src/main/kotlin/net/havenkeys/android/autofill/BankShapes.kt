@@ -14,11 +14,13 @@ object BankShapes {
 
     /** [value] and its check [digit] in one box: `NNNN-D`, `NNNND`, or the number alone. */
     fun shape(value: String, digit: String?, box: BoxFacts): String {
-        if (digit == null || box.hasDigitBox) return value
+        // A number box takes digits only: an `X` digit stays out.
+        val d = digit?.takeUnless { box.type == "number" && !it.all { c -> c in '0'..'9' } }
+        if (d == null || box.hasDigitBox) return value
         fun room(n: Int) = box.maxLength == null || box.maxLength >= n
         return when {
-            box.type != "number" && room(value.length + 1 + digit.length) -> "$value-$digit"
-            room(value.length + digit.length) -> "$value$digit"
+            box.type != "number" && room(value.length + 1 + d.length) -> "$value-$d"
+            room(value.length + d.length) -> "$value$d"
             else -> value
         }
     }
@@ -32,14 +34,17 @@ object BankShapes {
         return BoxFacts(type, maxLengthOf(f).takeIf { it >= 0 }, hasDigitBox)
     }
 
-    /** What each of [boxes] takes, by field index. A box whose value is empty or does not fit gets nothing. */
+    /** What each of [boxes] takes, by field index. A box whose value is absent, empty or does not fit gets nothing. */
     fun values(boxes: List<BankBox>, fields: Map<Int, FieldFacts>, bank: BankFillRecord): List<Pair<Int, String>> {
         val roles = boxes.map { it.role }.toSet()
         return boxes.mapNotNull { box ->
             val f = fields[box.index] ?: return@mapNotNull null
             val value = when (box.role) {
-                BankRole.BRANCH -> shape(bank.branch, bank.branchDigit, boxOf(f, BankRole.BRANCH_DIGIT in roles))
-                BankRole.ACCOUNT -> shape(bank.account, bank.accountDigit, boxOf(f, BankRole.ACCOUNT_DIGIT in roles))
+                // A number the item lacks leaves its box alone.
+                BankRole.BRANCH ->
+                    bank.branch?.let { shape(it, bank.branchDigit, boxOf(f, BankRole.BRANCH_DIGIT in roles)) }
+                BankRole.ACCOUNT ->
+                    bank.account?.let { shape(it, bank.accountDigit, boxOf(f, BankRole.ACCOUNT_DIGIT in roles)) }
                 BankRole.BRANCH_DIGIT -> bank.branchDigit
                 BankRole.ACCOUNT_DIGIT -> bank.accountDigit
             }

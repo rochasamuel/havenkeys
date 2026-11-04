@@ -284,6 +284,22 @@ class FillPlannerTest {
     }
 
     @Test
+    fun aBankWithoutABranchOrAccountFillsWhatItHas() = runTest {
+        val fields = bankScreen(focus = 0)
+        val form = requireNotNull(LoginFormFinder.find(fields))
+        val contaOnly = FillValues(null, "s3cret", BankFillRecord(null, null, "12345", "6"))
+        assertEquals(
+            listOf(fields[1].index to "12345", fields[2].index to "6", fields[3].index to "s3cret"),
+            FillPlanner.entries(form, fields, contaOnly),
+        )
+        val branchOnly = FillValues(null, null, BankFillRecord("1234", null, null, null))
+        assertEquals(listOf(fields[0].index to "1234"), FillPlanner.entries(form, fields, branchOnly))
+        // No numbers at all: the password alone.
+        val passwordOnly = FillValues(null, "s3cret", null)
+        assertEquals(listOf(fields[3].index to "s3cret"), FillPlanner.entries(form, fields, passwordOnly))
+    }
+
+    @Test
     fun loginOnBankBoxPutsUsernameInFocusedBox() = runTest {
         val fields = bankScreen(focus = 1)
         val form = requireNotNull(LoginFormFinder.find(fields))
