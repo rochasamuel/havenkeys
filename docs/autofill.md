@@ -1542,6 +1542,83 @@ submit). Cards typed in processor iframes are not offered.
   the top page.
 * A phishing checkout that the user picks a card on receives that card.
 
+## Bank accounts
+
+Spec: `docs/superpowers/specs/2026-11-03-bank-account-design.md`. Trust rules:
+`security-model.md` §27. Words: `packages/field-words/words.json`
+(`BANK_BRANCH`, `BANK_ACCOUNT`, `BANK_DIGIT`, `BANK_NEGATIVE`); classifier:
+`autofill/bank.ts` (Android: `BankFieldClassifier`); writing: `autofill/bank-fill.ts`
+(Android: `BankShapes`).
+
+### Roles and rules
+
+Roles: `bankBranch`, `bankBranchDigit`, `bankAccount`, `bankAccountDigit`.
+
+1. **Branch.** A `BANK_BRANCH` word, and either the box looks numeric
+   (`type=number|tel`, `inputmode=numeric`, `maxlength` <= 8) or its group
+   has a conta box. Text "Ag" / "Agência" boxes qualify by their conta
+   neighbour. `BANK_NEGATIVE` holds `agencia de viagem` and similar, so a
+   travel agency stays non-bank.
+2. **Account.** A `BANK_ACCOUNT` word, no `BANK_NEGATIVE` phrase, and a
+   branch box in the same group. Conta never counts on its own, so "Entrar
+   na sua conta" stays a login.
+3. **Digit.** A `BANK_DIGIT` word with no `maxlength` or `maxlength` 1-2, or
+   a `maxlength` of 1-2, placed right after a branch or account box; it takes
+   that box's digit role. The first box of a one-time-code run (the next box
+   also has `maxlength` 1, or the OTP score passes the threshold) is not a
+   digit.
+4. **Never bank.** Password, one-time-code, hidden, disabled and read-only
+   boxes, and boxes with a card or identity claim. An `autocomplete` token
+   that names no real autofill field (`nope`, `off`, `chrome-off`) is
+   neutral; a real one (`username`, `cc-number`, `given-name`) refuses.
+
+The login and identity classifiers refuse a box that has a bank role, so an
+agência never becomes a username. Itaú's "Código do operador" and CPF boxes
+stay usernames or identity fields.
+
+The shared fixture (`br-fields.test.ts`, `BrFieldsTest.kt`) has a `bank`
+column per record (a role, `none` or `skip`) and group facts in `context`
+(`groupHasBranch`, `groupHasAccount`, `prevRole`); both harnesses run it.
+
+### Writing the values
+
+Each value is shaped to its box. With a separate digit box, the number box
+gets the number and the digit box the digit. Otherwise, with a digit:
+`NNNN-D` when the box accepts a hyphen (not `type=number`, and no
+`maxlength` or one >= length + 2); else `NNNND` when it takes length + 1;
+else the number alone. Masks get events per character, as card numbers do.
+Only visible, editable boxes of the picked form are written, re-checked at
+write time; a frame only when it and its top page are saved for the item;
+values HavenKeys did not write are never overwritten. A bank fill never
+submits.
+
+### Menu and popup
+
+A bank box opens the bank menu on the same trusted events and preference as
+the login menu: the site's bank accounts first (bank glyph, title,
+`Ag 1234 · Conta •••45-6`), then its logins; picking an old login fills its
+username into the box and its password into the form. A bank menu with
+nothing saved for the site does not open on focus (it would intrude on
+donation and checkout forms with an agência box); it opens only from the
+field icon, and then shows "No bank account saved". On a password box the
+login menu lists logins, then bank accounts. The popup lists the site's bank
+accounts after its logins with Fill; like logins it has no password copy.
+
+### Android
+
+`BankFieldClassifier` and `BankShapes` follow the rules above from
+`SharedWords.kt`. A target with bank roles gets one dataset per matched bank
+account (every bank box and the password, shaped as above, labelled with the
+title and `Ag 1234 · •••45-6`), then the site's or app's login datasets. The
+framework replaces existing values, as it does for logins. Rust matches and
+fills (`security-model.md` §27).
+
+### Limitations
+
+* Heuristic classification: a box with an unusual label is skipped.
+* A phishing page the user picks a bank account on, for a site saved for it,
+  gets the values; a page that is not the saved site is offered none.
+
 ## Android
 
 The Android app's card (`CardFieldClassifier`, `CardFormFinder`) and identity

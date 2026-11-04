@@ -835,6 +835,26 @@ Spec: `docs/superpowers/specs/2026-10-13-encrypted-attachments-design.md`.
 * **Quota abuse.** An account holder can fill the 192 MiB attachment quota
   with pending uploads; the server sweeps unlisted uploads after 24 hours.
 
+### T15 — Bank accounts
+
+Spec: `docs/superpowers/specs/2026-11-03-bank-account-design.md`.
+
+* **A phishing page copying a bank's agência/conta form.** Its boxes are
+  classified as bank boxes, but it is not the saved site, so Rust returns no
+  bank rows and `fill_item` is denied. A look-alike of the saved site gets
+  the lookalike warning, as for logins. A frame on an unsaved top page is
+  denied.
+* **A page that wants a bank account without the user.** Nothing is filled
+  without a pick on a trusted event; a fill never submits or continues a
+  sign-in.
+* **A compromised extension.** Can ask for an item id, but Rust checks the
+  binding and returns only the picked item's bank values and password.
+* **Older devices.** They set the item aside as unreadable; they never show
+  it wrongly.
+* *Residual:* once filled, the page's JavaScript can read the values; on
+  Android the framework holds the offered values for the session unless
+  "Confirm before filling" is on.
+
 ### Account deletion
 
 * **A stolen session token** cannot delete the account: the route also

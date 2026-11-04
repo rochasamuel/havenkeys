@@ -44,6 +44,9 @@ What the desktop app does today:
 * **Cards** (holder name, number, verification number, expiry) with the
   network's logo, detected from the number; numbers stay masked until you
   reveal them, and 1Password and Bitwarden credit cards import as cards
+* **Bank accounts** (bank, holder, agência, conta with digits, internet-banking
+  password, websites); filled after you pick one on a bank's agência/conta
+  form, never submitted
 * A **HavenKeys Account** item pinned first in All items: your email,
   server, account ID and Secret Key, to read or copy when setting up
   another computer (read-only; never stored in the vault or sent to the
@@ -118,6 +121,7 @@ What the Android app does (early release; tried on one phone, the instrumented t
   file). Nothing is filled without a tap. "Confirm before filling" keeps the
   logins' values away from Android until you pick one
 * Cards and your identity in Autofill, and saving a typed card
+* Bank accounts: viewing, editing and Autofill (agência, conta, digits, password)
 * No screenshots of HavenKeys, no backups of its data, English and Brazilian
   Portuguese
 * Creating, editing and deleting logins, secure notes and cards, and editing

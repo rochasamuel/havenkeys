@@ -2287,3 +2287,46 @@ Threats: `threat-model.md` T14. Format: `crypto.md` "Attachments".
   removes them, up to 24 hours. A server cannot be told by the client that
   attachments are unsupported except by the failed upload (`server_unsupported`).
   Android does not yet read or write attachments.
+
+## 27. Bank accounts
+
+Spec: `docs/superpowers/specs/2026-11-03-bank-account-design.md`. Threats:
+`threat-model.md` T15. Autofill: `autofill.md` "Bank accounts".
+
+* **The item.** A Bank Account (bank, holder, type, agência with its digit,
+  conta with its digit, internet-banking password, websites, app bindings,
+  notes, custom fields) is sealed like a login. It is bound to its websites
+  and apps like a login.
+* **What its overview holds.** The sealed overview, which the list and
+  `find_matches` read, holds the bank, the agência and the last 3 characters
+  of the account with its digit (`45-6`). It does not hold the full account,
+  the holder, the password or the notes. An agência is printed on cheques and
+  is not treated as secret. Search matches title, bank and agência, never the
+  full account.
+* **Site and app binding.** `fill_item` for a bank account runs the login's
+  check in Rust: vault unlocked, item is site-bound, and the page, and for a
+  frame the top page too, match the item's website rules (on Android, the
+  app's bindings or verified hosts). The extension's item id, origin and box
+  roles are not trusted. A card, identity or note id sent to the bank path is
+  denied, and a bank id sent to TOTP, passkey or "Sign in with" requests is
+  denied.
+* **What leaves Rust.** Only the agência, conta, their digits and the
+  password of the picked item. Not the holder, notes or custom fields.
+* **A bank fill never submits.** It does not press a button or continue a
+  sign-in; `auto_sign_in_for` is false for a bank account whatever the
+  settings. Nothing is overwritten except values HavenKeys wrote (on Android
+  the framework replaces values, as for logins).
+* **Copy.** Copy on the desktop and phone goes through Rust
+  (`copy_bank_field`, an allowlist: bank, holder, agência, conta, password,
+  and "Copy details", a text Rust composes), with the usual clipboard-clear
+  delay. The account type has no copy. The toolbar popup offers Fill and, as
+  for logins, no password copy; while the account is frozen it offers neither.
+* **Older devices.** A device that does not know the type records the item as
+  unreadable and retries after an update; its sync does not fail. Update
+  every device before creating a bank account.
+* **Android.** Direct fill covers a bank account as it covers logins
+  (CLAUDE.md amendment of 2026-11-03); "Confirm before filling" and the rows
+  offered after an unlock open HavenKeys first.
+* **Limitations.** The values reach the page's JavaScript once filled, as a
+  login's do. The Android framework holds the offered values for the fill
+  session unless "Confirm before filling" is on.
