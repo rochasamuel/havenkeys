@@ -216,26 +216,6 @@ export function BankEditor({ existing, readOnly, onCancel, onSaved, onDirtyChang
               <input className="edit-input" value={draft.bank} maxLength={64} aria-label={f.bank}
                 onChange={(e) => set("bank", e.target.value)} autoComplete="off" spellCheck={false} />
             </label>
-            <label className="row edit-row">
-              <span className="edit-label">{f.holderName}</span>
-              <input className="edit-input" value={draft.holderName} maxLength={256} aria-label={f.holderName}
-                onChange={(e) => set("holderName", e.target.value)} autoComplete="off" spellCheck={false} />
-            </label>
-            <label className="row edit-row">
-              <span className="edit-label">{f.accountType}</span>
-              <span className="select-wrap">
-                <select value={draft.accountType} aria-label={f.accountType}
-                  onChange={(e) => set("accountType", e.target.value as Draft["accountType"])}>
-                  <option value="">{t.bank.noType}</option>
-                  {ACCOUNT_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {t.bank.types[type]}
-                    </option>
-                  ))}
-                </select>
-                <Icon name="chevronDown" size={14} className="select-chevron" />
-              </span>
-            </label>
             <div className="row edit-row">
               {/* The label names the number box; clicking it lands there. */}
               <label className="edit-label" htmlFor={`${ids}-branch`}>{f.branch}</label>
@@ -291,6 +271,26 @@ export function BankEditor({ existing, readOnly, onCancel, onSaved, onDirtyChang
                 </span>
               )}
             </div>
+            <label className="row edit-row">
+              <span className="edit-label">{f.accountType}</span>
+              <span className="select-wrap">
+                <select value={draft.accountType} aria-label={f.accountType}
+                  onChange={(e) => set("accountType", e.target.value as Draft["accountType"])}>
+                  <option value="">{t.bank.noType}</option>
+                  {ACCOUNT_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {t.bank.types[type]}
+                    </option>
+                  ))}
+                </select>
+                <Icon name="chevronDown" size={14} className="select-chevron" />
+              </span>
+            </label>
+            <label className="row edit-row">
+              <span className="edit-label">{f.holderName}</span>
+              <input className="edit-input" value={draft.holderName} maxLength={256} aria-label={f.holderName}
+                onChange={(e) => set("holderName", e.target.value)} autoComplete="off" spellCheck={false} />
+            </label>
             <PasswordEdit value={draft.password} onChange={(next) => set("password", next)}
               saved={saved.password} label={f.password} />
           </div>

@@ -106,6 +106,13 @@ describe("BankEditor", () => {
     expect(box(f.account).value).toBe("");
   });
 
+  it("lists the fields in the detail's order", async () => {
+    await render();
+    const labels = [...host.querySelectorAll(".edit-label")].map((l) => l.textContent);
+    const fields = [f.bank, f.branch, f.account, f.accountType, f.holderName, f.password];
+    expect(labels.filter((l) => fields.includes(l!))).toEqual(fields);
+  });
+
   it("labels the number box with its row label", async () => {
     await render();
     const label = [...host.querySelectorAll<HTMLLabelElement>("label.edit-label")].find((l) => l.textContent === f.account)!;
