@@ -13,7 +13,7 @@ typealias OpenItem = (id: String) -> Unit
 
 /** A login shows its title's initial; the other kinds show what they are. */
 internal fun ItemSummary.leading(): RowLeading = when (kind) {
-    ItemKind.LOGIN -> RowLeading.Monogram(title)
+    ItemKind.LOGIN, ItemKind.BANK_ACCOUNT -> RowLeading.Monogram(title)
     ItemKind.SECURE_NOTE -> RowLeading.Glyph(HavenIcon.Note, soft = true)
     ItemKind.CARD -> RowLeading.Glyph(HavenIcon.Card)
     ItemKind.IDENTITY -> RowLeading.Glyph(HavenIcon.IdCard)

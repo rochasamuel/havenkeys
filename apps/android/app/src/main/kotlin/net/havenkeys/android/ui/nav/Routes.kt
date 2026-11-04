@@ -40,6 +40,7 @@ private fun kindArg(kind: ItemKind): String = when (kind) {
     ItemKind.SECURE_NOTE -> "note"
     ItemKind.CARD -> "card"
     ItemKind.IDENTITY -> "identity"
+    ItemKind.BANK_ACCOUNT -> "bank"
 }
 
 /** The kinds the phone can create; the identity is never one of them. */

@@ -143,7 +143,7 @@ private fun rememberTextLoads(
 
 @StringRes
 private fun screenTitle(kind: ItemKind, isNew: Boolean): Int = when (kind) {
-    ItemKind.LOGIN -> if (isNew) R.string.edit_new_login else R.string.edit_login
+    ItemKind.LOGIN, ItemKind.BANK_ACCOUNT -> if (isNew) R.string.edit_new_login else R.string.edit_login
     ItemKind.SECURE_NOTE -> if (isNew) R.string.edit_new_note else R.string.edit_note
     ItemKind.CARD -> if (isNew) R.string.edit_new_card else R.string.edit_card
     ItemKind.IDENTITY -> R.string.edit_identity

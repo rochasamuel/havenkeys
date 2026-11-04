@@ -22,6 +22,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import uniffi.havenkeys_mobile.AutofillKind
 import uniffi.havenkeys_mobile.AutofillMatch
 
 @RunWith(RobolectricTestRunner::class)
@@ -32,7 +33,7 @@ class AutofillSearchScreenTest {
     private fun text(id: Int, vararg args: Any) = RuntimeEnvironment.getApplication().getString(id, *args)
 
     private val repo = FakeAutofillRepository().apply {
-        matchList = Outcome.Ok(listOf(AutofillMatch("m1", "GitHub", "sam", false)))
+        matchList = Outcome.Ok(listOf(AutofillMatch("m1", "GitHub", "sam", false, AutofillKind.LOGIN)))
     }
     private val confirmed = mutableListOf<String>()
 

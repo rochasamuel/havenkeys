@@ -15,6 +15,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import uniffi.havenkeys_mobile.AutofillKind
 import uniffi.havenkeys_mobile.AutofillMatch
 import uniffi.havenkeys_mobile.CredentialCaller
 import uniffi.havenkeys_mobile.PasskeyCreatePlan
@@ -26,7 +27,7 @@ class PasskeyCreateViewModelTest {
     @After fun reset() = Dispatchers.resetMain()
 
     private val caller = CredentialCaller("com.android.chrome", listOf(ByteArray(32)), "https://github.com")
-    private val home = AutofillMatch("id1", "GitHub", "octo", false)
+    private val home = AutofillMatch("id1", "GitHub", "octo", false, AutofillKind.LOGIN)
 
     private fun vm(repo: FakeCredentialRepository, conditional: Boolean = false) =
         PasskeyCreateViewModel(repo, caller, "{}", conditional).also { it.load() }
@@ -62,7 +63,7 @@ class PasskeyCreateViewModelTest {
 
     @Test
     fun aBlankUserNameNeverPreselects() = runTest {
-        val blankHome = AutofillMatch("id2", "Other", "", false)
+        val blankHome = AutofillMatch("id2", "Other", "", false, AutofillKind.LOGIN)
         val repo = FakeCredentialRepository().apply {
             plan = Outcome.Ok(PasskeyCreatePlan("github.com", "", false, listOf(blankHome)))
         }

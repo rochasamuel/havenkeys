@@ -35,20 +35,26 @@ mod unlock;
 mod vault;
 
 pub use account::DeviceInfo;
-pub use autofill::{AutofillMatch, BoundFill, FillValues, FrameFacts, TargetFacts, TargetKind};
+pub use autofill::{
+    AutofillKind, AutofillMatch, BankFillRecord, BankSummaryRecord, BoundFill, FillValues,
+    FrameFacts, TargetFacts, TargetKind,
+};
 pub use cards::{
     CardChoice, CardChoices, CardFrameRoles, CardRole, CardValue, SaveCard, MAX_CARD_FRAMES,
 };
 pub use credentials::{
     privileged_browsers_json, CredentialCaller, PasskeyCreatePlan, PasskeyOffer,
 };
-pub use edit::{Change, EditField, FieldChange, ItemDraft, ItemEdit, MatchKind, Website};
+pub use edit::{
+    BankDraft, Change, EditField, FieldChange, ItemDraft, ItemEdit, MatchKind, Website,
+};
 pub use error::{MobileError, MobileResult};
 pub use events::VaultEvents;
 pub use health::{HealthCountsView, HealthIssueView, HealthKind, HealthView};
 pub use identity_fill::{IdentityChoice, IdentityRole, IdentityValue, MAX_IDENTITY_ROLES};
 pub use items::{
-    FieldKind, Generated, GeneratorOptions, ItemKind, ItemSummary, ItemView, TotpNow, ViewField,
+    BankAccountType, BankField, BankViewRecord, FieldKind, Generated, GeneratorOptions, ItemKind,
+    ItemSummary, ItemView, TotpNow, ViewField,
 };
 pub use key_file::{CipherError, KeystoreCipher};
 pub use onboarding::{InvitePreview, KitPreview, LumaFrame};
@@ -87,6 +93,36 @@ pub mod testing {
                 notes: None,
             }),
             ..blank(ItemType::Card, title)
+        };
+        let mut vault = v.client.vault().unwrap();
+        let staged = vault.stage_create(input, 1).unwrap();
+        let id = staged.item_id;
+        vault.commit_write(staged, 1).unwrap();
+        id.to_string()
+    }
+
+    /// A bank account for itau.com.br in an unlocked vault: (item ID).
+    /// Itaú, agência 1234-5, conta 12345-6, holder Maria Silva, password
+    /// `senha-itau-1`, notes `chave pix`.
+    pub fn seed_bank(v: &MobileVault, title: &str) -> String {
+        use havenkeys_core::bank::{BankAccountInput, BankAccountType};
+        let input = ItemInput {
+            urls: vec![UrlRule {
+                url: "https://itau.com.br".into(),
+                match_type: MatchType::Domain,
+            }],
+            password: SecretUpdate::Set(SecretString::from("senha-itau-1")),
+            notes: SecretUpdate::Set(SecretString::from("chave pix")),
+            bank: Some(BankAccountInput {
+                bank: Some("Itaú".into()),
+                holder_name: Some(SecretString::from("Maria Silva")),
+                account_type: Some(BankAccountType::Checking),
+                branch: Some("1234-5".into()),
+                branch_digit: None,
+                account: SecretUpdate::Set(SecretString::from("12345-6")),
+                account_digit: SecretUpdate::Keep,
+            }),
+            ..blank(ItemType::BankAccount, title)
         };
         let mut vault = v.client.vault().unwrap();
         let staged = vault.stage_create(input, 1).unwrap();

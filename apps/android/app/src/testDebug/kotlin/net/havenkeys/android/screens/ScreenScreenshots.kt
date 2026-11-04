@@ -78,6 +78,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowLooper
+import uniffi.havenkeys_mobile.AutofillKind
 import uniffi.havenkeys_mobile.AutofillMatch
 import uniffi.havenkeys_mobile.DeviceInfo
 import uniffi.havenkeys_mobile.EditField
@@ -289,8 +290,8 @@ class ScreenScreenshots {
         rpId = "github.com",
         userName = "sam",
         homes = listOf(
-            AutofillMatch("h1", "GitHub", "sam@example.com", true),
-            AutofillMatch("h2", "GitHub work", "sam@work.example", false),
+            AutofillMatch("h1", "GitHub", "sam@example.com", true, AutofillKind.LOGIN),
+            AutofillMatch("h2", "GitHub work", "sam@work.example", false, AutofillKind.LOGIN),
         ),
         selected = "h1",
     )
@@ -392,7 +393,9 @@ class ScreenScreenshots {
         ) {
             val repo = remember {
                 FakeAutofillRepository().apply {
-                    matchList = Outcome.Ok(listOf(AutofillMatch("m1", "GitHub", "sam@example.com", true)))
+                    matchList = Outcome.Ok(
+                        listOf(AutofillMatch("m1", "GitHub", "sam@example.com", true, AutofillKind.LOGIN)),
+                    )
                 }
             }
             AutofillSearchScreen(repo::search, CallerApp("com.example.app", "Example"), onConfirmed = { null })

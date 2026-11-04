@@ -122,4 +122,18 @@ mod tests {
         assert!(v.clear_recent_searches().is_err());
         assert!(v.record_use(Uuid::nil().to_string()).is_err());
     }
+
+    #[test]
+    fn copying_or_filling_a_bank_account_is_recorded() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, _) = unlocked(dir.path());
+        let bank = crate::testing::seed_bank(&v, "Conta Itaú");
+        add_note(&v, "Other", 2);
+        // The app reports a copy or an Android fill as for a login.
+        v.record_use(bank.clone()).unwrap();
+        let used = v.frequently_used(6).unwrap();
+        assert_eq!(used.len(), 1);
+        assert_eq!(used[0].id, bank);
+        assert!(used[0].kind == crate::items::ItemKind::BankAccount);
+    }
 }

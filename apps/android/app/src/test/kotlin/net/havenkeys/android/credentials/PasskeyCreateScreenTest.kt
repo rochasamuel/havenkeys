@@ -25,6 +25,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import uniffi.havenkeys_mobile.AutofillKind
 import uniffi.havenkeys_mobile.AutofillMatch
 
 @RunWith(RobolectricTestRunner::class)
@@ -40,7 +41,7 @@ class PasskeyCreateScreenTest {
         loading = false,
         rpId = "github.com",
         userName = "sam",
-        homes = (1..homes).map { AutofillMatch("h$it", "Login $it", "user$it", false) },
+        homes = (1..homes).map { AutofillMatch("h$it", "Login $it", "user$it", false, AutofillKind.LOGIN) },
         selected = "h1",
         excluded = excluded,
     )

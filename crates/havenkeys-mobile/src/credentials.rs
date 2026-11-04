@@ -406,6 +406,8 @@ impl MobileVault {
         Ok(FillValues {
             username: creds.username,
             password: creds.password.map(|p| p.expose().to_owned()),
+            // A password credential: never the bank numbers.
+            bank: None,
         })
     }
 }

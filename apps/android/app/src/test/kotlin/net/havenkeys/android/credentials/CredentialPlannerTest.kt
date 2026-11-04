@@ -7,6 +7,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import uniffi.havenkeys_mobile.AutofillKind
 import uniffi.havenkeys_mobile.AutofillMatch
 import uniffi.havenkeys_mobile.CredentialCaller
 import uniffi.havenkeys_mobile.PasskeyOffer
@@ -14,7 +15,7 @@ import uniffi.havenkeys_mobile.PasskeyOffer
 class CredentialPlannerTest {
     private val caller = CredentialCaller("com.android.chrome", listOf(ByteArray(32)), "https://github.com")
     private val passkey = PasskeyOffer("id1", byteArrayOf(1, 2), "GitHub", "octo")
-    private val login = AutofillMatch("id2", "GitHub", "octo", false)
+    private val login = AutofillMatch("id2", "GitHub", "octo", false, AutofillKind.LOGIN)
 
     @Test
     fun nothingAskedIsNothingOffered() = runTest {

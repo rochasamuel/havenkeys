@@ -8,6 +8,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import uniffi.havenkeys_mobile.AutofillKind
 import uniffi.havenkeys_mobile.AutofillMatch
 import uniffi.havenkeys_mobile.FillValues
 import uniffi.havenkeys_mobile.TargetFacts
@@ -17,7 +18,7 @@ class FillPlannerTest {
     private val target = TargetFacts("com.android.chrome", listOf(ByteArray(32)), "github.com", "https")
     private val login = LoginForm(listOf(0), listOf(1), emptyList(), "github.com", "https", 0)
     private val otp = LoginForm(emptyList(), emptyList(), listOf(0), "github.com", "https", 0)
-    private val match = AutofillMatch("id1", "GitHub", "octo", true)
+    private val match = AutofillMatch("id1", "GitHub", "octo", true, AutofillKind.LOGIN)
 
     @Test
     fun lockedAsksToUnlockFirst() = runTest {

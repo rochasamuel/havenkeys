@@ -857,6 +857,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_item_template(
     ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_save_bank(
+    ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_scan_totp(
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_update_item(
@@ -871,6 +873,10 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_identity_values(
     ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_bank_details_text(
+    ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_bank_view(
+    ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_generate_password(
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_item_view(
@@ -878,6 +884,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_list_items(
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_reveal(
+    ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_reveal_bank_field(
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_search(
     ): Int
@@ -1065,6 +1073,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_item_template(`ptr`: Long,`kind`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_save_bank(`ptr`: Long,`draft`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_scan_totp(`ptr`: Long,`frame`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_update_item(`ptr`: Long,`id`: RustBuffer.ByValue,`draft`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1079,6 +1089,10 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_autofill_identity_values(`ptr`: Long,`target`: RustBuffer.ByValue,`frame`: RustBuffer.ByValue,`roles`: RustBuffer.ByValue,`documents`: Byte,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_bank_details_text(`ptr`: Long,`id`: RustBuffer.ByValue,`lang`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_bank_view(`ptr`: Long,`id`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_generate_password(`ptr`: Long,`o`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_item_view(`ptr`: Long,`id`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1086,6 +1100,8 @@ internal object UniffiLib {
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_list_items(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_reveal(`ptr`: Long,`id`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_reveal_bank_field(`ptr`: Long,`id`: RustBuffer.ByValue,`field`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_search(`ptr`: Long,`query`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -1347,7 +1363,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_matches() and 0xFFFF) != 20194) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_search() and 0xFFFF) != 30281) {
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_search() and 0xFFFF) != 3948) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_target_kind() and 0xFFFF) != 33114) {
@@ -1398,6 +1414,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_item_template() and 0xFFFF) != 49488) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_save_bank() and 0xFFFF) != 62052) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_scan_totp() and 0xFFFF) != 29331) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1419,6 +1438,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_identity_values() and 0xFFFF) != 3636) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_bank_details_text() and 0xFFFF) != 17538) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_bank_view() and 0xFFFF) != 19513) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_generate_password() and 0xFFFF) != 1655) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1429,6 +1454,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_reveal() and 0xFFFF) != 13808) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_reveal_bank_field() and 0xFFFF) != 53351) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_search() and 0xFFFF) != 23952) {
@@ -2390,7 +2418,8 @@ public interface MobileVaultInterface {
     fun `autofillMatches`(`target`: TargetFacts): List<AutofillMatch>
     
     /**
-     * "Search HavenKeys…": any login, by title, username or website. No
+     * "Search HavenKeys…": any login or bank account, by title, username,
+     * website, bank or agência. No
      * secrets; filling one goes through `autofill_bind_and_fill`.
      * Empty while the account is frozen.
      */
@@ -2491,6 +2520,11 @@ public interface MobileVaultInterface {
     fun `itemTemplate`(`kind`: ItemKind): ItemEdit
     
     /**
+     * Create or change a bank account; returns its ID. Needs the server.
+     */
+    fun `saveBank`(`draft`: BankDraft): kotlin.String
+    
+    /**
      * Decode a camera frame for the one-time code field. Only a usable
      * `otpauth://totp` link comes back, for the editor to put in the field
      * as if typed; it is saved only with the item.
@@ -2523,6 +2557,17 @@ public interface MobileVaultInterface {
      */
     fun `autofillIdentityValues`(`target`: TargetFacts, `frame`: FrameFacts, `roles`: List<IdentityRole>, `documents`: kotlin.Boolean): List<IdentityValue>
     
+    /**
+     * The transfer details to copy, one per line, in `lang` (`"en"` or
+     * `"pt-BR"`): bank, agência, conta with its type, holder.
+     */
+    fun `bankDetailsText`(`id`: kotlin.String, `lang`: kotlin.String): kotlin.String
+    
+    /**
+     * A bank account's screen and editor. `Denied` for any other item.
+     */
+    fun `bankView`(`id`: kotlin.String): BankViewRecord
+    
     fun `generatePassword`(`o`: GeneratorOptions): Generated
     
     fun `itemView`(`id`: kotlin.String): ItemView
@@ -2533,6 +2578,11 @@ public interface MobileVaultInterface {
      * Exactly one field of one item.
      */
     fun `reveal`(`id`: kotlin.String, `key`: kotlin.String): kotlin.String
+    
+    /**
+     * One of a bank account's revealed values. `NotFound` when it has none.
+     */
+    fun `revealBankField`(`id`: kotlin.String, `field`: BankField): kotlin.String
     
     fun `search`(`query`: kotlin.String): List<ItemSummary>
     
@@ -3015,7 +3065,8 @@ open class MobileVault: Disposable, AutoCloseable, MobileVaultInterface
 
     
     /**
-     * "Search HavenKeys…": any login, by title, username or website. No
+     * "Search HavenKeys…": any login or bank account, by title, username,
+     * website, bank or agência. No
      * secrets; filling one goes through `autofill_bind_and_fill`.
      * Empty while the account is frozen.
      */
@@ -3350,6 +3401,24 @@ open class MobileVault: Disposable, AutoCloseable, MobileVaultInterface
 
     
     /**
+     * Create or change a bank account; returns its ID. Needs the server.
+     */
+    @Throws(MobileException::class)override fun `saveBank`(`draft`: BankDraft): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_save_bank(
+        it,
+        
+        FfiConverterTypeBankDraft.lower(`draft`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
      * Decode a camera frame for the one-time code field. Only a usable
      * `otpauth://totp` link comes back, for the editor to put in the field
      * as if typed; it is saved only with the item.
@@ -3477,6 +3546,44 @@ open class MobileVault: Disposable, AutoCloseable, MobileVaultInterface
     
 
     
+    /**
+     * The transfer details to copy, one per line, in `lang` (`"en"` or
+     * `"pt-BR"`): bank, agência, conta with its type, holder.
+     */
+    @Throws(MobileException::class)override fun `bankDetailsText`(`id`: kotlin.String, `lang`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_bank_details_text(
+        it,
+        
+        FfiConverterString.lower(`id`),
+        FfiConverterString.lower(`lang`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * A bank account's screen and editor. `Denied` for any other item.
+     */
+    @Throws(MobileException::class)override fun `bankView`(`id`: kotlin.String): BankViewRecord {
+            return FfiConverterTypeBankViewRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_bank_view(
+        it,
+        
+        FfiConverterString.lower(`id`),_status)
+}
+    }
+    )
+    }
+    
+
+    
     @Throws(MobileException::class)override fun `generatePassword`(`o`: GeneratorOptions): Generated {
             return FfiConverterTypeGenerated.lift(
     callWithHandle {
@@ -3533,6 +3640,25 @@ open class MobileVault: Disposable, AutoCloseable, MobileVaultInterface
         
         FfiConverterString.lower(`id`),
         FfiConverterString.lower(`key`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * One of a bank account's revealed values. `NotFound` when it has none.
+     */
+    @Throws(MobileException::class)override fun `revealBankField`(`id`: kotlin.String, `field`: BankField): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_reveal_bank_field(
+        it,
+        
+        FfiConverterString.lower(`id`),
+        FfiConverterTypeBankField.lower(`field`),_status)
 }
     }
     )
@@ -4562,6 +4688,13 @@ data class AutofillMatch (
     var `username`: kotlin.String?
     , 
     var `hasTotp`: kotlin.Boolean
+    , 
+    var `kind`: AutofillKind
+    , 
+    /**
+     * Set for a bank account only.
+     */
+    var `bank`: BankSummaryRecord? = null 
     
 ){
     
@@ -4582,6 +4715,8 @@ public object FfiConverterTypeAutofillMatch: FfiConverterRustBuffer<AutofillMatc
             FfiConverterString.read(buf),
             FfiConverterOptionalString.read(buf),
             FfiConverterBoolean.read(buf),
+            FfiConverterTypeAutofillKind.read(buf),
+            FfiConverterOptionalTypeBankSummaryRecord.read(buf),
         )
     }
 
@@ -4589,7 +4724,9 @@ public object FfiConverterTypeAutofillMatch: FfiConverterRustBuffer<AutofillMatc
             FfiConverterString.allocationSize(value.`id`) +
             FfiConverterString.allocationSize(value.`title`) +
             FfiConverterOptionalString.allocationSize(value.`username`) +
-            FfiConverterBoolean.allocationSize(value.`hasTotp`)
+            FfiConverterBoolean.allocationSize(value.`hasTotp`) +
+            FfiConverterTypeAutofillKind.allocationSize(value.`kind`) +
+            FfiConverterOptionalTypeBankSummaryRecord.allocationSize(value.`bank`)
     )
 
     override fun write(value: AutofillMatch, buf: ByteBuffer) {
@@ -4597,6 +4734,311 @@ public object FfiConverterTypeAutofillMatch: FfiConverterRustBuffer<AutofillMatc
             FfiConverterString.write(value.`title`, buf)
             FfiConverterOptionalString.write(value.`username`, buf)
             FfiConverterBoolean.write(value.`hasTotp`, buf)
+            FfiConverterTypeAutofillKind.write(value.`kind`, buf)
+            FfiConverterOptionalTypeBankSummaryRecord.write(value.`bank`, buf)
+    }
+}
+
+
+
+/**
+ * A bank account as its editor saves it (`id` `None`: a new one). The
+ * bank, holder, type and agência are sent in full; the conta, its digit,
+ * the password and the notes are changes, so the editor never has to read
+ * them. Custom fields and app bindings are kept as they are. No `Debug`.
+ */
+data class BankDraft (
+    var `id`: kotlin.String?
+    , 
+    /**
+     * The `revision` of the `BankViewRecord` the draft was made from.
+     */
+    var `baseRevision`: kotlin.Long?
+    , 
+    var `title`: kotlin.String
+    , 
+    var `websites`: List<Website>
+    , 
+    var `tags`: List<kotlin.String>
+    , 
+    var `bank`: kotlin.String?
+    , 
+    var `holderName`: kotlin.String?
+    , 
+    var `accountType`: BankAccountType?
+    , 
+    var `branch`: kotlin.String?
+    , 
+    var `branchDigit`: kotlin.String?
+    , 
+    var `account`: Change
+    , 
+    var `accountDigit`: Change
+    , 
+    var `password`: Change
+    , 
+    var `notes`: Change
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBankDraft: FfiConverterRustBuffer<BankDraft> {
+    override fun read(buf: ByteBuffer): BankDraft {
+        return BankDraft(
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalLong.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterSequenceTypeWebsite.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalTypeBankAccountType.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterTypeChange.read(buf),
+            FfiConverterTypeChange.read(buf),
+            FfiConverterTypeChange.read(buf),
+            FfiConverterTypeChange.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: BankDraft) = (
+            FfiConverterOptionalString.allocationSize(value.`id`) +
+            FfiConverterOptionalLong.allocationSize(value.`baseRevision`) +
+            FfiConverterString.allocationSize(value.`title`) +
+            FfiConverterSequenceTypeWebsite.allocationSize(value.`websites`) +
+            FfiConverterSequenceString.allocationSize(value.`tags`) +
+            FfiConverterOptionalString.allocationSize(value.`bank`) +
+            FfiConverterOptionalString.allocationSize(value.`holderName`) +
+            FfiConverterOptionalTypeBankAccountType.allocationSize(value.`accountType`) +
+            FfiConverterOptionalString.allocationSize(value.`branch`) +
+            FfiConverterOptionalString.allocationSize(value.`branchDigit`) +
+            FfiConverterTypeChange.allocationSize(value.`account`) +
+            FfiConverterTypeChange.allocationSize(value.`accountDigit`) +
+            FfiConverterTypeChange.allocationSize(value.`password`) +
+            FfiConverterTypeChange.allocationSize(value.`notes`)
+    )
+
+    override fun write(value: BankDraft, buf: ByteBuffer) {
+            FfiConverterOptionalString.write(value.`id`, buf)
+            FfiConverterOptionalLong.write(value.`baseRevision`, buf)
+            FfiConverterString.write(value.`title`, buf)
+            FfiConverterSequenceTypeWebsite.write(value.`websites`, buf)
+            FfiConverterSequenceString.write(value.`tags`, buf)
+            FfiConverterOptionalString.write(value.`bank`, buf)
+            FfiConverterOptionalString.write(value.`holderName`, buf)
+            FfiConverterOptionalTypeBankAccountType.write(value.`accountType`, buf)
+            FfiConverterOptionalString.write(value.`branch`, buf)
+            FfiConverterOptionalString.write(value.`branchDigit`, buf)
+            FfiConverterTypeChange.write(value.`account`, buf)
+            FfiConverterTypeChange.write(value.`accountDigit`, buf)
+            FfiConverterTypeChange.write(value.`password`, buf)
+            FfiConverterTypeChange.write(value.`notes`, buf)
+    }
+}
+
+
+
+/**
+ * The numbers a bank form is filled with. `Debug` prints none of them.
+ */
+data class BankFillRecord (
+    var `branch`: kotlin.String
+    , 
+    var `branchDigit`: kotlin.String?
+    , 
+    var `account`: kotlin.String
+    , 
+    var `accountDigit`: kotlin.String?
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBankFillRecord: FfiConverterRustBuffer<BankFillRecord> {
+    override fun read(buf: ByteBuffer): BankFillRecord {
+        return BankFillRecord(
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: BankFillRecord) = (
+            FfiConverterString.allocationSize(value.`branch`) +
+            FfiConverterOptionalString.allocationSize(value.`branchDigit`) +
+            FfiConverterString.allocationSize(value.`account`) +
+            FfiConverterOptionalString.allocationSize(value.`accountDigit`)
+    )
+
+    override fun write(value: BankFillRecord, buf: ByteBuffer) {
+            FfiConverterString.write(value.`branch`, buf)
+            FfiConverterOptionalString.write(value.`branchDigit`, buf)
+            FfiConverterString.write(value.`account`, buf)
+            FfiConverterOptionalString.write(value.`accountDigit`, buf)
+    }
+}
+
+
+
+/**
+ * A bank account's overview, shown instead of a username: the bank, the
+ * agência and the last 3 characters of the conta (`45-6`). `Debug` prints
+ * none of them.
+ */
+data class BankSummaryRecord (
+    var `bank`: kotlin.String?
+    , 
+    var `branch`: kotlin.String?
+    , 
+    var `accountLast3`: kotlin.String?
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBankSummaryRecord: FfiConverterRustBuffer<BankSummaryRecord> {
+    override fun read(buf: ByteBuffer): BankSummaryRecord {
+        return BankSummaryRecord(
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: BankSummaryRecord) = (
+            FfiConverterOptionalString.allocationSize(value.`bank`) +
+            FfiConverterOptionalString.allocationSize(value.`branch`) +
+            FfiConverterOptionalString.allocationSize(value.`accountLast3`)
+    )
+
+    override fun write(value: BankSummaryRecord, buf: ByteBuffer) {
+            FfiConverterOptionalString.write(value.`bank`, buf)
+            FfiConverterOptionalString.write(value.`branch`, buf)
+            FfiConverterOptionalString.write(value.`accountLast3`, buf)
+    }
+}
+
+
+
+/**
+ * An opened bank account, for its screen and its editor: everything but
+ * the conta, its digit, the password and the notes, which come from
+ * `reveal_bank_field`. Custom fields are rows whose values come from
+ * `reveal`. `Debug` prints no value.
+ */
+data class BankViewRecord (
+    var `summary`: ItemSummary
+    , 
+    var `bank`: kotlin.String?
+    , 
+    var `holderName`: kotlin.String?
+    , 
+    var `accountType`: BankAccountType?
+    , 
+    var `branch`: kotlin.String?
+    , 
+    var `branchDigit`: kotlin.String?
+    , 
+    var `hasAccount`: kotlin.Boolean
+    , 
+    var `hasPassword`: kotlin.Boolean
+    , 
+    var `hasNotes`: kotlin.Boolean
+    , 
+    var `websites`: List<Website>
+    , 
+    var `customFields`: List<ViewField>
+    , 
+    /**
+     * What a `BankDraft` made from this view carries back.
+     */
+    var `revision`: kotlin.Long?
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBankViewRecord: FfiConverterRustBuffer<BankViewRecord> {
+    override fun read(buf: ByteBuffer): BankViewRecord {
+        return BankViewRecord(
+            FfiConverterTypeItemSummary.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalTypeBankAccountType.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterSequenceTypeWebsite.read(buf),
+            FfiConverterSequenceTypeViewField.read(buf),
+            FfiConverterOptionalLong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: BankViewRecord) = (
+            FfiConverterTypeItemSummary.allocationSize(value.`summary`) +
+            FfiConverterOptionalString.allocationSize(value.`bank`) +
+            FfiConverterOptionalString.allocationSize(value.`holderName`) +
+            FfiConverterOptionalTypeBankAccountType.allocationSize(value.`accountType`) +
+            FfiConverterOptionalString.allocationSize(value.`branch`) +
+            FfiConverterOptionalString.allocationSize(value.`branchDigit`) +
+            FfiConverterBoolean.allocationSize(value.`hasAccount`) +
+            FfiConverterBoolean.allocationSize(value.`hasPassword`) +
+            FfiConverterBoolean.allocationSize(value.`hasNotes`) +
+            FfiConverterSequenceTypeWebsite.allocationSize(value.`websites`) +
+            FfiConverterSequenceTypeViewField.allocationSize(value.`customFields`) +
+            FfiConverterOptionalLong.allocationSize(value.`revision`)
+    )
+
+    override fun write(value: BankViewRecord, buf: ByteBuffer) {
+            FfiConverterTypeItemSummary.write(value.`summary`, buf)
+            FfiConverterOptionalString.write(value.`bank`, buf)
+            FfiConverterOptionalString.write(value.`holderName`, buf)
+            FfiConverterOptionalTypeBankAccountType.write(value.`accountType`, buf)
+            FfiConverterOptionalString.write(value.`branch`, buf)
+            FfiConverterOptionalString.write(value.`branchDigit`, buf)
+            FfiConverterBoolean.write(value.`hasAccount`, buf)
+            FfiConverterBoolean.write(value.`hasPassword`, buf)
+            FfiConverterBoolean.write(value.`hasNotes`, buf)
+            FfiConverterSequenceTypeWebsite.write(value.`websites`, buf)
+            FfiConverterSequenceTypeViewField.write(value.`customFields`, buf)
+            FfiConverterOptionalLong.write(value.`revision`, buf)
     }
 }
 
@@ -5025,10 +5467,15 @@ public object FfiConverterTypeFieldChange: FfiConverterRustBuffer<FieldChange> {
 
 
 
+/**
+ * A bank account's has no username, its password and `bank`.
+ */
 data class FillValues (
     var `username`: kotlin.String?
     , 
     var `password`: kotlin.String?
+    , 
+    var `bank`: BankFillRecord? = null 
     
 ){
     
@@ -5047,17 +5494,20 @@ public object FfiConverterTypeFillValues: FfiConverterRustBuffer<FillValues> {
         return FillValues(
             FfiConverterOptionalString.read(buf),
             FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalTypeBankFillRecord.read(buf),
         )
     }
 
     override fun allocationSize(value: FillValues) = (
             FfiConverterOptionalString.allocationSize(value.`username`) +
-            FfiConverterOptionalString.allocationSize(value.`password`)
+            FfiConverterOptionalString.allocationSize(value.`password`) +
+            FfiConverterOptionalTypeBankFillRecord.allocationSize(value.`bank`)
     )
 
     override fun write(value: FillValues, buf: ByteBuffer) {
             FfiConverterOptionalString.write(value.`username`, buf)
             FfiConverterOptionalString.write(value.`password`, buf)
+            FfiConverterOptionalTypeBankFillRecord.write(value.`bank`, buf)
     }
 }
 
@@ -6562,6 +7012,118 @@ public object FfiConverterTypeWebsite: FfiConverterRustBuffer<Website> {
 
 
 
+/**
+ * What kind of site-bound item a match is.
+ */
+
+enum class AutofillKind {
+    
+    LOGIN,
+    BANK_ACCOUNT;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeAutofillKind: FfiConverterRustBuffer<AutofillKind> {
+    override fun read(buf: ByteBuffer) = try {
+        AutofillKind.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: AutofillKind) = 4UL
+
+    override fun write(value: AutofillKind, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class BankAccountType {
+    
+    CHECKING,
+    SAVINGS,
+    PAYMENT,
+    OTHER;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBankAccountType: FfiConverterRustBuffer<BankAccountType> {
+    override fun read(buf: ByteBuffer) = try {
+        BankAccountType.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: BankAccountType) = 4UL
+
+    override fun write(value: BankAccountType, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+/**
+ * The bank values shown only on a reveal, one per call.
+ */
+
+enum class BankField {
+    
+    ACCOUNT,
+    ACCOUNT_DIGIT,
+    PASSWORD,
+    NOTES;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBankField: FfiConverterRustBuffer<BankField> {
+    override fun read(buf: ByteBuffer) = try {
+        BankField.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: BankField) = 4UL
+
+    override fun write(value: BankField, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
 
 enum class CardRole {
     
@@ -6884,7 +7446,8 @@ enum class ItemKind {
     LOGIN,
     SECURE_NOTE,
     CARD,
-    IDENTITY;
+    IDENTITY,
+    BANK_ACCOUNT;
 
     
 
@@ -7257,6 +7820,70 @@ public object FfiConverterOptionalByteArray: FfiConverterRustBuffer<kotlin.ByteA
 /**
  * @suppress
  */
+public object FfiConverterOptionalTypeBankFillRecord: FfiConverterRustBuffer<BankFillRecord?> {
+    override fun read(buf: ByteBuffer): BankFillRecord? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeBankFillRecord.read(buf)
+    }
+
+    override fun allocationSize(value: BankFillRecord?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeBankFillRecord.allocationSize(value)
+        }
+    }
+
+    override fun write(value: BankFillRecord?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeBankFillRecord.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeBankSummaryRecord: FfiConverterRustBuffer<BankSummaryRecord?> {
+    override fun read(buf: ByteBuffer): BankSummaryRecord? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeBankSummaryRecord.read(buf)
+    }
+
+    override fun allocationSize(value: BankSummaryRecord?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeBankSummaryRecord.allocationSize(value)
+        }
+    }
+
+    override fun write(value: BankSummaryRecord?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeBankSummaryRecord.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalTypeIdentityChoice: FfiConverterRustBuffer<IdentityChoice?> {
     override fun read(buf: ByteBuffer): IdentityChoice? {
         if (buf.get().toInt() == 0) {
@@ -7343,6 +7970,38 @@ public object FfiConverterOptionalTypeViewSection: FfiConverterRustBuffer<ViewSe
         } else {
             buf.put(1)
             FfiConverterTypeViewSection.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeBankAccountType: FfiConverterRustBuffer<BankAccountType?> {
+    override fun read(buf: ByteBuffer): BankAccountType? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeBankAccountType.read(buf)
+    }
+
+    override fun allocationSize(value: BankAccountType?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeBankAccountType.allocationSize(value)
+        }
+    }
+
+    override fun write(value: BankAccountType?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeBankAccountType.write(value, buf)
         }
     }
 }

@@ -9,13 +9,16 @@
 //! None of these types derive `Debug`: drafts carry typed secrets.
 
 use crate::error::{MobileError, MobileResult};
-use crate::items::{parse_id, FieldKind, ItemKind, DOCUMENTS};
+use crate::items::{parse_id, BankAccountType, FieldKind, ItemKind, DOCUMENTS};
 use crate::onboarding::LumaFrame;
 use crate::qr;
 use crate::vault::MobileVault;
+use havenkeys_core::bank::BankAccountInput;
 use havenkeys_core::card::{CardExpiry, CardInput};
 use havenkeys_core::identity::IdentityFields;
-use havenkeys_core::model::{normalize_url, ItemInput, ItemType, MatchType, SecretUpdate, UrlRule};
+use havenkeys_core::model::{
+    normalize_url, ItemInput, ItemOverview, ItemType, MatchType, SecretUpdate, UrlRule,
+};
 use havenkeys_core::totp::parse_totp_input;
 use havenkeys_core::vault::StagedWrite;
 use havenkeys_core::{Error, SecretString};
@@ -27,6 +30,17 @@ pub enum Change {
     Keep,
     Replace { value: String },
     Remove,
+}
+
+impl Change {
+    /// A sealed value the core merges itself: `Keep` reads the vault there.
+    fn update(self) -> SecretUpdate {
+        match self {
+            Change::Keep => SecretUpdate::Keep,
+            Change::Replace { value } => SecretUpdate::Set(SecretString::new(value)),
+            Change::Remove => SecretUpdate::Clear,
+        }
+    }
 }
 
 #[derive(Clone, Copy, uniffi::Enum)]
@@ -87,6 +101,29 @@ pub struct ItemDraft {
     pub tags: Vec<String>,
 }
 
+/// A bank account as its editor saves it (`id` `None`: a new one). The
+/// bank, holder, type and agência are sent in full; the conta, its digit,
+/// the password and the notes are changes, so the editor never has to read
+/// them. Custom fields and app bindings are kept as they are. No `Debug`.
+#[derive(uniffi::Record)]
+pub struct BankDraft {
+    pub id: Option<String>,
+    /// The `revision` of the `BankViewRecord` the draft was made from.
+    pub base_revision: Option<i64>,
+    pub title: String,
+    pub websites: Vec<Website>,
+    pub tags: Vec<String>,
+    pub bank: Option<String>,
+    pub holder_name: Option<String>,
+    pub account_type: Option<BankAccountType>,
+    pub branch: Option<String>,
+    pub branch_digit: Option<String>,
+    pub account: Change,
+    pub account_digit: Change,
+    pub password: Change,
+    pub notes: Change,
+}
+
 /// Every identity value, in the order the desktop shows them.
 const IDENTITY_FIELDS: [&str; 27] = [
     "first_name",
@@ -129,6 +166,8 @@ fn fields_of(kind: ItemKind) -> Vec<(String, FieldKind)> {
             ("notes", FieldKind::Secret),
         ]),
         ItemKind::SecureNote => list(&[("content", FieldKind::Secret)]),
+        // Edited with `BankDraft`, not field by field.
+        ItemKind::BankAccount => Vec::new(),
         ItemKind::Card => list(&[
             ("card.holder", FieldKind::Text),
             ("card.number", FieldKind::Secret),
@@ -153,12 +192,21 @@ fn fields_of(kind: ItemKind) -> Vec<(String, FieldKind)> {
 fn kind_of(t: ItemType) -> ItemKind {
     match t {
         ItemType::Login => ItemKind::Login,
-        // The phone has no bank account screens yet; it shows one as a note
-        // without fields, and the core refuses a save as a type change.
-        ItemType::SecureNote | ItemType::BankAccount => ItemKind::SecureNote,
+        ItemType::SecureNote => ItemKind::SecureNote,
+        ItemType::BankAccount => ItemKind::BankAccount,
         ItemType::Card => ItemKind::Card,
         ItemType::Identity => ItemKind::Identity,
     }
+}
+
+pub(crate) fn websites(o: &ItemOverview) -> Vec<Website> {
+    o.urls
+        .iter()
+        .map(|r| Website {
+            url: r.url.clone(),
+            match_kind: match_kind(&r.match_type),
+        })
+        .collect()
 }
 
 fn match_kind(t: &MatchType) -> MatchKind {
@@ -316,11 +364,7 @@ impl Changes {
 
     /// A sealed value the core merges itself: `Keep` reads the vault there.
     fn update(&mut self, key: &str) -> SecretUpdate {
-        match self.take(key) {
-            None | Some(Change::Keep) => SecretUpdate::Keep,
-            Some(Change::Replace { value }) => SecretUpdate::Set(SecretString::new(value)),
-            Some(Change::Remove) => SecretUpdate::Clear,
-        }
+        self.take(key).map_or(SecretUpdate::Keep, Change::update)
     }
 
     /// A blank `Replace` keeps the 2FA key: only an explicit `Remove`
@@ -433,6 +477,9 @@ impl MobileVault {
                     ..blank(ItemType::Card, title)
                 }
             }
+            ItemKind::BankAccount => {
+                return Err(Error::InvalidInput("a bank account is saved with save_bank").into())
+            }
             ItemKind::Identity => {
                 // The one identity is created by the client, never here.
                 let id = id.ok_or(Error::Denied)?;
@@ -459,8 +506,56 @@ impl MobileVault {
     }
 }
 
+impl MobileVault {
+    /// Seal a bank draft as a new bank account or a change to one. Nothing
+    /// is sent or recorded here.
+    pub(crate) fn stage_bank(&self, draft: BankDraft) -> MobileResult<StagedWrite> {
+        self.unlocked()?;
+        let id = draft.id.as_deref().map(parse_id).transpose()?;
+        let vault = self.client.vault()?;
+        if let Some(id) = &id {
+            // `Denied` for any other kind of item: its type cannot change.
+            vault.bank_fields(*id)?;
+            if vault.item_revision(id)? != draft.base_revision {
+                return Err(Error::ItemChangedElsewhere.into());
+            }
+        }
+        let input = ItemInput {
+            urls: rules(draft.websites)?,
+            password: draft.password.update(),
+            notes: draft.notes.update(),
+            tags: Some(draft.tags),
+            bank: Some(BankAccountInput {
+                bank: draft.bank,
+                holder_name: draft.holder_name.map(SecretString::new),
+                account_type: draft.account_type.map(BankAccountType::core),
+                branch: draft.branch,
+                branch_digit: draft.branch_digit,
+                account: draft.account.update(),
+                account_digit: draft.account_digit.update(),
+            }),
+            ..blank(ItemType::BankAccount, draft.title.trim().to_owned())
+        };
+        let now = havenkeys_client::now_ms();
+        Ok(match id {
+            Some(id) => vault.stage_update(&id, input, now)?,
+            None => vault.stage_create(input, now)?,
+        })
+    }
+}
+
 #[uniffi::export]
 impl MobileVault {
+    /// Create or change a bank account; returns its ID. Needs the server.
+    pub fn save_bank(&self, draft: BankDraft) -> MobileResult<String> {
+        self.unlocked()?;
+        self.client.require_online()?;
+        let staged = self.stage_bank(draft)?;
+        let id = staged.item_id.to_string();
+        self.send(staged)?;
+        Ok(id)
+    }
+
     /// What the editor needs to open `id`: names and presence, the title,
     /// websites and username. No secret.
     pub fn item_edit(&self, id: String) -> MobileResult<ItemEdit> {
@@ -502,6 +597,7 @@ impl MobileVault {
                 .map(|(k, _)| k.to_owned())
                 .collect()
             }
+            ItemKind::BankAccount => Vec::new(),
             ItemKind::Identity => vault
                 .reveal_identity(&id)?
                 .filled_field_names()
@@ -509,19 +605,14 @@ impl MobileVault {
                 .map(|n| format!("identity.{n}"))
                 .collect(),
         };
-        let has_custom_fields = matches!(kind, ItemKind::Login | ItemKind::SecureNote)
-            && !vault.item_sections(&id)?.is_empty();
+        let has_custom_fields = matches!(
+            kind,
+            ItemKind::Login | ItemKind::SecureNote | ItemKind::BankAccount
+        ) && !vault.item_sections(&id)?.is_empty();
         Ok(ItemEdit {
             kind,
             title,
-            websites: o
-                .urls
-                .iter()
-                .map(|r| Website {
-                    url: r.url.clone(),
-                    match_kind: match_kind(&r.match_type),
-                })
-                .collect(),
+            websites: websites(&o),
             fields: fields_of(kind)
                 .into_iter()
                 .map(|(key, field_kind)| EditField {
@@ -617,6 +708,7 @@ impl MobileVault {
 mod tests {
     use super::*;
     use crate::autofill::TargetFacts;
+    use crate::items::BankField;
     use crate::vault::tests::{code, overdue_refuses, unlocked};
     use havenkeys_core::app_target::AppIdentity;
     use havenkeys_core::custom_field::{FieldInput, FieldValueInput, SectionInput};
@@ -1373,5 +1465,156 @@ mod tests {
         for bad in ["0/30", "13/30", "4/3", "4/203", "aa/bb", "4-30"] {
             assert!(parse_expiry(bad).is_err(), "{bad}");
         }
+    }
+
+    /// A bank draft that changes nothing but the title, from the view.
+    fn bank_draft(v: &MobileVault, id: &str, title: &str) -> BankDraft {
+        let view = v.bank_view(id.into()).unwrap();
+        BankDraft {
+            id: Some(id.into()),
+            base_revision: view.revision,
+            title: title.into(),
+            websites: view.websites,
+            tags: view.summary.tags,
+            bank: view.bank,
+            holder_name: view.holder_name,
+            account_type: view.account_type,
+            branch: view.branch,
+            branch_digit: view.branch_digit,
+            account: Change::Keep,
+            account_digit: Change::Keep,
+            password: Change::Keep,
+            notes: Change::Keep,
+        }
+    }
+
+    fn save(v: &MobileVault, draft: BankDraft) -> String {
+        let staged = v.stage_bank(draft).unwrap();
+        let id = staged.item_id.to_string();
+        commit(v, staged);
+        id
+    }
+
+    #[test]
+    fn a_bank_edit_keeps_what_was_not_changed() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, _) = unlocked(dir.path());
+        let id = crate::testing::seed_bank(&v, "Conta Itaú");
+        let app = AppIdentity::new("br.com.itau", &[vec![4; 32]]).unwrap();
+        {
+            let mut vault = v.client.vault().unwrap();
+            let item = Uuid::parse_str(&id).unwrap();
+            let staged = vault.stage_bind_app(&item, &app, 2).unwrap();
+            vault.commit_write(staged, 2).unwrap();
+        }
+        assert_eq!(save(&v, bank_draft(&v, &id, "Itaú PF")), id);
+        let reveal = |f| v.reveal_bank_field(id.clone(), f).unwrap();
+        assert_eq!(reveal(BankField::Account), "12345");
+        assert_eq!(reveal(BankField::AccountDigit), "6");
+        assert_eq!(reveal(BankField::Password), "senha-itau-1");
+        assert_eq!(reveal(BankField::Notes), "chave pix");
+        let view = v.bank_view(id.clone()).unwrap();
+        assert_eq!(view.summary.title, "Itaú PF");
+        assert_eq!(view.holder_name.as_deref(), Some("Maria Silva"));
+        // The app binding is carried over by the edit.
+        let bound = v
+            .client
+            .vault()
+            .unwrap()
+            .matches_for_app(&app, &[], 3)
+            .unwrap();
+        assert_eq!(bound[0].id.to_string(), id);
+
+        // Each change touches one value; a pasted `-D` is split off into
+        // the digit the editor cleared.
+        let draft = BankDraft {
+            account: Change::Replace {
+                value: "98.765-x".into(),
+            },
+            account_digit: Change::Remove,
+            password: Change::Replace {
+                value: "nova-senha".into(),
+            },
+            notes: Change::Remove,
+            ..bank_draft(&v, &id, "Itaú PF")
+        };
+        save(&v, draft);
+        assert_eq!(reveal(BankField::Account), "98765");
+        assert_eq!(reveal(BankField::AccountDigit), "X");
+        assert_eq!(reveal(BankField::Password), "nova-senha");
+        assert!(v.reveal_bank_field(id.clone(), BankField::Notes).is_err());
+        let draft = BankDraft {
+            account_digit: Change::Remove,
+            ..bank_draft(&v, &id, "Itaú PF")
+        };
+        save(&v, draft);
+        assert!(v.reveal_bank_field(id, BankField::AccountDigit).is_err());
+    }
+
+    #[test]
+    fn a_bank_draft_is_checked() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, _) = unlocked(dir.path());
+        let id = crate::testing::seed_bank(&v, "Conta Itaú");
+        let new = |title: &str| BankDraft {
+            id: None,
+            base_revision: None,
+            ..bank_draft(&v, &id, title)
+        };
+        // A new one with the same values is its own item.
+        let other = save(&v, new("Outra"));
+        assert_ne!(other, id);
+        // Nothing to name it by: refused.
+        let empty = BankDraft {
+            bank: None,
+            account: Change::Remove,
+            ..new("  ")
+        };
+        assert_eq!(code(v.stage_bank(empty).err().unwrap()), "invalid_input");
+        // An older copy, another kind of item, the generic editor: refused.
+        let stale = BankDraft {
+            base_revision: Some(0),
+            ..bank_draft(&v, &id, "x")
+        };
+        assert_eq!(
+            code(v.stage_bank(stale).err().unwrap()),
+            "item_changed_elsewhere"
+        );
+        let login = full_login(&v);
+        let wrong = BankDraft {
+            id: Some(login.clone()),
+            ..bank_draft(&v, &id, "x")
+        };
+        assert!(v.stage_bank(wrong).is_err());
+        let generic = ItemDraft {
+            kind: ItemKind::BankAccount,
+            title: "x".into(),
+            websites: vec![],
+            changes: vec![],
+            base_revision: None,
+            tags: vec![],
+        };
+        assert!(v.stage_draft(None, generic).is_err());
+        assert!(v
+            .stage_draft(
+                Some(&Uuid::parse_str(&id).unwrap()),
+                login_draft("x", vec![])
+            )
+            .is_err());
+        // Locked: nothing.
+        let draft = new("y");
+        v.lock();
+        assert_eq!(code(v.stage_bank(draft).err().unwrap()), "locked");
+    }
+
+    #[test]
+    fn saving_a_bank_needs_the_server() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, seen) = unlocked(dir.path());
+        let id = crate::testing::seed_bank(&v, "Conta Itaú");
+        let draft = bank_draft(&v, &id, "x");
+        assert_eq!(code(v.save_bank(draft).err().unwrap()), "offline");
+        let draft = bank_draft(&v, &id, "x");
+        overdue_refuses(&v, &seen, |v| v.save_bank(draft));
     }
 }

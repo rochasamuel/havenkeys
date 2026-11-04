@@ -3,8 +3,10 @@
 //! field per call, so a screen holds a secret only after the user asked.
 
 use crate::autofill::unix_seconds;
+use crate::edit::{websites, Website};
 use crate::error::MobileResult;
 use crate::vault::MobileVault;
+use havenkeys_core::bank::{BankAccountType as CoreAccountType, BankSummary, DetailsLanguage};
 use havenkeys_core::card::CardField;
 use havenkeys_core::custom_field::{FieldSection, FieldValue};
 use havenkeys_core::generator;
@@ -20,6 +22,71 @@ pub enum ItemKind {
     SecureNote,
     Card,
     Identity,
+    BankAccount,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
+pub enum BankAccountType {
+    Checking,
+    Savings,
+    Payment,
+    Other,
+}
+
+impl BankAccountType {
+    pub(crate) fn of(t: CoreAccountType) -> Self {
+        match t {
+            CoreAccountType::Checking => Self::Checking,
+            CoreAccountType::Savings => Self::Savings,
+            CoreAccountType::Payment => Self::Payment,
+            CoreAccountType::Other => Self::Other,
+        }
+    }
+
+    pub(crate) fn core(self) -> CoreAccountType {
+        match self {
+            Self::Checking => CoreAccountType::Checking,
+            Self::Savings => CoreAccountType::Savings,
+            Self::Payment => CoreAccountType::Payment,
+            Self::Other => CoreAccountType::Other,
+        }
+    }
+}
+
+/// The bank values shown only on a reveal, one per call.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
+pub enum BankField {
+    Account,
+    AccountDigit,
+    Password,
+    Notes,
+}
+
+/// An opened bank account, for its screen and its editor: everything but
+/// the conta, its digit, the password and the notes, which come from
+/// `reveal_bank_field`. Custom fields are rows whose values come from
+/// `reveal`. `Debug` prints no value.
+#[derive(uniffi::Record)]
+pub struct BankViewRecord {
+    pub summary: ItemSummary,
+    pub bank: Option<String>,
+    pub holder_name: Option<String>,
+    pub account_type: Option<BankAccountType>,
+    pub branch: Option<String>,
+    pub branch_digit: Option<String>,
+    pub has_account: bool,
+    pub has_password: bool,
+    pub has_notes: bool,
+    pub websites: Vec<Website>,
+    pub custom_fields: Vec<ViewField>,
+    /// What a `BankDraft` made from this view carries back.
+    pub revision: Option<i64>,
+}
+
+impl std::fmt::Debug for BankViewRecord {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("BankViewRecord(<redacted>)")
+    }
 }
 
 #[derive(uniffi::Record)]
@@ -122,7 +189,8 @@ fn url_host(raw: &str) -> Option<String> {
 pub(crate) fn summary(o: &ItemOverview) -> ItemSummary {
     let (kind, subtitle) = match o.item_type {
         ItemType::Login => (ItemKind::Login, o.username.clone()),
-        ItemType::SecureNote | ItemType::BankAccount => (ItemKind::SecureNote, None),
+        ItemType::SecureNote => (ItemKind::SecureNote, None),
+        ItemType::BankAccount => (ItemKind::BankAccount, o.bank.as_ref().and_then(bank_line)),
         ItemType::Card => (
             ItemKind::Card,
             o.card
@@ -143,6 +211,22 @@ pub(crate) fn summary(o: &ItemOverview) -> ItemSummary {
         updated_at: o.updated_at,
         created_at: o.created_at,
         tags: o.tags.clone(),
+    }
+}
+
+/// `Ag 1234 · •••45-6`, either part alone, or the bank's name.
+fn bank_line(b: &BankSummary) -> Option<String> {
+    let parts: Vec<String> = [
+        b.branch.as_ref().map(|br| format!("Ag {br}")),
+        b.account_last3.as_ref().map(|l| format!("•••{l}")),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    if parts.is_empty() {
+        b.bank.clone()
+    } else {
+        Some(parts.join(" · "))
     }
 }
 
@@ -300,7 +384,7 @@ impl MobileVault {
                     fields.push(field(key, key, kind, None));
                 }
             }
-            // Not shown on the phone yet.
+            // Its screen opens with `bank_view`.
             ItemType::BankAccount => {}
             ItemType::Identity => {
                 let present = vault.reveal_identity(&id)?;
@@ -357,6 +441,55 @@ impl MobileVault {
             _ => return Err(wrong().into()),
         };
         Ok(value.expose().to_owned())
+    }
+
+    /// A bank account's screen and editor. `Denied` for any other item.
+    pub fn bank_view(&self, id: String) -> MobileResult<BankViewRecord> {
+        self.unlocked()?;
+        let id = parse_id(&id)?;
+        let vault = self.client.vault()?;
+        let f = vault.bank_fields(id)?;
+        let o = vault.get_item(&id)?;
+        let mut custom_fields = Vec::new();
+        custom_rows(f.sections, &mut custom_fields);
+        Ok(BankViewRecord {
+            summary: summary(&o),
+            bank: f.bank,
+            holder_name: f.holder_name.map(|h| h.expose().to_owned()),
+            account_type: f.account_type.map(BankAccountType::of),
+            branch: f.branch,
+            branch_digit: f.branch_digit,
+            has_account: f.account.is_some(),
+            has_password: f.password.is_some(),
+            has_notes: f.notes.is_some(),
+            websites: websites(&o),
+            custom_fields,
+            revision: vault.item_revision(&id)?,
+        })
+    }
+
+    /// One of a bank account's revealed values. `NotFound` when it has none.
+    pub fn reveal_bank_field(&self, id: String, field: BankField) -> MobileResult<String> {
+        self.unlocked()?;
+        let id = parse_id(&id)?;
+        let f = self.client.vault()?.bank_fields(id)?;
+        let value = match field {
+            BankField::Account => f.account,
+            BankField::AccountDigit => f.account_digit,
+            BankField::Password => f.password,
+            BankField::Notes => f.notes,
+        };
+        Ok(value.ok_or(Error::NotFound)?.expose().to_owned())
+    }
+
+    /// The transfer details to copy, one per line, in `lang` (`"en"` or
+    /// `"pt-BR"`): bank, agência, conta with its type, holder.
+    pub fn bank_details_text(&self, id: String, lang: String) -> MobileResult<String> {
+        let lang = DetailsLanguage::parse(&lang)?;
+        self.unlocked()?;
+        let id = parse_id(&id)?;
+        let text = self.client.vault()?.bank_fields(id)?.details(lang);
+        Ok(text.ok_or(Error::NotFound)?.expose().to_owned())
     }
 
     pub fn totp(&self, id: String) -> MobileResult<TotpNow> {
@@ -797,5 +930,68 @@ mod tests {
             .unwrap();
         assert!(matches!(name.kind, FieldKind::Text));
         assert!(view.fields.iter().all(|f| f.value.is_none()));
+    }
+
+    #[test]
+    fn bank_reveal_returns_one_value() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, _) = unlocked(dir.path());
+        let id = crate::testing::seed_bank(&v, "Conta Itaú");
+        let reveal = |f| v.reveal_bank_field(id.clone(), f).unwrap();
+        assert_eq!(reveal(BankField::Account), "12345");
+        assert_eq!(reveal(BankField::AccountDigit), "6");
+        assert_eq!(reveal(BankField::Password), "senha-itau-1");
+        assert_eq!(reveal(BankField::Notes), "chave pix");
+        // Another kind of item is refused, whatever it holds.
+        let login = add_login(&v);
+        assert!(v
+            .reveal_bank_field(login.clone(), BankField::Password)
+            .is_err());
+        assert!(v.bank_view(login).is_err());
+        v.lock();
+        assert!(v.reveal_bank_field(id, BankField::Account).is_err());
+    }
+
+    #[test]
+    fn the_bank_view_carries_no_account_or_password() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, _) = unlocked(dir.path());
+        let id = crate::testing::seed_bank(&v, "Conta Itaú");
+        let summary = v.list_items().unwrap().pop().unwrap();
+        assert!(summary.kind == ItemKind::BankAccount);
+        assert_eq!(summary.subtitle.as_deref(), Some("Ag 1234 · •••45-6"));
+        let view = v.bank_view(id).unwrap();
+        assert_eq!(view.summary.title, "Conta Itaú");
+        assert_eq!(view.bank.as_deref(), Some("Itaú"));
+        assert_eq!(view.holder_name.as_deref(), Some("Maria Silva"));
+        assert_eq!(view.account_type, Some(BankAccountType::Checking));
+        assert_eq!(
+            (view.branch.as_deref(), view.branch_digit.as_deref()),
+            (Some("1234"), Some("5"))
+        );
+        assert!(view.has_account && view.has_password && view.has_notes);
+        assert_eq!(view.websites[0].url, "https://itau.com.br/");
+        assert!(view.custom_fields.is_empty());
+        assert!(view.revision.is_some());
+        let shown = format!("{view:?}");
+        for value in ["Itaú", "Maria", "1234"] {
+            assert!(!shown.contains(value), "{shown}");
+        }
+    }
+
+    #[test]
+    fn bank_details_text_follows_the_language() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, _) = unlocked(dir.path());
+        let id = crate::testing::seed_bank(&v, "Conta Itaú");
+        assert_eq!(
+            v.bank_details_text(id.clone(), "pt-BR".into()).unwrap(),
+            "Itaú\nAgência 1234-5\nConta 12345-6 (corrente)\nTitular Maria Silva"
+        );
+        assert_eq!(
+            v.bank_details_text(id.clone(), "en".into()).unwrap(),
+            "Itaú\nBranch 1234-5\nAccount 12345-6 (checking)\nHolder Maria Silva"
+        );
+        assert!(v.bank_details_text(id, "pt".into()).is_err());
     }
 }

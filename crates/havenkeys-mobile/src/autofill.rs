@@ -10,9 +10,10 @@ use crate::vault::MobileVault;
 use havenkeys_core::app_target::{classify, AppIdentity, FillTarget};
 use havenkeys_core::asset_links::{candidate_hosts, AssetLinksCache};
 use havenkeys_core::local::LocalSlot;
-use havenkeys_core::model::SecretField;
-use havenkeys_core::vault::{FillCredentials, Suggestion};
-use havenkeys_core::Error;
+use havenkeys_core::model::{ItemType, SecretField};
+use havenkeys_core::vault::{FillCredentials, MatchKind, Suggestion};
+use havenkeys_core::{Error, SecretString};
+use std::fmt;
 
 #[derive(Clone, uniffi::Record)]
 pub struct TargetFacts {
@@ -46,18 +47,63 @@ pub enum TargetKind {
     App,
 }
 
+/// What kind of site-bound item a match is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
+pub enum AutofillKind {
+    Login,
+    BankAccount,
+}
+
+/// A bank account's overview, shown instead of a username: the bank, the
+/// agência and the last 3 characters of the conta (`45-6`). `Debug` prints
+/// none of them.
+#[derive(uniffi::Record)]
+pub struct BankSummaryRecord {
+    pub bank: Option<String>,
+    pub branch: Option<String>,
+    pub account_last3: Option<String>,
+}
+
+impl fmt::Debug for BankSummaryRecord {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("BankSummaryRecord(<redacted>)")
+    }
+}
+
+/// The numbers a bank form is filled with. `Debug` prints none of them.
+#[derive(uniffi::Record)]
+pub struct BankFillRecord {
+    pub branch: String,
+    pub branch_digit: Option<String>,
+    pub account: String,
+    pub account_digit: Option<String>,
+}
+
+impl fmt::Debug for BankFillRecord {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("BankFillRecord(<redacted>)")
+    }
+}
+
 #[derive(uniffi::Record)]
 pub struct AutofillMatch {
     pub id: String,
     pub title: String,
     pub username: Option<String>,
     pub has_totp: bool,
+    pub kind: AutofillKind,
+    /// Set for a bank account only.
+    #[uniffi(default = None)]
+    pub bank: Option<BankSummaryRecord>,
 }
 
+/// A bank account's has no username, its password and `bank`.
 #[derive(uniffi::Record)]
 pub struct FillValues {
     pub username: Option<String>,
     pub password: Option<String>,
+    #[uniffi(default = None)]
+    pub bank: Option<BankFillRecord>,
 }
 
 #[derive(uniffi::Record)]
@@ -76,13 +122,29 @@ pub(crate) fn to_match(s: &Suggestion) -> AutofillMatch {
         title: s.title.clone(),
         username: s.username.clone(),
         has_totp: s.has_totp,
+        kind: match s.kind {
+            MatchKind::Login => AutofillKind::Login,
+            MatchKind::BankAccount => AutofillKind::BankAccount,
+        },
+        bank: s.bank.as_ref().map(|b| BankSummaryRecord {
+            bank: b.bank.clone(),
+            branch: b.branch.clone(),
+            account_last3: b.account_last3.clone(),
+        }),
     }
 }
 
 fn to_values(c: FillCredentials) -> FillValues {
+    let text = |s: SecretString| s.expose().to_owned();
     FillValues {
         username: c.username,
-        password: c.password.map(|p| p.expose().to_owned()),
+        password: c.password.map(text),
+        bank: c.bank.map(|b| BankFillRecord {
+            branch: b.branch,
+            branch_digit: b.branch_digit,
+            account: text(b.account),
+            account_digit: b.account_digit.map(text),
+        }),
     }
 }
 
@@ -267,7 +329,8 @@ impl MobileVault {
         Ok(code.code.expose().to_owned())
     }
 
-    /// "Search HavenKeys…": any login, by title, username or website. No
+    /// "Search HavenKeys…": any login or bank account, by title, username,
+    /// website, bank or agência. No
     /// secrets; filling one goes through `autofill_bind_and_fill`.
     /// Empty while the account is frozen.
     pub fn autofill_search(&self, query: String) -> MobileResult<Vec<AutofillMatch>> {
@@ -310,17 +373,26 @@ impl MobileVault {
                 vault.fill_for_app(&item, &app, &[])?
             } else {
                 // Not stored: the user's confirmation is this fill's only
-                // authorization, so it reads the login directly.
-                let username = vault.get_item(&item)?.username.clone();
-                let password = match vault.reveal(&item, SecretField::Password) {
-                    Ok(p) => Some(p),
-                    Err(Error::NotFound) => None,
-                    Err(e) => return Err(e.into()),
-                };
-                FillCredentials {
-                    username,
-                    password,
-                    bank: None,
+                // authorization, so it reads the item directly.
+                let o = vault.get_item(&item)?;
+                if o.item_type == ItemType::BankAccount {
+                    let f = vault.bank_fields(item)?;
+                    FillCredentials {
+                        username: None,
+                        bank: f.values(),
+                        password: f.password,
+                    }
+                } else {
+                    let password = match vault.reveal(&item, SecretField::Password) {
+                        Ok(p) => Some(p),
+                        Err(Error::NotFound) => None,
+                        Err(e) => return Err(e.into()),
+                    };
+                    FillCredentials {
+                        username: o.username.clone(),
+                        password,
+                        bank: None,
+                    }
                 }
             }
         };
@@ -637,5 +709,144 @@ mod tests {
         // Leaves the vault locked, so the call after it is the locked case.
         overdue_refuses(&v, &seen, |v| v.lookalike_for(page()));
         assert!(v.lookalike_for(page()).is_err());
+    }
+
+    fn itau() -> TargetFacts {
+        chrome("itau.com.br", Some("https"))
+    }
+
+    fn no_asset_links(v: &MobileVault) {
+        let mut s = v.settings().unwrap();
+        s.asset_links = false;
+        v.update_settings(s).unwrap();
+    }
+
+    #[test]
+    fn a_bank_is_offered_on_its_site_in_chrome() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, _) = unlocked(dir.path());
+        let id = crate::testing::seed_bank(&v, "Conta Itaú");
+        let m = v.autofill_matches(itau()).unwrap();
+        assert_eq!(m.len(), 1);
+        assert_eq!(m[0].id, id);
+        assert_eq!(m[0].kind, AutofillKind::BankAccount);
+        assert_eq!(m[0].username, None);
+        let b = m[0].bank.as_ref().unwrap();
+        assert_eq!(b.bank.as_deref(), Some("Itaú"));
+        assert_eq!(b.branch.as_deref(), Some("1234"));
+        assert_eq!(b.account_last3.as_deref(), Some("45-6"));
+        // A login is still a login, with no bank summary.
+        add_login(&v, "https://github.com");
+        let m = v
+            .autofill_matches(chrome("github.com", Some("https")))
+            .unwrap();
+        assert_eq!(
+            (m[0].kind, m[0].bank.is_none()),
+            (AutofillKind::Login, true)
+        );
+    }
+
+    #[test]
+    fn a_bank_fill_gives_values_and_password() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, _) = unlocked(dir.path());
+        let id = crate::testing::seed_bank(&v, "Conta Itaú");
+        let f = v.autofill_fill(id, itau()).unwrap();
+        assert_eq!(f.username, None);
+        assert_eq!(f.password.as_deref(), Some("senha-itau-1"));
+        let b = f.bank.unwrap();
+        assert_eq!(
+            (b.branch.as_str(), b.branch_digit.as_deref()),
+            ("1234", Some("5"))
+        );
+        assert_eq!(
+            (b.account.as_str(), b.account_digit.as_deref()),
+            ("12345", Some("6"))
+        );
+        let shown = format!("{b:?}");
+        assert!(
+            !shown.contains("12345") && !shown.contains("1234"),
+            "{shown}"
+        );
+    }
+
+    #[test]
+    fn a_bank_is_denied_on_another_site() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, _) = unlocked(dir.path());
+        let id = crate::testing::seed_bank(&v, "Conta Itaú");
+        for domain in ["itau.com.br.evil.com", "evilitau.com.br", "github.com"] {
+            let page = || chrome(domain, Some("https"));
+            assert!(v.autofill_matches(page()).unwrap().is_empty(), "{domain}");
+            assert!(v.autofill_fill(id.clone(), page()).is_err(), "{domain}");
+        }
+        // Nor in an app it was never bound to.
+        no_asset_links(&v);
+        assert!(v.autofill_matches(app(1)).unwrap().is_empty());
+        assert!(v.autofill_fill(id, app(1)).is_err());
+    }
+
+    #[test]
+    fn a_frozen_account_offers_no_bank() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, _) = unlocked(dir.path());
+        let id = crate::testing::seed_bank(&v, "Conta Itaú");
+        no_asset_links(&v);
+        freeze(&v);
+        assert!(v.autofill_matches(itau()).unwrap().is_empty());
+        assert!(v.autofill_search("itaú".into()).unwrap().is_empty());
+        let err = v.autofill_fill(id.clone(), itau()).err().unwrap();
+        assert_eq!(code(err), "account_frozen");
+        let err = v.autofill_bind_and_fill(id, app(1)).err().unwrap();
+        assert_eq!(code(err), "account_frozen");
+    }
+
+    #[test]
+    fn a_bank_found_by_search_binds_to_the_app_and_fills() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, _) = unlocked(dir.path());
+        let id = crate::testing::seed_bank(&v, "Conta Itaú");
+        no_asset_links(&v);
+        let found = v.autofill_search("itaú".into()).unwrap();
+        assert_eq!(found[0].id, id);
+        assert_eq!(found[0].kind, AutofillKind::BankAccount);
+        // Offline: filled once from the user's confirmation, not stored.
+        let once = v.autofill_bind_and_fill(id.clone(), app(1)).unwrap();
+        assert!(!once.saved);
+        assert_eq!(once.values.username, None);
+        assert_eq!(once.values.password.as_deref(), Some("senha-itau-1"));
+        let b = once.values.bank.unwrap();
+        assert_eq!((b.branch.as_str(), b.account.as_str()), ("1234", "12345"));
+        assert_eq!(v.frequently_used(6).unwrap()[0].id, id);
+        // Stored (as when online): the app then gets it through its binding.
+        let staged = {
+            let item = uuid::Uuid::parse_str(&id).unwrap();
+            let FillTarget::App(identity) = v.target(&app(1)).unwrap() else {
+                panic!("not an app")
+            };
+            v.client
+                .vault()
+                .unwrap()
+                .stage_bind_app(&item, &identity, 2)
+                .unwrap()
+        };
+        v.client.vault().unwrap().commit_write(staged, 2).unwrap();
+        assert_eq!(v.autofill_matches(app(1)).unwrap()[0].id, id);
+        let f = v.autofill_fill(id, app(1)).unwrap();
+        assert_eq!(f.bank.unwrap().account_digit.as_deref(), Some("6"));
+    }
+
+    #[test]
+    fn autofill_search_finds_banks_by_title_and_bank() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, _) = unlocked(dir.path());
+        let id = crate::testing::seed_bank(&v, "Conta salário");
+        for query in ["salário", "itaú", "1234"] {
+            let found = v.autofill_search(query.into()).unwrap();
+            assert_eq!(found.len(), 1, "{query}");
+            assert_eq!(found[0].id, id);
+        }
+        // Never by the full account number.
+        assert!(v.autofill_search("12345".into()).unwrap().is_empty());
     }
 }
