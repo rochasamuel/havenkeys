@@ -16,7 +16,12 @@ data class IdentityForm(val fields: List<IdentityField>, val webDomain: String?,
  * document number named by its words (a CPF box beside a card form).
  */
 object IdentityFormFinder {
-    fun find(fields: List<FieldFacts>): IdentityForm? {
+    /**
+     * [loneEmail]: a focused email box alone also qualifies; FormRouter asks
+     * so only when no login claims the box (spec
+     * 2026-11-14-android-email-username-focused-field §3).
+     */
+    fun find(fields: List<FieldFacts>, loneEmail: Boolean = false): IdentityForm? {
         val roles = rolesOf(fields)
         val anchor = fields.firstOrNull { it.focused } ?: fields.firstOrNull { roles[it.index] != null }
         val found = anchor?.let { a ->
@@ -24,15 +29,25 @@ object IdentityFormFinder {
                 .mapNotNull { f -> roles[f.index]?.let { f.index to it } }
                 .take(MAX_FIELDS)
         }.orEmpty()
-        // One field qualifies when the page names it for sure: by a hint (not a
-        // login's email or username), or a document number by its words.
-        val qualifies = found.size >= 2 ||
-            found.singleOrNull()?.second?.let { it.role.isDocument || it.byHint && it.role !in LOGIN_ROLES } == true
+        val focusedEmail = loneEmail && anchor?.focused == true
+        val qualifies = found.size >= 2 || qualifiesAlone(found.singleOrNull()?.second, focusedEmail)
         return if (anchor != null && qualifies && found.any { it.first == anchor.index }) {
             IdentityForm(found.map { (i, r) -> IdentityField(i, r.role) }, anchor.webDomain, anchor.webScheme)
         } else {
             null
         }
+    }
+
+    /**
+     * One field qualifies when the page names it for sure: by a hint (not a
+     * login's email or username), or a document number by its words; or,
+     * with [email] (the focused box, no login claiming it), an email box.
+     */
+    private fun qualifiesAlone(found: IdentityRoleOf?, email: Boolean): Boolean = when {
+        found == null -> false
+        found.role.isDocument -> true
+        found.byHint && found.role !in LOGIN_ROLES -> true
+        else -> email && found.role == IdentityRole.EMAIL
     }
 
     /** Agência and conta boxes are a bank account's, never the identity's (a tel agência is no phone). */

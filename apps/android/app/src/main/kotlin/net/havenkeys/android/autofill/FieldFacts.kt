@@ -33,6 +33,11 @@ data class FieldFacts(
     val isEmpty: Boolean = true,
     /** A list's option labels, in order, bounded. */
     val options: List<String> = emptyList(),
+    /**
+     * The form or view group this field belongs with ([FieldGroups]); null
+     * when the structure shows none, and then the whole screen is its group.
+     */
+    val group: FieldGroup? = null,
 ) {
     /** Its identifiers and labels normalized once, shared by every classifier in a request. */
     internal val words: FieldWords by lazy(LazyThreadSafetyMode.PUBLICATION) { FieldWords(this) }

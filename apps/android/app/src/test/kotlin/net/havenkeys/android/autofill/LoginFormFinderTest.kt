@@ -227,4 +227,91 @@ class LoginFormFinderTest {
             work = { LoginFormFinder.find(it) },
         )
     }
+    private fun findFocused(vararg fields: FieldFacts) =
+        fields.toList().let { LoginFormFinder.find(FieldGroups.focusedGroup(it), it) }
+
+    private val webEmail = mapOf("type" to "email", "autocomplete" to "email")
+    private val webPw = mapOf("type" to "password")
+
+    @Test
+    fun anEmailHintedBoxBesideAPasswordIsTheUsername() {
+        val user = field(hints = listOf("emailAddress"), focused = true)
+        val pw = field(inputType = password)
+        assertEquals(listOf(user.index), find(user, pw)!!.usernames)
+        val webUser = field(html = webEmail, group = htmlForm(1), focused = true)
+        val webPassword = field(html = webPw, group = htmlForm(1))
+        assertEquals(listOf(webUser.index), findFocused(webUser, webPassword)!!.usernames)
+    }
+
+    @Test
+    fun aNewsletterEmailNextToASignInIsNoLogin() {
+        val user = field(html = webEmail, group = htmlForm(1))
+        val pw = field(html = webPw, group = htmlForm(1))
+        val news = field(html = webEmail + ("name" to "newsletter_email"), group = htmlForm(2), focused = true)
+        assertNull(findFocused(user, pw, news))
+        // Unworded, it is still not the box the sign-in pairs with its password.
+        val plain = field(html = webEmail, group = htmlForm(3), focused = true)
+        assertNull(findFocused(user, pw, plain))
+    }
+
+    @Test
+    fun aNewsletterAboveTheSignInIsNoLoginEither() {
+        val news = field(html = webEmail, group = htmlForm(2), focused = true)
+        val user = field(html = webEmail, group = htmlForm(1))
+        val pw = field(html = webPw, group = htmlForm(1))
+        assertNull(findFocused(news, user, pw))
+    }
+
+    @Test
+    fun aFocusedEmailOutsideThePasswordsGroupIsNotTheLoginsUsername() {
+        // An app's newsletter box in a view group without a password: the whole window
+        // is read, and the username is the one in the password's group.
+        val news = field(hints = listOf("emailAddress"), group = viewGroup(2), focused = true)
+        val user = field(hints = listOf("emailAddress"), group = viewGroup(1))
+        val pw = field(inputType = password, group = viewGroup(1))
+        val form = findFocused(news, user, pw)!!
+        assertEquals(listOf(user.index), form.usernames)
+        assertEquals(listOf(pw.index), form.passwords)
+    }
+
+    @Test
+    fun aUsernameFormApartFromItsPasswordFormStillPairs() {
+        val user = field(html = webEmail, group = htmlForm(1), focused = true)
+        val pw = field(html = webPw, group = htmlForm(2))
+        val form = findFocused(user, pw)!!
+        assertEquals(listOf(user.index), form.usernames)
+        assertEquals(listOf(pw.index), form.passwords)
+        assertEquals(user.index, form.focused)
+    }
+
+    @Test
+    fun anEmailFirstStepInItsOwnFormIsALogin() {
+        val user = field(html = webEmail, group = htmlForm(1), focused = true)
+        val search = field(html = mapOf("type" to "search"), group = htmlForm(2))
+        val form = findFocused(user, search)!!
+        assertEquals(listOf(user.index), form.usernames)
+        assertTrue(form.passwords.isEmpty())
+    }
+
+    @Test
+    fun aNewsletterEmailAloneIsNoFirstStep() {
+        val news = field(html = webEmail, hint = "Subscribe to our newsletter", focused = true)
+        assertNull(findFocused(news))
+        val inForm = field(html = webEmail + ("name" to "newsletter"), group = htmlForm(1), focused = true)
+        assertNull(findFocused(inForm))
+    }
+
+    @Test
+    fun aSignInEmailThatMentionsACodeIsStillAFirstStep() {
+        val user = field(html = webEmail + ("placeholder" to "We'll email you a sign-in code"), focused = true)
+        assertEquals(listOf(user.index), findFocused(user)!!.usernames)
+    }
+
+    @Test
+    fun aSearchBoxBesideASignInIsNoLogin() {
+        val user = field(html = webEmail, group = htmlForm(1))
+        val pw = field(html = webPw, group = htmlForm(1))
+        val search = field(html = mapOf("type" to "search", "name" to "q"), group = htmlForm(2), focused = true)
+        assertNull(findFocused(user, pw, search))
+    }
 }

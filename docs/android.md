@@ -138,6 +138,35 @@ email, dates, document numbers). Security: `security-model.md` §22.4a.
   the browser's report (AN47); a card typed into a processor's iframe is not
   saved (AN49). Not run on a device yet (AN50).
 
+## Login fields: the focused form and email boxes
+
+Spec: `docs/superpowers/specs/2026-11-14-android-email-username-focused-field-design.md`.
+Kotlin only: Rust still decides the target, the matches and every value,
+and direct fill and "Confirm before filling" are unchanged.
+
+* **The focused field's group:** a fill request is answered for the form
+  the user is in. On a page, that is the field's HTML `<form>` (up to 40
+  fields); elsewhere, the nearest container, up to 8 levels up, that holds
+  another text field (the extension's rule). A native view group is used
+  only when it holds a password or code of its own, or nothing else on
+  the screen signs in, so a fill never loses its password. With nothing
+  focused, or no group, the whole screen is read as before. Cards always
+  read the whole screen.
+* **Email as username:** an email box (`emailAddress` hint, `type="email"`,
+  `autocomplete="email"`) beside a password is the login's username. Alone
+  in its form it is a first step, offered the site's logins and saved as the
+  username, when nothing else in its frame signs in and its words do not say
+  newsletter, subscribe, search, coupon and the like; or when the screen
+  pairs it with a password in another form. Otherwise (a newsletter box next
+  to a sign-in) it gets the identity's email, never a login.
+* **Never mixed:** a newsletter, search or sign-up form beside a sign-in
+  gets no login rows; a sign-up still gets the identity and "Save
+  password?"; the username is chosen in the password's own group first.
+* **Limitations:** a password alone in its web form, with its username in
+  another form, is filled without the username (the extension does the
+  same). Browsers that report no forms (compatibility mode) use view
+  groups. Not run on a device yet.
+
 ## Toolchain
 
 Installed in user space, no `sudo`:
@@ -438,6 +467,12 @@ This is the redesign's final pass; the stage 2–4 lists above still apply.
 - [ ] Offline: saving a new card says the card was not saved.
 - [ ] Cards fill in both Chrome and Firefox (each browser's first field may be its own address bar; the page's site must still be read from the first field inside the page).
 - [ ] TalkBack reads the card rows; dark theme.
+
+### Focused form and email as username
+- [ ] Chrome and Firefox, a page with a sign-in and a newsletter form: the newsletter box gets only the identity's email; the sign-in's email box gets the site's logins and the fill touches only the sign-in.
+- [ ] An email-only first step (Google- or Microsoft-style) on a page with a footer newsletter: the site's logins are offered; after the password step the save sheet keeps the email as the username.
+- [ ] A page with a search box and a sign-in: the search box gets no login rows.
+- [ ] An app whose sign-in box carries the `emailAddress` hint: logins offered and saved with it.
 
 Passkeys (Android M3; the same list is in `security-review.md`): see "Android
 M3" there. Run it on a real Android 14+ phone with HavenKeys enabled in
