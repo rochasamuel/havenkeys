@@ -4328,3 +4328,51 @@ their plaintext (`Zeroizing`) in memory until that upload returns.
       device and open it there.
 - [ ] Export a backup with attachments and restore it into a new vault.
 - [ ] An older desktop opens an item with attachments without losing them.
+
+# Security Review: Field detection signals (2026-11-14)
+
+Spec: `docs/superpowers/specs/2026-11-14-field-detection-signals-design.md`.
+Extension content script only; no protocol, Rust or Android change.
+
+### FD1. aria-disabled / aria-hidden fields are not fillable (Low, mitigated)
+**Component:** `autofill/aria.ts`, `usable.ts` `isFillable`, `card.ts`
+`isCardFillable`, `identity.ts` `isIdentityFillable`, `bank.ts`.
+**Attack scenario:** a page renders a decoy input inside an `aria-hidden`
+subtree (a common honeypot shape) or marks one `aria-disabled`, so it joins
+the login group and receives the username or password, or shifts which box
+is the username.
+**Mitigation:** one rule (`isUnavailable`) for every fillability check and
+for the write itself (`setValue` re-checks `isStrictlyFillable`): disabled,
+`:disabled` (fieldset), `aria-disabled="true"`, or `aria-hidden="true"` on
+the field or an ancestor, across shadow hosts. Tests cover the honeypot, an
+inherited and a shadow-host aria-hidden, and a field turned aria-disabled
+after the menu opened.
+**Remaining limitations:** the ancestor walk stops at 128 levels (deeper
+fields count as not hidden, as before); `aria-disabled` on a container is
+not inherited; `inert` is not checked. A page that wrongly leaves
+`aria-hidden` on its app root gets no fill (availability, not security).
+
+### FD2. Neighbouring text as a label (Info, by design)
+**Component:** `autofill/labels.ts` `neighbourText`.
+**Attack scenario:** page-controlled text next to a field steers its
+classification (makes a box look like the username or an OTP field), or
+reading it costs unbounded work.
+**Mitigation:** the text is only compared against the fixed keyword lists;
+it is never inserted, evaluated or sent. A page could already steer
+classification through `name`, `id`, `placeholder` or `aria-label`; this
+adds no new power, and fills still need the user's pick and Rust's origin
+check. Text owned by another control, hidden siblings, prose over 60
+characters and other table rows are never read. Bounded: 3 levels, 8
+siblings a side, 12 nodes per sibling, 60 elements per control check;
+attack 7 and the hostile-DOM fuzz test cover it.
+**Remaining limitations:** neighbouring text weighs like a label.
+
+### FD3. Test-hook data-* attributes as a weak signal (Info, by design)
+**Component:** `autofill/group.ts` `features` (`DATA_ATTRIBUTES`),
+`classify.ts`.
+**Attack scenario:** as FD2, through `data-testid` and similar values.
+**Mitigation:** fixed allowlist of six attributes, 64 characters each and
+200 in all, compared only against keyword lists; weaker than `name`/`id`
+and never enough alone to reach a username or OTP threshold. Nothing is
+ever written to `data-*` (CLAUDE.md §19 unchanged).
+**Remaining limitations:** none beyond FD2.

@@ -1210,6 +1210,12 @@
     "USERNAME_WORD_IN_ATTRS_WEAK": 25,
     "USERNAME_WORD_IN_TEXT": 40,
     "USERNAME_WORD_IN_TEXT_WEAK": 20,
+    "USERNAME_WORD_IN_DATA": {
+      "extension": 30
+    },
+    "USERNAME_WORD_IN_DATA_WEAK": {
+      "extension": 15
+    },
     "USERNAME_NEGATIVE_PENALTY": 80,
     "USERNAME_LAST_BEFORE_PASSWORD": {
       "extension": 40
@@ -1217,6 +1223,9 @@
     "OTP_AC": 120,
     "OTP_WORD": 70,
     "OTP_WORD_WEAK": 30,
+    "OTP_WORD_IN_DATA": {
+      "extension": 40
+    },
     "OTP_LENGTH": 15,
     "OTP_NUMERIC": 10,
     "OTP_SPLIT_GROUP": {

@@ -7,6 +7,7 @@
 // per group.
 
 import { MAX_CARD_ROLES, type CardRole } from "@havenkeys/protocol";
+import { isUnavailable } from "./aria";
 import { cardKindOf, TEXT_TYPES, type CardElement, type CardFieldKind } from "./card-kind";
 import { groupRoot, MAX_GROUP_INPUTS, type Env } from "./group";
 
@@ -27,9 +28,12 @@ export interface CardGroup {
   fields: CardField[];
 }
 
-/** Visible, enabled, editable. The identity's stricter visibility applies: cards are not site-bound either. */
+/**
+ * Visible, enabled, editable, not aria-disabled or aria-hidden (aria.ts). The
+ * identity's stricter visibility applies: cards are not site-bound either.
+ */
 export function isCardFillable(el: CardElement, env: Env): boolean {
-  if (el.disabled) return false;
+  if (isUnavailable(el)) return false;
   if (!(env.strictVisible ? env.strictVisible(el) : env.isVisible(el))) return false;
   if (el instanceof HTMLSelectElement) return true;
   return !el.readOnly && TEXT_TYPES.has(el.type.toLowerCase());

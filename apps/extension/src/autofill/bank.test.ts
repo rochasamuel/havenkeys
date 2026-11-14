@@ -147,4 +147,24 @@ describe("bank classifier", () => {
     </form>`);
     expect(classifyBank(document, env).map((b) => b.role)).toEqual(["bankBranch", "bankAccount"]);
   });
+
+  it("an aria-hidden or aria-disabled box is never a bank box (spec 2026-11-14)", () => {
+    expect(bankRoleOf(box("Agência", 'maxlength="4" aria-disabled="true"'), facts({ groupHasAccount: true }))).toBeNull();
+    page(`<div aria-hidden="true"><label for="x">Agência</label><input id="x" maxlength="4"></div>`);
+    expect(bankRoleOf($("#x"), facts({ groupHasAccount: true }))).toBeNull();
+    page(`<form>
+      <label for="ag">Agência</label><input id="ag" type="text" maxlength="4">
+      <div aria-hidden="true"><label for="hp">Agência</label><input id="hp" type="text" maxlength="4"></div>
+      <label for="ct">Conta</label><input id="ct" type="text" maxlength="7">
+    </form>`);
+    expect(classifyBank(document, env).map((b) => b.el.id)).toEqual(["ag", "ct"]);
+  });
+
+  it("reads Agência and Conta from a table row's preceding cell (spec 2026-11-14)", () => {
+    page(`<form><table>
+      <tr><td>Agência</td><td><input id="ag" name="f1" maxlength="4"></td></tr>
+      <tr><td>Conta</td><td><input id="ct" name="f2" maxlength="7"></td></tr>
+    </table></form>`);
+    expect(classifyBank(document, env).map((b) => b.role)).toEqual(["bankBranch", "bankAccount"]);
+  });
 });

@@ -8,6 +8,7 @@
 // evaluated or inserted. Imports nothing from group.ts at runtime, which
 // imports this module (the shared input filter is usable.ts).
 
+import { isUnavailable } from "./aria";
 import { cardKindOf } from "./card-kind";
 import { otpScore } from "./classify";
 import type { Env } from "./group";
@@ -42,7 +43,7 @@ function attr(el: Element, n: string): string {
 
 /** The box's normalized words, or null when it can never be a bank box (rule 4, BANK_NEGATIVE). */
 function wordsOf(el: HTMLInputElement): string | null {
-  if (!TYPES.has(el.type) || el.disabled || el.readOnly) return null;
+  if (!TYPES.has(el.type) || el.readOnly || isUnavailable(el)) return null;
   if (attr(el, "autocomplete").toLowerCase().split(/\s+/).some((t) => AC_REAL.test(t))) return null;
   if (cardKindOf(el, false)) return null;
   const attrs = normalize(`${attr(el, "name")} ${attr(el, "id")}`);
