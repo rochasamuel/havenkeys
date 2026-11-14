@@ -189,6 +189,8 @@ export const en = {
     codeRow: (account: string) => `${account} · one-time code`,
     generateTitle: "Generate strong password",
     generateBody: "Fills the new password fields",
+    // The password follows the field's passwordrules or HavenKeys' table of sites' rules.
+    generateFollowsRules: "Follows this site's password rules",
     generateSettings: "Password settings",
     generateLength: "Length",
     generateCharacters: "Characters",

@@ -6,10 +6,11 @@ use crate::secret::WireSecret;
 use crate::{
     COSE_ES256, CREDENTIAL_ID_BYTES, MAX_ACCOUNT_BYTES, MAX_CARD_CODE_BYTES, MAX_CARD_FRAMES,
     MAX_CARD_NUMBER_BYTES, MAX_CARD_ROLES, MAX_CARD_VALUE_BYTES, MAX_CHALLENGE_BYTES,
-    MAX_CREDENTIAL_LIST, MAX_IDENTITY_ROLES, MAX_IDENTITY_VALUE_BYTES, MAX_LOOKALIKE_BYTES,
-    MAX_MATCHES, MAX_MATCH_TAGS, MAX_MATCH_TAG_BYTES, MAX_PASSWORD_LENGTH, MAX_PROVIDER_ACCOUNTS,
-    MAX_PROVIDER_ORIGINS, MAX_RP_ID_BYTES, MAX_SECRET_BYTES, MAX_TITLE_BYTES, MAX_URL_BYTES,
-    MAX_USERNAME_BYTES, MAX_USER_HANDLE_BYTES, MIN_PASSWORD_LENGTH, PROTOCOL_VERSION,
+    MAX_CREDENTIAL_LIST, MAX_FIELD_LENGTH, MAX_IDENTITY_ROLES, MAX_IDENTITY_VALUE_BYTES,
+    MAX_LOOKALIKE_BYTES, MAX_MATCHES, MAX_MATCH_TAGS, MAX_MATCH_TAG_BYTES, MAX_PASSWORD_LENGTH,
+    MAX_PASSWORD_RULES_BYTES, MAX_PROVIDER_ACCOUNTS, MAX_PROVIDER_ORIGINS, MAX_RP_ID_BYTES,
+    MAX_SECRET_BYTES, MAX_TITLE_BYTES, MAX_URL_BYTES, MAX_USERNAME_BYTES, MAX_USER_HANDLE_BYTES,
+    MIN_PASSWORD_LENGTH, PROTOCOL_VERSION,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -78,13 +79,21 @@ pub enum Request {
         top_url: Option<String>,
     },
     /// The desktop generator's saved policy (its generator tab), so the
-    /// in-page menu can show it before the user changes anything.
-    GeneratorOptions {},
+    /// in-page menu can show it before the user changes anything. With
+    /// `constraints`, the result also says which rules a `generate_password`
+    /// with them would follow (spec 2026-11-14-password-rules-generator).
+    GeneratorOptions {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        constraints: Option<PasswordConstraints>,
+    },
     /// A new random password from the desktop's generator: its saved
-    /// policy, or the one in `options`.
+    /// policy, or the one in `options`. With `constraints`, it follows the
+    /// password field's rules, else the site's, and the field's lengths.
     GeneratePassword {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         options: Option<PasswordOptions>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        constraints: Option<PasswordConstraints>,
     },
     /// Would saving this submitted login add a new item, update one, or do
     /// nothing? The password is compared inside the core, never returned.
@@ -313,6 +322,57 @@ impl PasswordOptions {
     }
 }
 
+/// What a password field asks of its password. `url` is the field's frame,
+/// from the browser (never the page); the rest is the page's own text and
+/// numbers, which can only shape the password that same page receives.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PasswordConstraints {
+    pub url: String,
+    /// The field's `passwordrules` attribute.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rules: Option<String>,
+    /// The field's `minlength`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_length: Option<u32>,
+    /// The field's `maxlength`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_length: Option<u32>,
+}
+
+impl PasswordConstraints {
+    /// The URL is checked with the others (`Request::urls`).
+    fn is_valid(&self) -> bool {
+        let field_length = |n: &Option<u32>| n.is_none_or(|n| (1..=MAX_FIELD_LENGTH).contains(&n));
+        (self.url.starts_with("https://") || self.url.starts_with("http://"))
+            && self
+                .rules
+                .as_deref()
+                .is_none_or(|r| text_ok(r, MAX_PASSWORD_RULES_BYTES))
+            && field_length(&self.min_length)
+            && field_length(&self.max_length)
+    }
+}
+
+// Page text and browsing history: keep them out of Debug.
+impl fmt::Debug for PasswordConstraints {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PasswordConstraints")
+            .finish_non_exhaustive()
+    }
+}
+
+/// Which rules a generated password followed. Mirrors
+/// havenkeys_core::password_rules::RuleSource.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RuleSource {
+    /// The field's `passwordrules` attribute.
+    Field,
+    /// HavenKeys' table of sites' rules.
+    Site,
+}
+
 /// One identity value for a fill.
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -519,7 +579,7 @@ impl Request {
             Request::CheckLookalike { .. } => "check_lookalike",
             Request::FillItem { .. } => "fill_item",
             Request::GetTotp { .. } => "get_totp",
-            Request::GeneratorOptions {} => "generator_options",
+            Request::GeneratorOptions { .. } => "generator_options",
             Request::GeneratePassword { .. } => "generate_password",
             Request::CheckLogin { .. } => "check_login",
             Request::SaveLogin { .. } => "save_login",
@@ -544,11 +604,11 @@ impl Request {
 
     fn urls(&self) -> Vec<&str> {
         match self {
-            Request::Status {}
-            | Request::Lock {}
-            | Request::GeneratorOptions {}
-            | Request::GeneratePassword { .. }
-            | Request::ShowUnlock {} => Vec::new(),
+            Request::Status {} | Request::Lock {} | Request::ShowUnlock {} => Vec::new(),
+            Request::GeneratorOptions { constraints }
+            | Request::GeneratePassword { constraints, .. } => {
+                constraints.iter().map(|c| c.url.as_str()).collect()
+            }
             Request::FillCard {
                 top_url, frames, ..
             } => std::iter::once(top_url.as_str())
@@ -680,7 +740,18 @@ impl Request {
                         .is_none_or(|n| text_ok(n, MAX_CARD_VALUE_BYTES))
                     && expiry.as_deref().is_none_or(expiry_shape_ok)
             }
-            Request::GeneratePassword { options } => options.is_none_or(|o| o.is_valid()),
+            Request::GeneratePassword {
+                options,
+                constraints,
+            } => {
+                options.is_none_or(|o| o.is_valid())
+                    && constraints
+                        .as_ref()
+                        .is_none_or(PasswordConstraints::is_valid)
+            }
+            Request::GeneratorOptions { constraints } => constraints
+                .as_ref()
+                .is_none_or(PasswordConstraints::is_valid),
             _ => true,
         }
     }
@@ -801,7 +872,7 @@ impl Response {
                             && m.tags.iter().all(|t| t.len() <= MAX_MATCH_TAG_BYTES)
                     })
             }
-            Some(ResultBody::GeneratorOptions { options }) => options.is_valid(),
+            Some(ResultBody::GeneratorOptions { options, .. }) => options.is_valid(),
             Some(ResultBody::CheckLogin { action, item_id }) => {
                 (*action == SaveAction::Update) == item_id.is_some()
             }
@@ -939,9 +1010,18 @@ pub enum ResultBody {
     },
     GeneratorOptions {
         options: PasswordOptions,
+        /// Which rules a generate with the request's constraints would
+        /// follow. Sent only when one does, so an older extension (which
+        /// never sends constraints) parses the answer as before.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        followed: Option<RuleSource>,
     },
     GeneratePassword {
         password: WireSecret,
+        /// Which rules the password followed; omitted when none (as for
+        /// `generator_options`).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        followed: Option<RuleSource>,
     },
     CheckLogin {
         action: SaveAction,

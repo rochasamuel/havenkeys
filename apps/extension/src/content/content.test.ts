@@ -229,6 +229,32 @@ describe("content script", () => {
     }
   });
 
+  it("sends a new-password field's passwordrules and lengths with its menu, and nothing for a login field", async () => {
+    document.body.innerHTML = `<form><h1>Create account</h1><input name="user" type="email">
+      <input name="new" type="password" autocomplete="new-password" minlength="8" maxlength="16"
+        passwordrules="minlength: 8; maxlength: 16; required: lower, upper; required: digit;"><button type="submit">Sign up</button></form>`;
+    const open = async (el: HTMLInputElement) => {
+      sent.length = 0;
+      openReply = { ok: true, token: "e".repeat(32), rows: 1 };
+      el.focus();
+      for (const l of windowListeners.get("pointerdown") ?? []) l({ isTrusted: true, composedPath: () => [el] } as unknown as Event);
+      await new Promise((r) => setTimeout(r, 10));
+      deliver({ type: "bg_close_menu", token: "e".repeat(32) });
+      openReply = undefined;
+      return sent.find((m) => (m as { type: string }).type === "cs_open_menu");
+    };
+    expect(await open(field("new"))).toEqual({
+      type: "cs_open_menu",
+      kind: "new_password",
+      passwordRules: { rules: "minlength: 8; maxlength: 16; required: lower, upper; required: digit;", minLength: 8, maxLength: 16 },
+    });
+    // A plain new-password field asks nothing beyond the menu.
+    field("new").removeAttribute("passwordrules");
+    field("new").removeAttribute("minlength");
+    field("new").removeAttribute("maxlength");
+    expect(await open(field("new"))).toEqual({ type: "cs_open_menu", kind: "new_password" });
+  });
+
   it("Riot: clicking a form-less, icon-only sign-in button offers the typed login", async () => {
     await new Promise((r) => setTimeout(r, 1100)); // submit debounce
     document.body.innerHTML = `<div><div><input name="username" type="text"></div>

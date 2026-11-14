@@ -33,6 +33,7 @@ pub mod origin;
 pub mod pairing;
 pub mod pake;
 pub mod passkey;
+pub mod password_rules;
 pub mod password_strength;
 pub mod secret;
 pub mod sso;

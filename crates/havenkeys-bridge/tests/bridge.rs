@@ -1327,6 +1327,75 @@ fn generator_follows_the_desktop_generator_tab() {
     );
 }
 
+#[test]
+fn generate_password_follows_the_fields_rules_then_the_sites() {
+    let f = fixture();
+    // The field's own rules.
+    let r = call(
+        &f,
+        serde_json::json!({"type": "generate_password", "constraints": {
+            "url": "https://signup.example/", "rules": "minlength: 10; maxlength: 12; allowed: digit;",
+        }}),
+    );
+    assert_eq!(r["result"]["followed"], "field");
+    let pw = r["result"]["password"].as_str().unwrap();
+    assert_eq!(pw.len(), 12);
+    assert!(pw.bytes().all(|c| c.is_ascii_digit()));
+    // No field rules: the bundled table's entry for the site (163.com:
+    // "minlength: 6; maxlength: 16;"), found by registrable domain.
+    let r = call(
+        &f,
+        serde_json::json!({"type": "generate_password", "constraints": {"url": "https://reg.163.com/join"}}),
+    );
+    assert_eq!(r["result"]["followed"], "site");
+    assert_eq!(r["result"]["password"].as_str().unwrap().len(), 16);
+    // Only the field's maxlength: the saved policy (24), shortened, and no `followed` key.
+    let r = call(
+        &f,
+        serde_json::json!({"type": "generate_password", "constraints": {"url": "https://signup.example/", "maxLength": 10}}),
+    );
+    assert_eq!(r["result"]["password"].as_str().unwrap().len(), 10);
+    assert!(r["result"].get("followed").is_none(), "{}", r["result"]);
+    // Rules that cannot be met: the plain policy, as before.
+    let r = call(
+        &f,
+        serde_json::json!({"type": "generate_password", "constraints": {
+            "url": "https://signup.example/", "rules": "minlength: 30; maxlength: 10;",
+        }}),
+    );
+    assert_eq!(r["result"]["password"].as_str().unwrap().len(), 24);
+    assert!(r["result"].get("followed").is_none());
+    // The menu's question, without a password.
+    let r = call(
+        &f,
+        serde_json::json!({"type": "generator_options", "constraints": {"url": "https://163.com/"}}),
+    );
+    assert_eq!(r["result"]["followed"], "site");
+    assert!(r["result"].get("password").is_none());
+    let r = call(
+        &f,
+        serde_json::json!({"type": "generator_options", "constraints": {"url": "https://signup.example/"}}),
+    );
+    assert!(r["result"].get("followed").is_none());
+    // A URL that is not http(s) never reaches the core.
+    assert_eq!(
+        error_code(&call(
+            &f,
+            serde_json::json!({"type": "generate_password", "constraints": {"url": "file:///x"}}),
+        )),
+        Some("invalid_input")
+    );
+    // Locked: nothing, constraints or not.
+    f.vault.lock().unwrap().lock();
+    assert_eq!(
+        error_code(&call(
+            &f,
+            serde_json::json!({"type": "generate_password", "constraints": {"url": "https://163.com/"}}),
+        )),
+        Some("locked")
+    );
+}
+
 fn check(f: &Fixture, url: &str, user: Option<&str>, pw: &str) -> serde_json::Value {
     call(
         f,

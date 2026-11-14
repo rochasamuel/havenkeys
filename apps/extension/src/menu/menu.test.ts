@@ -472,6 +472,27 @@ describe("card rows", () => {
   });
 });
 
+describe("generate row and the site's password rules", () => {
+  async function show(rules?: string) {
+    replies = [
+      { ok: true, value: { state: "ready", kind: "new_password", site: "signup.example", items: [], passkeys: [], hint: null, ...(rules ? { rules } : {}) } },
+    ];
+    await load();
+    return document.querySelector("button.row")!.textContent;
+  }
+
+  it("says the password follows the site's rules when Rust says so", async () => {
+    expect(await show("field")).toContain("Follows this site's password rules");
+    expect(await show("site")).toContain("Follows this site's password rules");
+  });
+
+  it("keeps the usual line otherwise", async () => {
+    const text = await show();
+    expect(text).toContain("Fills the new password fields");
+    expect(text).not.toContain("password rules");
+  });
+});
+
 describe("generator settings", () => {
   const trusted = { isTrusted: true } as MouseEvent;
   /** The desktop generator tab's saved policy. */

@@ -40,6 +40,7 @@ import { cardFieldsForFill, cardGroupFor, findCardGroup } from "../autofill/card
 import { cardRolesToFill, fillCard, readCardSubmission } from "../autofill/card-fill";
 import { classifyGroup, defaultEnv, fieldsOf, groupFor, groupRoot, isFillable, isRendered, type Env } from "../autofill/group";
 import { findLoginGroup, findOtpGroup, readSubmission } from "../autofill/page";
+import { readFieldRules } from "../autofill/password-rules";
 import { buttonLabel, findSubmitButton, hasChallenge, pressWhenReady, waitForSubmitButton, type PressStep } from "../autofill/submit";
 import { findIdentityGroup, identityGroupFor } from "../autofill/identity";
 import { fillIdentity, rolesToFill } from "../autofill/identity-fill";
@@ -226,10 +227,13 @@ function start(): void {
     // A card menu in a subframe says where the frame sits (null in the top
     // frame) and where the field is, so the top frame can draw the menu.
     const ancestry = kind === "card" ? frameAncestry() : null;
+    // A new password follows what the field asks for (its passwordrules, min/maxlength).
+    const passwordRules = kind === "new_password" ? readFieldRules(field) : null;
     opening = true;
     const req: ContentRequest = {
       type: "cs_open_menu",
       kind,
+      ...(passwordRules ? { passwordRules } : {}),
       ...(explicit ? { explicit: true as const } : {}),
       ...(choice.passwordBox ? { passwordBox: true as const } : {}),
       ...(choice.roles ? { roles: choice.roles } : {}),

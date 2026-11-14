@@ -155,6 +155,7 @@ export const ptBR: Messages = {
     codeRow: (account: string) => `${account} · código de verificação`,
     generateTitle: "Gerar senha forte",
     generateBody: "Preenche os campos de nova senha",
+    generateFollowsRules: "Segue as regras de senha deste site",
     generateSettings: "Configurações da senha",
     generateLength: "Tamanho",
     generateCharacters: "Caracteres",

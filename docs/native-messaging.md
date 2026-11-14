@@ -119,8 +119,8 @@ UTF-8 JSON. The length is checked before anything is allocated.
 | `check_lookalike` | `url`, `topUrl`? | yes | lookup |
 | `fill_item` | `itemId` (UUID), `url`, `topUrl`? | yes | secret |
 | `get_totp` | `itemId` (UUID), `url`, `topUrl`? | yes | secret |
-| `generator_options` | none (returns the policy saved in the desktop's generator tab) | yes | lookup |
-| `generate_password` | `options`? (`length` 8–128, `uppercase`, `lowercase`, `digits`, `symbols`, `avoidAmbiguous`; at least one class on; else the desktop generator tab's saved policy) | yes | lookup |
+| `generator_options` | `constraints`? (as for `generate_password`); returns the policy saved in the desktop's generator tab, and `followed`? when a generate with those constraints would follow rules | yes | lookup |
+| `generate_password` | `options`? (`length` 8–128, `uppercase`, `lowercase`, `digits`, `symbols`, `avoidAmbiguous`; at least one class on; else the desktop generator tab's saved policy); `constraints`? (`url`: the field's frame, `http(s)`, from the browser; `rules`?: the field's `passwordrules`, 1–1024 bytes; `minLength`?, `maxLength`?: 1–1024); returns `password` and `followed`? (`"field"` or `"site"`) | yes | lookup |
 | `check_login` | `url`, `topUrl`?, `username` (string or null), `password`, `currentPassword`? (a change-password form's current password) | yes | secret |
 | `save_login` | `url`, `topUrl`?, `username`, `password`, `itemId` (UUID or null), `title`? (a new login's name; refused with `itemId`) | yes | secret, plus one update per item per 10 min |
 | `find_passkeys` | `url`, `topUrl`?, `rpId`, `allowCredentials` (list) | yes | lookup |
@@ -146,6 +146,23 @@ at most 253 bytes (a saved site whose confusable key equals the page's) or
 answers it while the account is frozen. An older desktop rejects the
 unknown type, and the extension treats any error as "no warning". The
 native host must be rebuilt for development, as for every protocol change.
+
+`generate_password` and `generator_options` take optional `constraints`
+(spec `2026-11-14-password-rules-generator`): the frame URL of the
+new-password field, which the background takes from the browser, and that
+field's `passwordrules`, `minlength` and `maxlength`, which are page content.
+Rust (`havenkeys_core::password_rules`) follows the field's rules, else the
+bundled table's rules for the page's host or registrable domain, else the
+plain policy; the field's lengths always bound the length, never below 4
+characters. A rule that does not parse or cannot be met is skipped, so
+generation never fails where it succeeded without constraints. The result's
+`followed` (`"field"` or `"site"`) is sent only when rules were followed, so
+an older extension, which never sends constraints, parses the answers as
+before. An older desktop rejects `constraints` as `malformed`: the extension
+then sends the same `generate_password` without them, and shows no
+"Follows this site's password rules" note (any `generator_options` error is
+no note). Page-supplied rules can only weaken the password that same page
+receives (`security-review.md`, PR1).
 
 `entitlement` on the `status` and `find_matches` results is sent only when
 the account is frozen (`"frozen"`); a Full account's results carry no such
@@ -389,6 +406,9 @@ error.
 | Password (and `currentPassword`) in `check_login`/`save_login` | 16 KiB (the core allows 4096 characters) | host, bridge, core |
 | Username | 2 KiB (the core allows 512 characters) | host, bridge, core |
 | `title` in `save_login` | 1 KiB, not empty (the core allows 256 characters, no control characters) | extension, host, bridge, core |
+| `constraints.rules` (a field's `passwordrules`) | 1–1024 bytes (the content script drops a longer one whole) | content script, extension, host, bridge, core |
+| `constraints.minLength`, `constraints.maxLength` | integers 1–1024 | content script, extension, host, bridge |
+| Generated password for a page | 4–128 characters; below 8 only when the page's own `maxlength` or rules demand it | core |
 | Suggestions per `find_matches` | 50 | bridge, host, extension |
 | Passkeys per `find_passkeys`, candidates per `check_passkey_create` | 50 | bridge, host, extension |
 | Binary fields (`credentialId`, `challenge`, `userHandle`, list entries, and every binary result) | unpadded base64url | extension, host, bridge |
@@ -756,6 +776,7 @@ with a provider (Google, Microsoft, GitHub, Apple, Facebook, Discord, X, LinkedI
 | `packages/protocol/src/index.test.ts` | TS validator accepts exact shapes only |
 | `apps/extension/src/**/*.test.ts` | Native client (ID correlation, timeouts, host loss, idle close, type mismatch), popup request validation, URL stripping, the popup never supplying URLs, content/menu/save message validation, menu sessions (single use, same tab only, offered items only, expiry, lock), save prompts (unchanged logins, multi-step, expiry, other tabs), content-script origin check and sender check, untrusted events, source hygiene |
 | `crates/havenkeys-protocol/tests/messages.rs`, `crates/havenkeys-bridge/tests/bridge.rs` | `check_lookalike` parses with exact shapes; the result is a bounded ASCII domain or null; `check_lookalike_names_the_imitated_saved_site`, `check_lookalike_refuses_when_locked`, `check_lookalike_is_answered_when_frozen`, `check_lookalike_is_rate_limited_as_a_lookup` |
+| `crates/havenkeys-core/src/password_rules.rs`, `crates/havenkeys-protocol/tests/messages.rs`, `crates/havenkeys-bridge/tests/bridge.rs`, `packages/protocol/src/password-rules.test.ts`, `apps/extension/src/autofill/password-rules.test.ts`, `background/inline-handler.test.ts` | Password rules: every class, required groups, custom classes, `max-consecutive`, length clamping and the 4-character floor, fallback on rules that do not parse or cannot be met, every bundled rule parsed and met; `constraints` shapes and bounds, `followed` results; `generate_password_follows_the_fields_rules_then_the_sites`; the field attributes read and bounded; the retry without constraints for an older desktop |
 | `crates/havenkeys-core/tests/security.rs` (Phase 5) | Frames on foreign top pages (A1), `check_login` classification, `save_login` origin binding (A2 for writes), password history bound |
 | `crates/havenkeys-core/tests/passkeys.rs`, `src/passkey/*.rs` | Passkey create → sign in, A1p/A2p/A3p, attaching to a login and keeping passkeys through edits, re-registration replacing across logins, the per-login limit, removal, input bounds; `authorize_rp` rules; byte layouts; the automatic upgrade (A1u/A2u): `auto`/`ask` after a recent fill, the 5-minute window and clock-skew handling, folded account-name matching, per-site scoping (`upgrade_is_per_site_and_never_for_look_alikes`, `a_fill_on_one_site_is_no_upgrade_on_another_site_of_the_same_login`), `conditional_create_needs_auto_for_exactly_that_login`, add-only and one silent passkey per fill (`conditional_create_never_replaces_the_filled_logins_own_passkey`, `one_fill_grants_one_silent_passkey`), the 16-entry fill memory cap, fill memory dropped on lock |
 | `crates/havenkeys-protocol/tests/messages.rs`, `crates/havenkeys-bridge/tests/bridge.rs` | Passkey requests parse with exact shapes and bounds, results validate; create → get over the bridge, attacks, offline create stores nothing; `passkey_upgrade_through_the_bridge` (A1u end to end), `passkey_status_through_the_bridge` |

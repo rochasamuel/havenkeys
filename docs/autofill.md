@@ -364,7 +364,39 @@ attributes, never into hidden fields, and never into other forms.
 |---|---|---|
 | Login | a username or (current) password field | username and password fields of that group |
 | One-time code | an OTP field | the code, one character per box for split fields (below) |
-| New password | a new-password or confirmation field | a password generated **by the desktop** (Rust CSPRNG, with the policy saved in the desktop's generator tab) into the new + confirmation fields. The switches button inside the row opens a panel showing that policy (`generator_options`), where length (8–128) and character classes can be changed for this password only, and a **Generate and fill** button; the frame slides taller. Panel changes go as `generate_password`'s `options`, which Rust checks again; nothing is stored in the extension |
+| New password | a new-password or confirmation field | a password generated **by the desktop** (Rust CSPRNG, with the policy saved in the desktop's generator tab) into the new + confirmation fields. The switches button inside the row opens a panel showing that policy (`generator_options`), where length (8–128) and character classes can be changed for this password only, and a **Generate and fill** button; the frame slides taller. Panel changes go as `generate_password`'s `options`, which Rust checks again; nothing is stored in the extension. The password follows the site's password rules when it has any (below) |
+
+**Site password rules** (spec `2026-11-14-password-rules-generator`). A
+generated password follows what the field asks for, as 1Password does:
+
+1. the field's own `passwordrules` attribute (Apple's syntax, e.g.
+   `minlength: 8; maxlength: 16; required: lower, upper; required: digit;
+   allowed: [-().&@?'#,/"+]; max-consecutive: 2;`), parsed in Rust with
+   1Password's `password-rules-parser`;
+2. otherwise HavenKeys' table of sites' rules
+   (`crates/havenkeys-core/data/password-rules.json`, from Apple's Password
+   Manager Resources, compiled in, never fetched), looked up by the frame's
+   host and then its registrable domain;
+3. otherwise the plain policy.
+
+The field's `minlength`/`maxlength` always bound the length as well. The
+length is the policy's (or the panel's), moved into the allowed range: at
+least 8 unless the site's maximum is lower, never below 4 (below that, the
+site's limits are ignored). The characters are the rules' allowed and
+required classes, ASCII only and never a space, with one character from each
+required group (`required: lower, upper` needs one letter of either case);
+with rules, the panel's class switches do not apply. `max-consecutive` is
+kept by drawing a repeated character again. Rules that do not parse or
+cannot be met are skipped for the next source, so generating never fails
+where it worked before. The content script reads the three attributes from
+the field the menu was opened on and drops any out of bounds (rules over
+1024 bytes, lengths outside 1–1024); the background adds the frame's URL
+from the browser. When Rust says the password will follow rules
+(`generator_options` with the constraints, asked as the menu opens), the
+row's second line reads "Follows this site's password rules". With an
+older desktop, the menu sends the request without the field's rules and
+shows no note. A page's rules only change the password that same page
+receives (see `security-review.md`, PR1).
 
 **Split one-time codes.** Widgets differ in what they accept (MUI OtpInput,
 react-otp-input, ng-otp-input, vue3-otp-input, hand-written ones). React and

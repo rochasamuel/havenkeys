@@ -4328,3 +4328,82 @@ their plaintext (`Zeroizing`) in memory until that upload returns.
       device and open it there.
 - [ ] Export a backup with attachments and restore it into a new vault.
 - [ ] An older desktop opens an item with attachments without losing them.
+
+# Security Review: Passwords that follow a site's rules (2026-11-14)
+
+Spec: `docs/superpowers/specs/2026-11-14-password-rules-generator-design.md`.
+
+### PR1. Page-controlled rules shape the generated password (Low, accepted)
+**Component:** `crates/havenkeys-core/src/password_rules.rs`,
+`apps/extension/src/autofill/password-rules.ts`.
+**Attack scenario:** a hostile page sets `passwordrules="maxlength: 4;
+allowed: digit;"` (or `maxlength="4"`) on its sign-up field so that HavenKeys
+generates a 4-digit password, which it could guess or which leaks easily.
+**Mitigation:** the rules, the lengths and the site whose table entry
+applies all belong to the page that receives the password, and the password
+generated is only ever filled into that page's field. A page that wants a
+weak password for its own account could equally accept any password the user
+types; it cannot weaken a password for another site, read one, or make
+HavenKeys fill anywhere else. The URL that selects a table entry comes from
+the browser's sender data, never from the page. The length never drops below
+`RULES_MIN_LENGTH` (4), and below the usual 8 only when the page's own
+`maxlength` or rules require it; with a smaller maximum, the page's limits
+are ignored. Without rules or length attributes nothing changes.
+**Remaining limitations:** the user is not warned that a site forced a short
+or narrow password beyond the row's "Follows this site's password rules";
+the generated password's strength is visible in the desktop afterwards
+(Vault health).
+
+### PR2. Parsing untrusted rules (Low, mitigated)
+**Component:** `password-rules-parser` 1.1.0 (1Password, `nom`, `#![forbid(unsafe_code)]`).
+**Attack scenario:** a crafted `passwordrules` value crashes or stalls the
+desktop's bridge.
+**Mitigation:** at most 1024 bytes (content script, extension, native host,
+bridge and core each check); the parser is a linear `nom` grammar with no
+unsafe code, and its non-ASCII handling only filters custom classes. A parse
+error, or rules that cannot be met (min above max, an empty class, more
+required groups than characters, a run limit on a one-character alphabet),
+falls back to the next source. Generation with `max-consecutive` is bounded
+(64 attempts). Tests cover garbage, truncated and oversized input, and the
+protocol fuzz loop includes `constraints`.
+**Remaining limitations:** the crate pulls `pretty-lint` and `colored`
+(MPL-2.0) for error formatting HavenKeys does not use.
+
+### PR3. Generation stays unbiased (Info, mitigated)
+**Component:** `generator::build`.
+**Attack scenario:** narrowing the alphabet or resampling introduces bias.
+**Mitigation:** every draw is `rand::distr::Uniform` over the OS CSPRNG, the
+shuffle is Fisher–Yates with the same sampler; a character that would break
+`max-consecutive` is drawn again uniformly from the alphabet without the
+repeated character, and a result missing a required class is discarded
+whole. The resampling makes repeats slightly less likely than uniform, which
+is what the site asked for. `generate` (no rules) is unchanged.
+**Remaining limitations:** the entropy estimate is length × log2(alphabet),
+an upper bound as before.
+
+### PR4. Secret and history hygiene (Info, mitigated)
+**Component:** `havenkeys-protocol` `PasswordConstraints`, background handler.
+**Attack scenario:** the page URL or rules leak into logs or `Debug` output.
+**Mitigation:** `PasswordConstraints` and `Request` print no URL or rules
+(tested); nothing is logged; the extension stores nothing (menu sessions
+live in worker memory). The generated password still never passes through
+the menu frame. `followed` reveals only which source applied, to the
+extension.
+**Remaining limitations:** none known.
+
+### PR5. Older desktops and extensions (Low, mitigated)
+**Component:** `background/inline-handler.ts` `generateFor`, `rulesFollowed`.
+**Attack scenario:** a version mismatch breaks password generation.
+**Mitigation:** an older desktop rejects `constraints` as `malformed`; the
+extension retries the exact request it used to send. `followed` is sent only
+when rules were followed, and only in answer to a request with constraints,
+so an older extension never sees the key.
+**Remaining limitations:** with an older desktop, the menu shows no note and
+the password follows only the menu's policy, as before.
+
+### Manual checks (owner)
+- [ ] A sign-up form with `passwordrules` (e.g. Apple's test page) gets a
+      password that its validator accepts, and the menu shows the note.
+- [ ] A site from the table without the attribute (e.g. one with a
+      `maxlength` of 16) gets a 16-character password.
+- [ ] With the previous desktop release, generating from the menu still fills.

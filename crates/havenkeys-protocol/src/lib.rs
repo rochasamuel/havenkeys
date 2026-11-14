@@ -68,6 +68,12 @@ pub const MAX_MATCH_TAG_BYTES: usize = 4 * 32;
 /// Generated password length bounds (the core generator's own).
 pub const MIN_PASSWORD_LENGTH: u32 = 8;
 pub const MAX_PASSWORD_LENGTH: u32 = 128;
+/// A password field's `passwordrules` attribute, in bytes (page text; the
+/// core's `password_rules::MAX_RULES_BYTES`).
+pub const MAX_PASSWORD_RULES_BYTES: usize = 1024;
+/// A password field's `minlength`/`maxlength`, at most (page values; larger
+/// ones say nothing a 128-character password could use).
+pub const MAX_FIELD_LENGTH: u32 = 1024;
 /// Roles one fill_identity may ask for (a form has fewer fields than this).
 pub const MAX_IDENTITY_ROLES: usize = 40;
 /// Largest identity value returned (the core's longest field is 4096 characters of a custom value; filled roles are far shorter).

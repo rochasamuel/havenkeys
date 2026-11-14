@@ -656,6 +656,10 @@ fn fuzz_parse_request_never_panics() {
         format!(r#"{{"v":1,"id":17,"request":{{"type":"start_sso","itemId":"{ITEM}","url":"https://a.com/"}}}}"#),
         r#"{"v":1,"id":18,"request":{"type":"save_sso","url":"https://a.com/","provider":"google","account":"a","itemId":null}}"#.to_string(),
         r#"{"v":1,"id":19,"request":{"type":"show_unlock"}}"#.to_string(),
+        r#"{"v":1,"id":20,"request":{"type":"generate_password","constraints":{"url":"https://a.com/","rules":"minlength: 8; required: digit;","minLength":6,"maxLength":16}}}"#.to_string(),
+        r#"{"v":1,"id":21,"request":{"type":"generator_options","constraints":{"url":"https://a.com/"}}}"#.to_string(),
+        r#"{"v":1,"id":22,"result":{"type":"generate_password","password":"x","followed":"site"}}"#.to_string(),
+        r#"{"v":1,"id":23,"result":{"type":"generator_options","options":{"length":20,"uppercase":true,"lowercase":true,"digits":true,"symbols":true,"avoidAmbiguous":false},"followed":"field"}}"#.to_string(),
     ]
     .into_iter()
     .map(String::into_bytes)
@@ -1173,4 +1177,99 @@ fn bank_values_never_print() {
         account_digit: None,
     };
     assert!(!format!("{f:?}").contains("1234") && !format!("{f:?}").contains("987654"));
+}
+
+#[test]
+fn password_constraints_parse_and_reencode() {
+    let ok = [
+        r#"{"v":1,"id":1,"request":{"type":"generate_password","constraints":{"url":"https://a.com/signup"}}}"#.to_owned(),
+        r#"{"v":1,"id":2,"request":{"type":"generate_password","constraints":{"url":"http://a.com/","rules":"minlength: 8; maxlength: 16; required: lower, upper; required: digit; allowed: [-().&@?'#,/\"+]; max-consecutive: 2;","minLength":8,"maxLength":16}}}"#.to_owned(),
+        r#"{"v":1,"id":3,"request":{"type":"generate_password","options":{"length":20,"uppercase":true,"lowercase":true,"digits":true,"symbols":false,"avoidAmbiguous":false},"constraints":{"url":"https://a.com/","maxLength":1024}}}"#.to_owned(),
+        r#"{"v":1,"id":4,"request":{"type":"generator_options","constraints":{"url":"https://a.com/","rules":"allowed: digit;"}}}"#.to_owned(),
+        r#"{"v":1,"id":5,"request":{"type":"generator_options"}}"#.to_owned(),
+        format!(
+            r#"{{"v":1,"id":6,"request":{{"type":"generate_password","constraints":{{"url":"https://a.com/","rules":"{}"}}}}}}"#,
+            "a".repeat(MAX_PASSWORD_RULES_BYTES)
+        ),
+    ];
+    for s in &ok {
+        let env = parse(s).unwrap_or_else(|r| panic!("{s}: {r:?}"));
+        assert_eq!(
+            serde_json::to_string(&env).unwrap(),
+            *s,
+            "re-encodes canonically"
+        );
+    }
+    let long_rules = "a".repeat(MAX_PASSWORD_RULES_BYTES + 1);
+    let long_url = "a".repeat(MAX_URL_BYTES);
+    let cases: Vec<(String, ErrorCode)> = vec![
+        // shape
+        (r#"{"v":1,"id":1,"request":{"type":"generate_password","constraints":{}}}"#.into(), ErrorCode::Malformed),
+        (r#"{"v":1,"id":1,"request":{"type":"generate_password","constraints":{"url":"https://a.com/","topUrl":"https://b.com/"}}}"#.into(), ErrorCode::Malformed),
+        (r#"{"v":1,"id":1,"request":{"type":"generate_password","constraints":{"url":"https://a.com/","rules":7}}}"#.into(), ErrorCode::Malformed),
+        (r#"{"v":1,"id":1,"request":{"type":"generate_password","constraints":{"url":"https://a.com/","minLength":-1}}}"#.into(), ErrorCode::Malformed),
+        (r#"{"v":1,"id":1,"request":{"type":"generate_password","constraints":{"url":"https://a.com/","maxLength":2.5}}}"#.into(), ErrorCode::Malformed),
+        (r#"{"v":1,"id":1,"request":{"type":"generate_password","constraints":{"url":"https://a.com/","maxLength":4294967296}}}"#.into(), ErrorCode::Malformed),
+        (r#"{"v":1,"id":1,"request":{"type":"generator_options","constraints":{"url":"https://a.com/","extra":1}}}"#.into(), ErrorCode::Malformed),
+        (r#"{"v":1,"id":1,"request":{"type":"generate_password","followed":"site"}}"#.into(), ErrorCode::Malformed),
+        // bounds
+        (r#"{"v":1,"id":1,"request":{"type":"generate_password","constraints":{"url":""}}}"#.into(), ErrorCode::InvalidInput),
+        (r#"{"v":1,"id":1,"request":{"type":"generate_password","constraints":{"url":"javascript:alert(1)"}}}"#.into(), ErrorCode::InvalidInput),
+        (r#"{"v":1,"id":1,"request":{"type":"generate_password","constraints":{"url":"file:///etc/passwd"}}}"#.into(), ErrorCode::InvalidInput),
+        (r#"{"v":1,"id":1,"request":{"type":"generator_options","constraints":{"url":"chrome-extension://x/menu.html"}}}"#.into(), ErrorCode::InvalidInput),
+        (r#"{"v":1,"id":1,"request":{"type":"generate_password","constraints":{"url":"https://a.com/","rules":""}}}"#.into(), ErrorCode::InvalidInput),
+        (format!(r#"{{"v":1,"id":1,"request":{{"type":"generate_password","constraints":{{"url":"https://a.com/","rules":"{long_rules}"}}}}}}"#), ErrorCode::InvalidInput),
+        (r#"{"v":1,"id":1,"request":{"type":"generate_password","constraints":{"url":"https://a.com/","minLength":0}}}"#.into(), ErrorCode::InvalidInput),
+        (r#"{"v":1,"id":1,"request":{"type":"generate_password","constraints":{"url":"https://a.com/","maxLength":1025}}}"#.into(), ErrorCode::InvalidInput),
+        (format!(r#"{{"v":1,"id":1,"request":{{"type":"generate_password","constraints":{{"url":"https://a.com/{long_url}"}}}}}}"#), ErrorCode::InvalidInput),
+    ];
+    for (input, code) in &cases {
+        assert_eq!(
+            parse(input).err().map(|r| r.code),
+            Some(*code),
+            "{}",
+            &input[..input.len().min(160)]
+        );
+    }
+}
+
+#[test]
+fn followed_results_are_validated() {
+    let valid = [
+        r#"{"v":1,"id":1,"result":{"type":"generate_password","password":"x"}}"#,
+        r#"{"v":1,"id":1,"result":{"type":"generate_password","password":"x","followed":"field"}}"#,
+        r#"{"v":1,"id":1,"result":{"type":"generate_password","password":"x","followed":"site"}}"#,
+        r#"{"v":1,"id":1,"result":{"type":"generator_options","options":{"length":20,"uppercase":true,"lowercase":true,"digits":true,"symbols":true,"avoidAmbiguous":false},"followed":"site"}}"#,
+    ];
+    for s in valid {
+        let msg = Outgoing::parse(s.as_bytes()).unwrap_or_else(|| panic!("{s}"));
+        // Without `followed`, no key at all (what older extensions parse).
+        assert_eq!(&msg.to_bytes().unwrap()[..], s.as_bytes());
+    }
+    for s in [
+        r#"{"v":1,"id":1,"result":{"type":"generate_password","password":"x","followed":"page"}}"#,
+        r#"{"v":1,"id":1,"result":{"type":"generate_password","password":"x","followed":1}}"#,
+        r#"{"v":1,"id":1,"result":{"type":"generate_password","password":"x","followed":"Field"}}"#,
+    ] {
+        assert!(Outgoing::parse(s.as_bytes()).is_none(), "{s}");
+    }
+}
+
+#[test]
+fn password_constraints_never_debug_print() {
+    let env = parse(
+        r#"{"v":1,"id":1,"request":{"type":"generate_password","constraints":{"url":"https://secret-site.example/","rules":"required: [zq];"}}}"#,
+    )
+    .unwrap();
+    let dbg = format!("{env:?}");
+    assert!(!dbg.contains("secret-site") && !dbg.contains("zq"), "{dbg}");
+    let Request::GeneratePassword {
+        constraints: Some(c),
+        ..
+    } = &env.request
+    else {
+        panic!("constraints")
+    };
+    let dbg = format!("{c:?}");
+    assert!(!dbg.contains("secret-site") && !dbg.contains("zq"), "{dbg}");
 }
