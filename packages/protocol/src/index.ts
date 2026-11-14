@@ -42,8 +42,42 @@ export const MAX_CHALLENGE_BYTES = 4096;
 export const MAX_USER_HANDLE_BYTES = 64;
 export const MAX_RP_ID_BYTES = 253;
 export const MAX_CREDENTIAL_LIST = 64;
-/** COSE ES256. */
+/** COSE algorithm identifiers HavenKeys creates keys for (spec 2026-11-14-passkey-parity §4). */
 export const COSE_ES256 = -7;
+export const COSE_ESP256 = -9;
+export const COSE_EDDSA = -8;
+export const COSE_ED25519 = -19;
+export const COSE_ALGORITHMS: readonly number[] = [COSE_ES256, COSE_ESP256, COSE_EDDSA, COSE_ED25519];
+/** `pubKeyCredParams` entries looked at, and accepted in `passkey_create`. */
+export const MAX_ALGORITHMS = 16;
+/** Largest PRF salt (`first` / `second`), in bytes. */
+export const MAX_PRF_SALT_BYTES = 1024;
+/** One PRF output (HMAC-SHA-256), in bytes. */
+export const PRF_OUTPUT_BYTES = 32;
+
+/**
+ * The first algorithm in the site's order that HavenKeys supports; ES256
+ * for an empty list (WebAuthn's default); null when none is supported. The
+ * same rule as the core's `choose_algorithm`, which decides; the extension
+ * uses it to fall back early and to leave `algorithms` out when it would
+ * pick ES256 anyway.
+ */
+export function chooseAlgorithm(algs: readonly number[]): number | null {
+  if (algs.length === 0) return COSE_ES256;
+  return algs.slice(0, MAX_ALGORITHMS).find((a) => COSE_ALGORITHMS.includes(a)) ?? null;
+}
+
+/** A site's PRF inputs (unpadded base64url, as the site sent them; Rust hashes them). */
+export interface PrfValues {
+  first: string;
+  second?: string;
+}
+
+/** PRF outputs (unpadded base64url, 32 bytes each). Secrets. */
+export interface PrfResults {
+  first: string;
+  second?: string;
+}
 
 // ------------------------------------------------------------------ requests
 
@@ -124,7 +158,17 @@ export type Request =
       title?: string;
     }
   | { type: "find_passkeys"; url: string; topUrl?: string; rpId: string; allowCredentials: string[] }
-  | { type: "passkey_get"; itemId: string; credentialId: string; url: string; topUrl?: string; rpId: string; challenge: string }
+  | {
+      type: "passkey_get";
+      itemId: string;
+      credentialId: string;
+      url: string;
+      topUrl?: string;
+      rpId: string;
+      challenge: string;
+      /** Only when the site sent `prf` input for this credential (an older desktop refuses the field). */
+      prf?: PrfValues;
+    }
   | { type: "check_passkey_create"; url: string; topUrl?: string; rpId: string; userName: string; excludeCredentials: string[]; conditional: boolean }
   | {
       type: "passkey_create";
@@ -137,6 +181,10 @@ export type Request =
       displayName: string | null;
       itemId: string | null;
       conditional: boolean;
+      /** The site's algorithms; only when ES256 would not be picked (an older desktop refuses the field). */
+      algorithms?: number[];
+      /** Only when the site asked for `prf`. */
+      prf?: { eval?: PrfValues };
     }
   | { type: "passkey_status"; url: string; topUrl?: string }
   | { type: "start_sso"; itemId: string; url: string; topUrl?: string }
@@ -248,7 +296,16 @@ export type Result =
   | { type: "check_login"; action: SaveAction; itemId: string | null }
   | { type: "save_login"; itemId: string }
   | { type: "find_passkeys"; passkeys: PasskeyMatch[] }
-  | { type: "passkey_get"; credentialId: string; authenticatorData: string; clientDataJson: string; signature: string; userHandle: string }
+  | {
+      type: "passkey_get";
+      credentialId: string;
+      authenticatorData: string;
+      clientDataJson: string;
+      signature: string;
+      userHandle: string;
+      /** PRF outputs; only when asked and the passkey has a PRF secret. */
+      prf?: PrfResults;
+    }
   | { type: "check_passkey_create"; excluded: boolean; candidates: PasskeyCandidate[]; upgrade: UpgradeHint }
   | {
       type: "passkey_create";
@@ -258,6 +315,8 @@ export type Result =
       authenticatorData: string;
       publicKey: string;
       publicKeyAlgorithm: number;
+      /** Only when the request carried `prf`. */
+      prf?: { enabled: boolean; results?: PrfResults };
     }
   | { type: "passkey_status"; hasPasskey: boolean }
   | { type: "open_item" }
@@ -360,6 +419,24 @@ export const isB64Url = (v: unknown, min: number, max: number): v is string => {
 const isCredentialId = (v: unknown): v is string => isB64Url(v, CREDENTIAL_ID_BYTES, CREDENTIAL_ID_BYTES);
 /** Any non-empty base64url blob the host returns (bounded by the frame size anyway). */
 const isBlob = (v: unknown): v is string => isB64Url(v, 1, 256 * 1024);
+
+const isPrfOutput = (v: unknown): v is string => isB64Url(v, PRF_OUTPUT_BYTES, PRF_OUTPUT_BYTES);
+
+/** `{ first, second? }`, each exactly 32 bytes; nothing else. */
+export function parsePrfResults(v: unknown): PrfResults | null {
+  if (!isObj(v) || !(hasExactKeys(v, ["first"]) || hasExactKeys(v, ["first", "second"]))) return null;
+  if (!isPrfOutput(v.first)) return null;
+  if (v.second === undefined) return { first: v.first };
+  return isPrfOutput(v.second) ? { first: v.first, second: v.second } : null;
+}
+
+function parsePrfCreated(v: unknown): { enabled: boolean; results?: PrfResults } | null {
+  if (!isObj(v) || !isBool(v.enabled)) return null;
+  if (hasExactKeys(v, ["enabled"])) return { enabled: v.enabled };
+  if (!hasExactKeys(v, ["enabled", "results"]) || !v.enabled) return null;
+  const results = parsePrfResults(v.results);
+  return results && { enabled: true, results };
+}
 
 function parsePasskeyMatch(v: unknown): PasskeyMatch | null {
   const keys = ["itemId", "credentialId", "title", "userName"];
@@ -592,10 +669,15 @@ function parseResult(v: unknown): Result | null {
       return passkeys && { type: "find_passkeys", passkeys };
     }
     case "passkey_get": {
-      if (!hasExactKeys(v, ["type", "credentialId", "authenticatorData", "clientDataJson", "signature", "userHandle"])) return null;
+      const keys = ["type", "credentialId", "authenticatorData", "clientDataJson", "signature", "userHandle"];
+      // `prf` only when the extension asked for it; an older desktop never sends it.
+      if (!hasExactKeys(v, keys) && !hasExactKeys(v, [...keys, "prf"])) return null;
       const { credentialId, authenticatorData, clientDataJson, signature, userHandle } = v;
       if (!isCredentialId(credentialId) || !isBlob(authenticatorData) || !isBlob(clientDataJson) || !isBlob(signature) || !isBlob(userHandle)) return null;
-      return { type: "passkey_get", credentialId, authenticatorData, clientDataJson, signature, userHandle };
+      const base = { type: "passkey_get" as const, credentialId, authenticatorData, clientDataJson, signature, userHandle };
+      if (v.prf === undefined) return base;
+      const prf = parsePrfResults(v.prf);
+      return prf && { ...base, prf };
     }
     case "check_passkey_create": {
       if (!hasExactKeys(v, ["type", "excluded", "candidates", "upgrade"]) || !isBool(v.excluded)) return null;
@@ -606,11 +688,14 @@ function parseResult(v: unknown): Result | null {
     }
     case "passkey_create": {
       const keys = ["type", "credentialId", "attestationObject", "clientDataJson", "authenticatorData", "publicKey", "publicKeyAlgorithm"];
-      if (!hasExactKeys(v, keys)) return null;
+      if (!hasExactKeys(v, keys) && !hasExactKeys(v, [...keys, "prf"])) return null;
       const { credentialId, attestationObject, clientDataJson, authenticatorData, publicKey, publicKeyAlgorithm } = v;
       if (!isCredentialId(credentialId) || !isBlob(attestationObject) || !isBlob(clientDataJson) || !isBlob(authenticatorData) || !isBlob(publicKey)) return null;
-      if (publicKeyAlgorithm !== COSE_ES256) return null;
-      return { type: "passkey_create", credentialId, attestationObject, clientDataJson, authenticatorData, publicKey, publicKeyAlgorithm };
+      if (typeof publicKeyAlgorithm !== "number" || !COSE_ALGORITHMS.includes(publicKeyAlgorithm)) return null;
+      const base = { type: "passkey_create" as const, credentialId, attestationObject, clientDataJson, authenticatorData, publicKey, publicKeyAlgorithm };
+      if (v.prf === undefined) return base;
+      const prf = parsePrfCreated(v.prf);
+      return prf && { ...base, prf };
     }
     case "passkey_status":
       if (!hasExactKeys(v, ["type", "hasPasskey"]) || !isBool(v.hasPasskey)) return null;

@@ -4,13 +4,14 @@
 
 use crate::secret::WireSecret;
 use crate::{
-    COSE_ES256, CREDENTIAL_ID_BYTES, MAX_ACCOUNT_BYTES, MAX_CARD_CODE_BYTES, MAX_CARD_FRAMES,
-    MAX_CARD_NUMBER_BYTES, MAX_CARD_ROLES, MAX_CARD_VALUE_BYTES, MAX_CHALLENGE_BYTES,
-    MAX_CREDENTIAL_LIST, MAX_FIELD_LENGTH, MAX_IDENTITY_ROLES, MAX_IDENTITY_VALUE_BYTES,
-    MAX_LOOKALIKE_BYTES, MAX_MATCHES, MAX_MATCH_TAGS, MAX_MATCH_TAG_BYTES, MAX_PASSWORD_LENGTH,
-    MAX_PASSWORD_RULES_BYTES, MAX_PROVIDER_ACCOUNTS, MAX_PROVIDER_ORIGINS, MAX_RP_ID_BYTES,
-    MAX_SECRET_BYTES, MAX_TITLE_BYTES, MAX_URL_BYTES, MAX_USERNAME_BYTES, MAX_USER_HANDLE_BYTES,
-    MIN_PASSWORD_LENGTH, PROTOCOL_VERSION,
+    COSE_ALGORITHMS, CREDENTIAL_ID_BYTES, MAX_ACCOUNT_BYTES, MAX_ALGORITHMS, MAX_CARD_CODE_BYTES,
+    MAX_CARD_FRAMES, MAX_CARD_NUMBER_BYTES, MAX_CARD_ROLES, MAX_CARD_VALUE_BYTES,
+    MAX_CHALLENGE_BYTES, MAX_CREDENTIAL_LIST, MAX_FIELD_LENGTH, MAX_IDENTITY_ROLES,
+    MAX_IDENTITY_VALUE_BYTES, MAX_LOOKALIKE_BYTES, MAX_MATCHES, MAX_MATCH_TAGS,
+    MAX_MATCH_TAG_BYTES, MAX_PASSWORD_LENGTH, MAX_PASSWORD_RULES_BYTES, MAX_PRF_SALT_BYTES,
+    MAX_PROVIDER_ACCOUNTS, MAX_PROVIDER_ORIGINS, MAX_RP_ID_BYTES, MAX_SECRET_BYTES,
+    MAX_TITLE_BYTES, MAX_URL_BYTES, MAX_USERNAME_BYTES, MAX_USER_HANDLE_BYTES, MIN_PASSWORD_LENGTH,
+    PRF_OUTPUT_BYTES, PROTOCOL_VERSION,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -140,6 +141,11 @@ pub enum Request {
         top_url: Option<String>,
         rp_id: String,
         challenge: String,
+        /// The site's `prf` input for this credential (its
+        /// `evalByCredential` entry, else `eval`). Omitted when the site
+        /// sent none, so an older desktop still reads the request.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        prf: Option<PrfValues>,
     },
     /// Before showing the save card: excluded? which logins can hold it?
     CheckPasskeyCreate {
@@ -165,6 +171,14 @@ pub enum Request {
         item_id: Option<Uuid>,
         /// mediation: "conditional" (the site's automatic upgrade).
         conditional: bool,
+        /// The site's `pubKeyCredParams` algorithms, in its order. Omitted
+        /// (ES256) when ES256 is the first one HavenKeys supports, so an
+        /// older desktop still reads the request.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        algorithms: Vec<i64>,
+        /// The site asked for the `prf` extension. Omitted otherwise.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        prf: Option<PrfCreateInput>,
     },
     /// Does HavenKeys hold a passkey `url` may use? A yes/no only.
     PasskeyStatus {
@@ -555,6 +569,85 @@ fn rp_ok(s: &str) -> bool {
     text_ok(s, MAX_RP_ID_BYTES)
 }
 
+/// A site's PRF inputs (`eval`, or one `evalByCredential` entry): unpadded
+/// base64url, as the site sent them; the core hashes them (WebAuthn L3
+/// §10.1.4). Not secret, but kept out of `Debug`.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PrfValues {
+    pub first: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub second: Option<String>,
+}
+
+impl PrfValues {
+    fn is_valid(&self) -> bool {
+        let salt = |s: &str| b64url_ok(s, 0, MAX_PRF_SALT_BYTES);
+        salt(&self.first) && self.second.as_deref().is_none_or(salt)
+    }
+}
+
+impl fmt::Debug for PrfValues {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("PrfValues(..)")
+    }
+}
+
+/// `prf` in a `passkey_create`: give the passkey a PRF secret, and
+/// evaluate it at once for `eval` (`evalByCredential` cannot name a
+/// credential that does not exist yet).
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PrfCreateInput {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub eval: Option<PrfValues>,
+}
+
+impl fmt::Debug for PrfCreateInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("PrfCreateInput(..)")
+    }
+}
+
+/// PRF outputs, unpadded base64url of 32 bytes each. Secrets: a site
+/// derives encryption keys from them. Zeroized on drop, never printed.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PrfResults {
+    pub first: WireSecret,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub second: Option<WireSecret>,
+}
+
+impl PrfResults {
+    fn is_valid(&self) -> bool {
+        let out = |s: &WireSecret| b64url_ok(s.expose(), PRF_OUTPUT_BYTES, PRF_OUTPUT_BYTES);
+        out(&self.first) && self.second.as_ref().is_none_or(out)
+    }
+}
+
+impl fmt::Debug for PrfResults {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("PrfResults(<redacted>)")
+    }
+}
+
+/// The `prf` output of a creation: whether the passkey has a PRF secret,
+/// and the outputs for `eval` if it was given.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PrfCreateOutput {
+    pub enabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub results: Option<PrfResults>,
+}
+
+impl fmt::Debug for PrfCreateOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("PrfCreateOutput(..)")
+    }
+}
+
 fn name_ok(s: &str) -> bool {
     s.len() <= MAX_USERNAME_BYTES
 }
@@ -684,11 +777,13 @@ impl Request {
                 credential_id,
                 rp_id,
                 challenge,
+                prf,
                 ..
             } => {
                 rp_ok(rp_id)
                     && credential_ok(credential_id)
                     && b64url_ok(challenge, 1, MAX_CHALLENGE_BYTES)
+                    && prf.as_ref().is_none_or(PrfValues::is_valid)
             }
             Request::CheckPasskeyCreate {
                 rp_id,
@@ -702,6 +797,8 @@ impl Request {
                 user_handle,
                 user_name,
                 display_name,
+                algorithms,
+                prf,
                 ..
             } => {
                 rp_ok(rp_id)
@@ -709,6 +806,10 @@ impl Request {
                     && b64url_ok(user_handle, 1, MAX_USER_HANDLE_BYTES)
                     && name_ok(user_name)
                     && display_name.as_deref().is_none_or(name_ok)
+                    && algorithms.len() <= MAX_ALGORITHMS
+                    && prf
+                        .as_ref()
+                        .is_none_or(|p| p.eval.as_ref().is_none_or(PrfValues::is_valid))
             }
             Request::FillIdentity { roles, .. } => {
                 !roles.is_empty() && roles.len() <= MAX_IDENTITY_ROLES && all_unique(roles)
@@ -892,9 +993,18 @@ impl Response {
             Some(ResultBody::PasskeyCreate {
                 credential_id,
                 public_key_algorithm,
+                prf,
                 ..
-            }) => credential_ok(credential_id) && *public_key_algorithm == COSE_ES256,
-            Some(ResultBody::PasskeyGet { credential_id, .. }) => credential_ok(credential_id),
+            }) => {
+                credential_ok(credential_id)
+                    && COSE_ALGORITHMS.contains(public_key_algorithm)
+                    && prf.as_ref().is_none_or(|p| {
+                        p.results.as_ref().is_none_or(|r| p.enabled && r.is_valid())
+                    })
+            }
+            Some(ResultBody::PasskeyGet {
+                credential_id, prf, ..
+            }) => credential_ok(credential_id) && prf.as_deref().is_none_or(PrfResults::is_valid),
             Some(ResultBody::StartSso {
                 provider_origins, ..
             }) => {
@@ -1040,6 +1150,10 @@ pub enum ResultBody {
         client_data_json: String,
         signature: String,
         user_handle: String,
+        /// PRF outputs, only when the request carried `prf` and the passkey
+        /// has a PRF secret.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        prf: Option<Box<PrfResults>>,
     },
     CheckPasskeyCreate {
         excluded: bool,
@@ -1053,7 +1167,11 @@ pub enum ResultBody {
         authenticator_data: String,
         /// SPKI DER, base64url.
         public_key: String,
+        /// COSE: -7 ES256, -9 ESP256, -8 EdDSA or -19 Ed25519.
         public_key_algorithm: i64,
+        /// Only when the request carried `prf`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        prf: Option<Box<PrfCreateOutput>>,
     },
     PasskeyStatus {
         has_passkey: bool,

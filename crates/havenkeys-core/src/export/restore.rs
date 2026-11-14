@@ -17,8 +17,8 @@ use crate::model::{
     SecretUpdate, MAX_APP_BINDINGS, MAX_PASSWORD_HISTORY,
 };
 use crate::passkey::{
-    clean_site_name, normalize_rp_id, Passkey, CREDENTIAL_ID_LEN, MAX_PASSKEYS_PER_LOGIN,
-    MAX_USER_HANDLE_BYTES,
+    clean_site_name, normalize_rp_id, KeyMaterial, Passkey, CREDENTIAL_ID_LEN,
+    MAX_PASSKEYS_PER_LOGIN, MAX_USER_HANDLE_BYTES,
 };
 use crate::vault::{build_item, StagedImport, VaultService};
 use std::collections::{HashMap, HashSet};
@@ -69,8 +69,8 @@ pub(crate) fn check_passkeys(keys: &[Passkey]) -> Result<()> {
         return Err(BAD);
     }
     for k in keys {
-        let key_ok = k.private_key.expose().len() == 32
-            && p256::ecdsa::SigningKey::from_slice(k.private_key.expose()).is_ok();
+        // A P-256 scalar or a well-formed envelope (Ed25519, PRF secret).
+        let key_ok = KeyMaterial::decode(&k.private_key).is_ok();
         if k.credential_id.0.len() != CREDENTIAL_ID_LEN
             || k.user_handle.0.is_empty()
             || k.user_handle.0.len() > MAX_USER_HANDLE_BYTES
@@ -430,6 +430,14 @@ mod tests {
         assert!(check_passkeys(&[passkey("github.com", good_key.clone())]).is_ok());
         assert!(check_passkeys(&[passkey("github.com", vec![0; 32])]).is_err()); // zero scalar
         assert!(check_passkeys(&[passkey("github.com", vec![1; 31])]).is_err()); // short
+                                                                                 // Ed25519 and PRF envelopes (spec 2026-11-14-passkey-parity §4).
+        let ed = [vec![1, 2, 0], vec![7; 32]].concat();
+        assert!(check_passkeys(&[passkey("github.com", ed.clone())]).is_ok());
+        let with_prf = [vec![1, 1, 1], good_key.clone(), vec![9; 32]].concat();
+        assert!(check_passkeys(&[passkey("github.com", with_prf)]).is_ok());
+        assert!(check_passkeys(&[passkey("github.com", ed[..34].to_vec())]).is_err());
+        let unknown_kind = [vec![1, 9, 0], vec![7; 32]].concat();
+        assert!(check_passkeys(&[passkey("github.com", unknown_kind)]).is_err());
         assert!(check_passkeys(&[passkey("GitHub.com.", good_key.clone())]).is_err()); // not normalized
         let too_many: Vec<_> = (0..=MAX_PASSKEYS_PER_LOGIN)
             .map(|_| passkey("github.com", good_key.clone()))

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { b64urlLength, envelope, MAX_LOOKALIKE_BYTES, MAX_MATCHES, parseIncoming, providersForOrigin } from "./index";
+import { b64urlLength, chooseAlgorithm, envelope, MAX_ALGORITHMS, MAX_LOOKALIKE_BYTES, MAX_MATCHES, parseIncoming, providersForOrigin } from "./index";
 
 const ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
 const match = { id: ID, title: "GitHub", username: "octo", hasTotp: true, strength: "same_host", provider: null, tags: [] };
@@ -160,6 +160,60 @@ describe("passkey results", () => {
       { v: 1, id: 1, result: { type: "passkey_create", credentialId: CRED, attestationObject: "oA", clientDataJson: "e30", authenticatorData: "AA", publicKey: "MA", publicKeyAlgorithm: -257 } },
     ];
     for (const m of bad) expect(parseIncoming(m), JSON.stringify(m)).toBeNull();
+  });
+
+  // 32 bytes of base64url: a PRF output.
+  const OUT = "A".repeat(43);
+  const create = { type: "passkey_create", credentialId: CRED, attestationObject: "oA", clientDataJson: "e30", authenticatorData: "AA", publicKey: "MA" };
+  const get = { type: "passkey_get", credentialId: CRED, authenticatorData: "AA", clientDataJson: "e30", signature: "MEU", userHandle: "AQ" };
+
+  it("accepts every algorithm HavenKeys creates, and nothing else", () => {
+    for (const alg of [-7, -9, -8, -19]) {
+      expect(parseIncoming({ v: 1, id: 1, result: { ...create, publicKeyAlgorithm: alg } }), String(alg)).not.toBeNull();
+    }
+    for (const alg of [-257, -48, -49, -50, 0, -7.5, "-7"]) {
+      expect(parseIncoming({ v: 1, id: 1, result: { ...create, publicKeyAlgorithm: alg } }), String(alg)).toBeNull();
+    }
+  });
+
+  it("parses PRF outputs exactly", () => {
+    const ok = [
+      { ...create, publicKeyAlgorithm: -7, prf: { enabled: true } },
+      { ...create, publicKeyAlgorithm: -7, prf: { enabled: false } },
+      { ...create, publicKeyAlgorithm: -8, prf: { enabled: true, results: { first: OUT } } },
+      { ...create, publicKeyAlgorithm: -8, prf: { enabled: true, results: { first: OUT, second: OUT } } },
+      { ...get, prf: { first: OUT } },
+      { ...get, prf: { first: OUT, second: OUT } },
+    ];
+    for (const r of ok) expect(parseIncoming({ v: 1, id: 1, result: r }), JSON.stringify(r)).not.toBeNull();
+    const m = parseIncoming({ v: 1, id: 1, result: { ...get, prf: { first: OUT } } });
+    expect(m && "result" in m && m.result.type === "passkey_get" ? m.result.prf : null).toEqual({ first: OUT });
+    const bad = [
+      // results without enabled, or with enabled false
+      { ...create, publicKeyAlgorithm: -7, prf: { results: { first: OUT } } },
+      { ...create, publicKeyAlgorithm: -7, prf: { enabled: false, results: { first: OUT } } },
+      { ...create, publicKeyAlgorithm: -7, prf: { enabled: "yes" } },
+      { ...create, publicKeyAlgorithm: -7, prf: { enabled: true, results: {} } },
+      { ...create, publicKeyAlgorithm: -7, prf: { enabled: true, extra: 1 } },
+      // outputs are exactly 32 bytes
+      { ...get, prf: { first: "AA" } },
+      { ...get, prf: { first: OUT + "AA" } },
+      { ...get, prf: { first: OUT, second: "a+b" } },
+      { ...get, prf: { first: OUT, third: OUT } },
+      { ...get, prf: null },
+      { ...get, prf: {} },
+    ];
+    for (const r of bad) expect(parseIncoming({ v: 1, id: 1, result: r }), JSON.stringify(r)).toBeNull();
+  });
+
+  it("chooses the first supported algorithm in the site's order", () => {
+    expect(chooseAlgorithm([])).toBe(-7);
+    expect(chooseAlgorithm([-7, -8])).toBe(-7);
+    expect(chooseAlgorithm([-8, -7])).toBe(-8);
+    expect(chooseAlgorithm([-257, -19])).toBe(-19);
+    expect(chooseAlgorithm([-9])).toBe(-9);
+    expect(chooseAlgorithm([-257, -48])).toBeNull();
+    expect(chooseAlgorithm([...Array<number>(MAX_ALGORITHMS).fill(-257), -7])).toBeNull();
   });
 
   it("measures base64url", () => {

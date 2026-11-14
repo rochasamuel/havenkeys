@@ -7,7 +7,8 @@
 
 use super::vault::{check_challenge, new_login_for_passkey, same_user_first, Homes, NewPasskey};
 use super::{
-    authorize_rp_for_app, Assertion, CreateCheck, PasskeyMatch, RpContext, StagedPasskey, Upgrade,
+    authorize_rp_for_app, Assertion, CreateCheck, PasskeyMatch, PrfCreate, PrfInput, RpContext,
+    StagedPasskey, Upgrade,
 };
 use crate::app_target::AppIdentity;
 use crate::asset_links::AssetLinksCache;
@@ -35,6 +36,10 @@ pub struct AppPasskeyCreate<'a> {
     pub user_handle: &'a [u8],
     pub user_name: &'a str,
     pub display_name: Option<&'a str>,
+    /// The app's `pubKeyCredParams` algorithms, in its order.
+    pub algorithms: &'a [i64],
+    /// The app asked for the `prf` extension.
+    pub prf: Option<PrfCreate<'a>>,
     /// Attach to this login (it must be matched to the app); `None` makes a
     /// new login.
     pub item_id: Option<Uuid>,
@@ -63,6 +68,7 @@ impl VaultService {
         self.passkeys_for(&ctx, allow)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn passkey_assert_for_app(
         &self,
         item_id: &Uuid,
@@ -70,12 +76,13 @@ impl VaultService {
         rp_id: &str,
         app: &AppIdentity,
         challenge: &[u8],
+        prf: Option<&PrfInput<'_>>,
         now_ms: i64,
     ) -> Result<Assertion> {
         self.session()?;
         check_challenge(challenge)?;
         let ctx = self.authorize_app_rp(rp_id, app, now_ms)?;
-        self.assert_for(item_id, credential_id, &ctx, challenge, None)
+        self.assert_for(item_id, credential_id, &ctx, challenge, None, prf)
     }
 
     /// Before asking the user: is one of the app's `excludeCredentials`
@@ -118,6 +125,8 @@ impl VaultService {
                 user_handle: req.user_handle,
                 user_name: req.user_name,
                 display_name: req.display_name,
+                algorithms: req.algorithms,
+                prf: req.prf,
             },
             Homes {
                 chosen: req.item_id,

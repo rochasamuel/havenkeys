@@ -318,6 +318,8 @@ fn passkey_req(handle: &[u8]) -> PasskeyCreate<'_> {
         user_handle: handle,
         user_name: "octo",
         display_name: None,
+        algorithms: &[],
+        prf: None,
         item_id: None,
         conditional: false,
     }
@@ -367,7 +369,7 @@ fn a_backup_restores_into_a_new_account_with_working_passkeys() {
         (3, 2, 1, 0)
     );
     assert!(b.get_item(&pk_item).unwrap().has_passkey);
-    b.passkey_assert(&pk_item, &cred, "github.com", GH, None, &[3; 32])
+    b.passkey_assert(&pk_item, &cred, "github.com", GH, None, &[3; 32], None)
         .unwrap();
 }
 
@@ -946,7 +948,7 @@ fn a_full_vault_round_trips_through_a_backup() {
     assert_eq!(got.cpf.as_ref().unwrap().expose(), "123.456.789-00");
 
     // The passkey still signs.
-    b.passkey_assert(&pk_item, &cred, "github.com", GH, None, &[3; 32])
+    b.passkey_assert(&pk_item, &cred, "github.com", GH, None, &[3; 32], None)
         .unwrap();
 }
 

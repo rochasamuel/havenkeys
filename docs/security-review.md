@@ -879,10 +879,57 @@ versions. All of them are listed below.
 | PK25 | Info | Extension (silent-save abort) | If the page aborts, navigates away, or otherwise cancels its request while an `auto` (silent) save is already in flight, the passkey the desktop already created and committed **stays in the vault**, even though the site never receives it and no "saved" notice appears | Accepted, same class as PK13 (orphan passkey after a late abort), but here it can happen with no card ever shown. Visible and deletable in that login's Passkeys list in the desktop app (`autofill.md`, Limitations) |
 | PK26 | Info | Extension (`passkey_status`) | The field menu's "you have a passkey for `<site>`" hint asks a Lookup-class `passkey_status` request once per menu open; the yes/no answer itself never reaches the page, but a page can already see the menu's iframe appear and estimate its height, which changes by one row depending on the answer | Accepted, the same residual signal `threat-model.md` and `autofill.md` already document for menu presence generally; `passkey_status` adds no item ID, credential ID, or account data to what a page can observe |
 | PK27 | Info | Extension (Passkeys Directory data) | The "`<name>` supports passkeys" hint's site names and help links are third-party data from the 2factorauth Passkeys Directory (`apps/extension/src/data/passkey-sites.json`), matched to a page by plain host-suffix comparison with no Public Suffix List | Accepted: this is a UI hint only, never an authorization decision — a wrong match can only show or hide a static help link, and `github.com.evil.com` still never matches `github.com`. The data is a build-time snapshot committed to the repo and reviewed like code (`scripts/update-passkey-directory.mjs`, run by hand, never fetched at runtime); the site name is rendered with `textContent` only, and only `https:` help links are kept, opened only after a trusted click via `chrome.tabs.create` |
+| PK28 | Medium | Core (Ed25519 keys, sync) | Passkeys sync to devices running older versions, which read `private_key` as a P-256 scalar and drop unknown `Passkey` fields on every edit. A new `alg` field would be dropped and the Ed25519 seed then used as a P-256 key | **Designed out** (2026-11-14): key type and PRF secret live inside `private_key` as a versioned envelope (35/67 bytes) that older versions keep byte for byte and refuse to sign with; ordinary ES256 passkeys keep the 32-byte form. Residual: Ed25519 and PRF passkeys don't work on a device until it is updated |
+| PK29 | Medium | Core / protocol / extension (PRF) | The PRF extension adds a per-credential secret whose loss would lock the user out of data a site encrypted with it, and returns secret outputs to the page | Accepted, documented: the secret is sealed with the private key in the same envelope (PK28), so no client drops it; outputs are `Zeroizing` in Rust and `WireSecret` on the wire, never logged; in the extension they are JavaScript strings/`ArrayBuffer`s that cannot be wiped and live only for the message to the page |
+| PK30 | Low | Extension (PRF inputs from the page) | A hostile page controls the PRF salts and `evalByCredential` map it sends | Accepted: salts are bounded (1024 bytes), the map to our allowed 16-byte IDs (64 entries), oversized messages go to the browser; outputs come only for a credential the user picked for the page's own rpId, and reveal nothing about the secret, the private key, or any other credential |
 | AS1 | Medium | Extension / core (automatic sign-in) | For up to 2 minutes after a pick, a page on the same origin receives the password and the current TOTP code without further clicks, relaxing rule #6 for the rest of that one sign-in | Accepted, documented: starts only from a trusted pick; bound to tab, frame and exact origin; forward-only single-use steps; every value re-requested from Rust with the origin check; global and per-login off switches (`auto_sign_in`). Script on that origin could already obtain the password after the single manual pick; the new part is that the OTP no longer needs its own click. Not a boundary against a compromised extension, which can call fill_item / get_totp directly |
 | AS2 | Low | Extension (automatic sign-in) | `cs_run_step` messages carry no run identity, so in a narrow race a leftover step confirmation from a replaced run in the same tab/frame/origin can advance the newly picked login's run one step early | Accepted: bounded because every value is re-requested from Rust for the frame's URL, and the login was just picked by the user on that origin |
 
 ## Details
+
+### PK28. Ed25519 passkeys and older clients (Medium, designed out)
+**Component:** `passkey/key.rs`, `Passkey.private_key`.
+**Attack scenario (accident, not attacker):** an Ed25519 passkey syncs to a
+device running 0.35. Its `Passkey` has no catch-all for unknown fields, so
+an `alg` field would vanish on the first edit there; the 32-byte Ed25519
+seed left in `private_key` is almost always a valid P-256 scalar, and the
+passkey would then sign with a different key than the site registered.
+**Mitigation:** no new field carries key material. `private_key` holds
+either the legacy 32-byte P-256 scalar or a versioned envelope (kind, flags,
+key, optional PRF secret). Older versions' `p256::SecretKey::from_slice`
+accepts only 24–32 bytes, so they report that passkey as damaged
+(`Corrupted`), never sign with it, still open the login, and write the bytes
+back unchanged. Tested against the 0.35 struct shape
+(`passkey::tests::older_versions_load_new_passkeys_and_cannot_misuse_them`).
+**Remaining:** the passkey fails on that device until it is updated; an
+older version refuses to restore a backup holding one (fails closed).
+
+### PK29. PRF secrets and outputs (Medium, accepted)
+**Component:** core (`key.rs`), protocol (`PrfResults`), extension (page,
+bridge, background).
+**Data-loss risk:** a site may encrypt user data under a PRF output; losing
+the per-credential secret would make that data unrecoverable. The secret is
+stored in the PK28 envelope, so every version, including older ones, keeps
+it through edits; it is created only when the site asks for `prf` at
+creation, so ordinary ES256 passkeys keep the format older versions can use.
+Deleting the passkey or the site re-registering the account (which replaces
+the passkey, PK5) removes it, as with any authenticator.
+**Disclosure:** outputs are secrets. Rust holds them in
+`Zeroizing<[u8; 32]>`; the protocol carries them in `WireSecret` (zeroized on
+drop, redacted `Debug`); nothing logs them. In the extension they pass
+through the bridge as strings to the page that asked; JavaScript cannot wipe
+them. **What a hostile page can learn:** for a credential the user picked
+for the page's own rpId, `HMAC(secret, H(salt))` for salts of its choice,
+which is the feature. It cannot learn the secret, the private key, another
+credential's outputs, or another site's (the core checks the rpId as for a
+signature). A compromised extension could obtain outputs for any passkey it
+could already get a signature from.
+
+### PK30. Page-controlled PRF inputs (Low, accepted)
+Salts over 1024 bytes, more than 64 `evalByCredential` entries, keys that are
+not base64url, a map without `allowCredentials`, or a page message over the
+bridge's 16 KiB limit go to the browser untouched. Only the chosen
+credential's input crosses to the desktop. The core re-checks salt sizes.
 
 ### PK1. UV from an unlocked vault (Medium, accepted)
 **Attack scenario:** someone sits at the user's unlocked, unattended

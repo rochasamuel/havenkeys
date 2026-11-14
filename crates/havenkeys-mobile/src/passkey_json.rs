@@ -7,12 +7,16 @@
 use crate::error::{MobileError, MobileResult};
 use data_encoding::BASE64URL_NOPAD;
 use havenkeys_core::passkey::{
-    encode_b64url, Assertion, Registration, COSE_ALG_ES256, MAX_CREDENTIAL_LIST,
+    choose_algorithm, encode_b64url, Assertion, Registration, MAX_ALGORITHMS, MAX_CREDENTIAL_LIST,
 };
 use serde::Deserialize;
 
 pub(crate) const MAX_REQUEST_JSON_BYTES: usize = 64 * 1024;
 const PUBLIC_KEY: &str = "public-key";
+/// What synced platform passkeys report (Google Password Manager, iCloud
+/// Keychain): usable on this device and, through the phone, on another
+/// one. The extension reports the same (spec 2026-11-14-passkey-parity §3).
+const TRANSPORTS: [&str; 2] = ["hybrid", "internal"];
 
 pub(crate) struct CreationOptions {
     pub rp_id: Option<String>,
@@ -21,6 +25,9 @@ pub(crate) struct CreationOptions {
     pub display_name: Option<String>,
     pub challenge: Vec<u8>,
     pub exclude: Vec<Vec<u8>>,
+    /// The site's `public-key` algorithms in its order (at most
+    /// `MAX_ALGORITHMS`); empty means WebAuthn's default, ES256.
+    pub algorithms: Vec<i64>,
 }
 
 pub(crate) struct RequestOptions {
@@ -121,12 +128,17 @@ fn credential_ids(list: &[RawDescriptor]) -> MobileResult<Vec<Vec<u8>>> {
 
 pub(crate) fn parse_creation(json: &str) -> MobileResult<CreationOptions> {
     let raw: RawCreation = from_json(json)?;
-    let es256 = raw.pub_key_cred_params.is_empty()
-        || raw
-            .pub_key_cred_params
-            .iter()
-            .any(|p| p.kind == PUBLIC_KEY && p.alg == COSE_ALG_ES256);
-    if !es256 {
+    let algorithms: Vec<i64> = raw
+        .pub_key_cred_params
+        .iter()
+        .filter(|p| p.kind == PUBLIC_KEY)
+        .map(|p| p.alg)
+        .take(MAX_ALGORITHMS)
+        .collect();
+    // A list with nothing HavenKeys supports, or no `public-key` entry at
+    // all (an empty list is WebAuthn's default, ES256).
+    let listed = !raw.pub_key_cred_params.is_empty();
+    if (listed && algorithms.is_empty()) || choose_algorithm(&algorithms).is_none() {
         return Err(unsupported());
     }
     Ok(CreationOptions {
@@ -136,6 +148,7 @@ pub(crate) fn parse_creation(json: &str) -> MobileResult<CreationOptions> {
         display_name: raw.user.display_name,
         challenge: bytes(&raw.challenge)?,
         exclude: credential_ids(&raw.exclude_credentials)?,
+        algorithms,
     })
 }
 
@@ -160,8 +173,8 @@ pub(crate) fn registration_json(r: &Registration) -> String {
             "attestationObject": encode_b64url(&r.attestation_object),
             "authenticatorData": encode_b64url(&r.authenticator_data),
             "publicKey": encode_b64url(&r.public_key),
-            "publicKeyAlgorithm": COSE_ALG_ES256,
-            "transports": ["internal"],
+            "publicKeyAlgorithm": r.public_key_algorithm,
+            "transports": TRANSPORTS,
         },
         "clientExtensionResults": { "credProps": { "rk": true } },
     })
@@ -219,7 +232,7 @@ mod tests {
     }
 
     #[test]
-    fn es256_is_required_when_algorithms_are_listed() {
+    fn a_supported_algorithm_is_required_when_algorithms_are_listed() {
         let rsa_only = CREATE.replace(r#", {"type": "public-key", "alg": -7}"#, "");
         assert_eq!(
             code(parse_creation(&rsa_only).err().unwrap()),
@@ -227,7 +240,27 @@ mod tests {
         );
         // No list means WebAuthn's defaults, which include ES256.
         let none = CREATE.replace(r#""pubKeyCredParams": [{"type": "public-key", "alg": -257}, {"type": "public-key", "alg": -7}],"#, "");
-        assert!(parse_creation(&none).is_ok());
+        assert!(parse_creation(&none).unwrap().algorithms.is_empty());
+        // Ed25519 and ESP256 are supported; the site's order is kept.
+        let ed = CREATE.replace(r#""alg": -257"#, r#""alg": -8"#);
+        assert_eq!(parse_creation(&ed).unwrap().algorithms, vec![-8, -7]);
+        let ml_dsa = CREATE.replace(
+            r#""alg": -257}, {"type": "public-key", "alg": -7"#,
+            r#""alg": -49"#,
+        );
+        assert_eq!(
+            code(parse_creation(&ml_dsa).err().unwrap()),
+            "unsupported_algorithm"
+        );
+        // Entries of another type are not algorithms.
+        let other = CREATE.replace(
+            r#"{"type": "public-key", "alg": -257}, {"type": "public-key", "alg": -7}"#,
+            r#"{"type": "other", "alg": -7}"#,
+        );
+        assert_eq!(
+            code(parse_creation(&other).err().unwrap()),
+            "unsupported_algorithm"
+        );
     }
 
     #[test]
@@ -313,6 +346,8 @@ mod tests {
             authenticator_data: vec![2],
             attestation_object: vec![3],
             public_key: vec![4],
+            public_key_algorithm: -8,
+            prf: None,
         };
         let v: serde_json::Value = serde_json::from_str(&registration_json(&reg)).unwrap();
         assert_eq!(v["id"], "AQEBAQEBAQEBAQEBAQEBAQ");
@@ -320,7 +355,11 @@ mod tests {
         assert_eq!(v["type"], "public-key");
         assert_eq!(v["response"]["clientDataJSON"], "e30");
         assert_eq!(v["response"]["attestationObject"], "Aw");
-        assert_eq!(v["response"]["publicKeyAlgorithm"], -7);
+        assert_eq!(v["response"]["publicKeyAlgorithm"], -8);
+        assert_eq!(
+            v["response"]["transports"],
+            serde_json::json!(["hybrid", "internal"])
+        );
         assert_eq!(v["clientExtensionResults"]["credProps"]["rk"], true);
 
         let a = Assertion {
@@ -329,6 +368,7 @@ mod tests {
             authenticator_data: vec![2],
             signature: vec![5],
             user_handle: vec![6],
+            prf: None,
         };
         let v: serde_json::Value = serde_json::from_str(&assertion_json(&a)).unwrap();
         assert_eq!(v["response"]["signature"], "BQ");

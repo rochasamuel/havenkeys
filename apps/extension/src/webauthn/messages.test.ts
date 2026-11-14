@@ -31,8 +31,9 @@ const create: CreateOptions = {
   excludeCredentials: [CRED],
   timeoutMs: 60_000,
   conditional: false,
+  prf: null,
 };
-const get: GetOptions = { rpId: null, challenge: "BwcHBwcHBwcHBwcHBwcHBw", allowCredentials: [], conditional: false, timeoutMs: null };
+const get: GetOptions = { rpId: null, challenge: "BwcHBwcHBwcHBwcHBwcHBw", allowCredentials: [], conditional: false, timeoutMs: null, prf: null };
 
 describe("base64url", () => {
   it("round-trips every length", () => {

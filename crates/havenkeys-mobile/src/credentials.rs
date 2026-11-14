@@ -233,6 +233,8 @@ impl MobileVault {
             Caller::Browser { page_url } => {
                 let vault = self.client.vault()?;
                 match client_data_hash.as_deref() {
+                    // PRF on Android is a follow-up (spec
+                    // 2026-11-14-passkey-parity §8): no outputs here.
                     Some(h) => vault.passkey_assert_with_hash(
                         &item,
                         &credential_id,
@@ -240,6 +242,7 @@ impl MobileVault {
                         page_url,
                         &req.challenge,
                         &hash_32(h)?,
+                        None,
                     )?,
                     None => vault.passkey_assert(
                         &item,
@@ -248,6 +251,7 @@ impl MobileVault {
                         page_url,
                         None,
                         &req.challenge,
+                        None,
                     )?,
                 }
             }
@@ -259,6 +263,7 @@ impl MobileVault {
                     &rp,
                     app,
                     &req.challenge,
+                    None,
                     havenkeys_client::now_ms(),
                 )?
             }
@@ -327,6 +332,8 @@ impl MobileVault {
                     user_handle: &opts.user_handle,
                     user_name: &opts.user_name,
                     display_name: opts.display_name.as_deref(),
+                    algorithms: &opts.algorithms,
+                    prf: None,
                     item_id: item,
                     conditional: false,
                 },
@@ -343,6 +350,8 @@ impl MobileVault {
                         user_handle: &opts.user_handle,
                         user_name: &opts.user_name,
                         display_name: opts.display_name.as_deref(),
+                        algorithms: &opts.algorithms,
+                        prf: None,
                         item_id: item,
                     },
                     now,

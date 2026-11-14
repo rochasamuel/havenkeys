@@ -19,8 +19,8 @@ const acks: string[] = [];
 
 const ID = "0123456789abcdef0123456789abcdef";
 const TOKEN = "a".repeat(32);
-const get = { rpId: null, challenge: "AQ", allowCredentials: [], conditional: false, timeoutMs: 1000 };
-const create = { rpId: null, challenge: "AQ", userId: "AQ", userName: "octo", userDisplayName: null, algs: [-7], excludeCredentials: [], timeoutMs: 1000, conditional: false };
+const get = { rpId: null, challenge: "AQ", allowCredentials: [], conditional: false, timeoutMs: 1000, prf: null };
+const create = { rpId: null, challenge: "AQ", userId: "AQ", userName: "octo", userDisplayName: null, algs: [-7], excludeCredentials: [], timeoutMs: 1000, conditional: false, prf: null };
 const savedCredential = { type: "create", credentialId: "AQEBAQEBAQEBAQEBAQEBAQ", clientDataJson: "e30", attestationObject: "oA", authenticatorData: "AA", publicKey: "MA", publicKeyAlgorithm: -7 };
 
 /** A 32-hex-char id/token distinct from the fixtures above, so tests never share pending state. */
@@ -354,5 +354,59 @@ describe("automatic passkey upgrade", () => {
     await flush();
     expect(frameWith(hex(903))).toBeNull();
     expect(responses.some((r) => r.id === id)).toBe(false);
+  });
+});
+
+describe("PRF and algorithms (spec 2026-11-14-passkey-parity)", () => {
+  const OUT = "A".repeat(43);
+  const CRED = "AQEBAQEBAQEBAQEBAQEBAQ";
+  const asserted = { type: "get", credentialId: CRED, clientDataJson: "e30", authenticatorData: "AA", signature: "MEU", userHandle: "AQ" };
+
+  it("forwards PRF inputs to the background exactly", async () => {
+    reply = () => ({ ok: true, token: hex(950), ui: "none" });
+    const prf = { eval: { first: "AQ" }, byCredential: [{ credentialId: CRED, values: { first: "Ag", second: "" } }] };
+    request({ kind: "get", id: hex(951), options: { ...get, conditional: true, allowCredentials: [CRED], prf } });
+    request({ kind: "create", id: hex(952), options: { ...create, algs: [-8, -7], prf: { eval: { first: "AQID" } } } });
+    await flush();
+    expect(sent).toContainEqual({ type: "wa_get", options: { ...get, conditional: true, allowCredentials: [CRED], prf } });
+    expect(sent).toContainEqual({ type: "wa_create", options: { ...create, algs: [-8, -7], prf: { eval: { first: "AQID" } } } });
+    request({ kind: "cancel", id: hex(951) });
+    request({ kind: "cancel", id: hex(952) });
+  });
+
+  it("drops page requests with malformed PRF inputs", async () => {
+    const bad = [
+      { ...get, prf: { eval: { first: "a+b" }, byCredential: [] } },
+      { ...get, prf: { eval: null, byCredential: [{ credentialId: CRED, values: { first: "AQ" } }] } }, // not allowed
+      { ...get, allowCredentials: [CRED], prf: { eval: null, byCredential: [{ credentialId: CRED, values: { first: "A".repeat(1368) } }] } },
+      { ...get, prf: { eval: null } },
+      { ...get, prf: undefined },
+    ];
+    for (const options of bad) request({ kind: "get", id: hex(960), options });
+    request({ kind: "create", id: hex(961), options: { ...create, prf: { eval: { first: "AQ", third: "AQ" } } } });
+    request({ kind: "create", id: hex(962), options: { ...create, prf: {} } });
+    await flush();
+    expect(sent).toEqual([]);
+  });
+
+  it("relays PRF outputs and Ed25519 credentials, and refuses malformed ones", async () => {
+    reply = () => ({ ok: true, token: hex(970), ui: "chooser" });
+    request({ kind: "get", id: hex(971), options: { ...get, prf: { eval: { first: "AQ" }, byCredential: [] } } });
+    await flush();
+    onMessage?.({ type: "bg_wa_result", token: hex(970), outcome: { outcome: "credential", credential: { ...asserted, prf: { results: { first: "AA" } } } } }, { id: "ext" });
+    expect(responses.some((r) => r.id === hex(971))).toBe(false);
+    onMessage?.({ type: "bg_wa_result", token: hex(970), outcome: { outcome: "credential", credential: { ...asserted, prf: { results: { first: OUT } } } } }, { id: "ext" });
+    expect(responses.find((r) => r.id === hex(971))).toEqual({ id: hex(971), outcome: "credential", credential: { ...asserted, prf: { results: { first: OUT } } } });
+
+    const ed = { ...savedCredential, publicKeyAlgorithm: -19, prf: { enabled: true, results: { first: OUT, second: OUT } } };
+    reply = (m) => ((m as { type: string }).type === "wa_create" ? { ok: true, token: hex(980), ui: "saved", credential: ed } : undefined);
+    request({ kind: "create", id: hex(981), options: { ...create, conditional: true, prf: { eval: null } } });
+    await flush();
+    expect(responses.find((r) => r.id === hex(981))).toEqual({ id: hex(981), outcome: "credential", credential: ed });
+    // An algorithm HavenKeys never creates is not relayed.
+    reply = (m) => ((m as { type: string }).type === "wa_create" ? { ok: true, token: hex(982), ui: "saved", credential: { ...savedCredential, publicKeyAlgorithm: -257 } } : undefined);
+    request({ kind: "create", id: hex(983), options: { ...create, conditional: true } });
+    await flush();
+    expect(responses.find((r) => r.id === hex(983))).toEqual({ id: hex(983), outcome: "fallback" });
   });
 });

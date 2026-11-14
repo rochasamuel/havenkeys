@@ -17,11 +17,17 @@ use std::fmt;
 
 mod app;
 pub(crate) mod cbor;
+mod key;
 mod rp;
 mod vault;
 mod webauthn;
 
 pub use app::{AppCreateQuery, AppPasskeyCreate};
+pub(crate) use key::KeyMaterial;
+pub use key::{
+    choose_algorithm, Algorithm, PrfInput, PrfOutput, COSE_ALG_ED25519, COSE_ALG_EDDSA,
+    COSE_ALG_ES256, COSE_ALG_ESP256, MAX_ALGORITHMS, MAX_PRF_SALT_BYTES, PRF_SECRET_LEN,
+};
 pub(crate) use rp::normalize_rp_id;
 pub use rp::{
     android_app_origin, app_rp_id, authorize_rp, authorize_rp_for_app, RpContext, MAX_RP_ID_BYTES,
@@ -31,7 +37,8 @@ pub use vault::{
 };
 pub(crate) use webauthn::{assert, register};
 pub use webauthn::{
-    authenticator_data, client_data_json, Assertion, Ceremony, NewUser, Registration,
+    authenticator_data, client_data_json, Assertion, Ceremony, NewUser, PrfCreate, PrfCreated,
+    Registration,
 };
 
 pub const MAX_PASSKEYS_PER_LOGIN: usize = 8;
@@ -41,8 +48,6 @@ pub const MAX_USER_HANDLE_BYTES: usize = 64;
 pub const MIN_CHALLENGE_BYTES: usize = 1;
 pub const MAX_CHALLENGE_BYTES: usize = 4096;
 pub const MAX_CREDENTIAL_LIST: usize = 64;
-/// COSE algorithm identifier for ES256 (ECDSA P-256 with SHA-256).
-pub const COSE_ALG_ES256: i64 = -7;
 
 /// Unpadded base64url.
 pub fn encode_b64url(bytes: &[u8]) -> String {
@@ -98,7 +103,13 @@ pub struct Passkey {
     pub user_name: String,
     #[serde(default)]
     pub display_name: Option<String>,
-    /// P-256 scalar, 32 bytes.
+    /// The key material, decoded only by `key::KeyMaterial`: a 32-byte
+    /// P-256 scalar (every passkey made before 2026-11-14, and ES256 ones
+    /// made without `prf`), or a versioned envelope holding the key type,
+    /// key and PRF secret that older versions refuse as damaged but keep
+    /// byte for byte (spec 2026-11-14-passkey-parity §4). No new field on
+    /// `Passkey` carries key material: older versions would drop it on an
+    /// edit.
     pub private_key: SecretBytes,
     /// Unix milliseconds.
     pub created_at: i64,
@@ -161,6 +172,91 @@ mod tests {
         let back: Passkey = serde_json::from_str(&json).unwrap();
         assert_eq!(back.credential_id, B64Url(vec![1; CREDENTIAL_ID_LEN]));
         assert_eq!(back.private_key.expose(), &[7; 32]);
+    }
+
+    /// `Passkey` exactly as HavenKeys 0.35 and earlier declare it: no
+    /// `deny_unknown_fields`, no catch-all for unknown fields, and
+    /// `private_key` read as a P-256 scalar.
+    #[derive(Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct OldPasskey {
+        credential_id: B64Url,
+        rp_id: String,
+        user_handle: B64Url,
+        user_name: String,
+        #[serde(default)]
+        display_name: Option<String>,
+        private_key: SecretBytes,
+        created_at: i64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        replaced_at: Option<i64>,
+    }
+
+    fn new_passkey(alg: Algorithm, prf: bool) -> Passkey {
+        let ctx = RpContext {
+            rp_id: "github.com".into(),
+            origin: "https://github.com".into(),
+            cross_origin: false,
+            top_origin: None,
+        };
+        let user = NewUser {
+            user_handle: &[1, 2, 3],
+            user_name: "octo".into(),
+            display_name: None,
+        };
+        let prf = prf.then_some(PrfCreate { eval: None });
+        register(&ctx, &[1; 32], user, 5, alg, prf).unwrap().0
+    }
+
+    #[test]
+    fn older_versions_load_new_passkeys_and_cannot_misuse_them() {
+        for (alg, prf) in [
+            (Algorithm::Ed25519, false),
+            (Algorithm::EdDsa, true),
+            (Algorithm::Es256, true),
+        ] {
+            let new = new_passkey(alg, prf);
+            let json = serde_json::to_string(&new).unwrap();
+            // The stored shape is unchanged: no new field for an older
+            // version to drop.
+            let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+            let mut keys: Vec<&str> = v.as_object().unwrap().keys().map(String::as_str).collect();
+            keys.sort_unstable();
+            assert_eq!(
+                keys,
+                [
+                    "createdAt",
+                    "credentialId",
+                    "displayName",
+                    "privateKey",
+                    "rpId",
+                    "userHandle",
+                    "userName"
+                ]
+            );
+            // An older version loads it (the login still opens)...
+            let old: OldPasskey = serde_json::from_str(&json).unwrap();
+            // ...and refuses to sign with it, as its `assert` does.
+            assert!(p256::ecdsa::SigningKey::from_slice(old.private_key.expose()).is_err());
+            // An edit there writes the passkey back byte for byte, so the
+            // key and the PRF secret survive and work here again.
+            let rewritten = serde_json::to_string(&old).unwrap();
+            let back: Passkey = serde_json::from_str(&rewritten).unwrap();
+            assert_eq!(back.private_key.expose(), new.private_key.expose());
+            let m = KeyMaterial::decode(&back.private_key).unwrap();
+            assert_eq!(m.has_prf(), prf);
+        }
+    }
+
+    #[test]
+    fn plain_es256_passkeys_keep_the_old_format() {
+        for alg in [Algorithm::Es256, Algorithm::Esp256] {
+            let new = new_passkey(alg, false);
+            let old: OldPasskey =
+                serde_json::from_str(&serde_json::to_string(&new).unwrap()).unwrap();
+            assert_eq!(old.private_key.expose().len(), 32);
+            assert!(p256::ecdsa::SigningKey::from_slice(old.private_key.expose()).is_ok());
+        }
     }
 
     #[test]

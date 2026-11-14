@@ -2034,6 +2034,97 @@ fn passkey_create_then_get_through_the_bridge() {
 }
 
 #[test]
+fn ed25519_and_prf_through_the_bridge() {
+    let f = online_fixture();
+    // "AQID" = [1, 2, 3]; "BAUG" = [4, 5, 6].
+    let created = call(
+        &f,
+        serde_json::json!({
+            "type": "passkey_create", "url": "https://github.com/", "rpId": "github.com",
+            "challenge": CHAL, "userHandle": "AQ", "userName": "octo", "displayName": null,
+            "itemId": f.github, "conditional": false,
+            "algorithms": [-257, -8, -7],
+            "prf": {"eval": {"first": "AQID", "second": "BAUG"}},
+        }),
+    );
+    let r = &created["result"];
+    assert_eq!(r["publicKeyAlgorithm"], -8, "{created}");
+    assert_eq!(r["prf"]["enabled"], true);
+    let first = r["prf"]["results"]["first"].as_str().unwrap().to_owned();
+    let second = r["prf"]["results"]["second"].as_str().unwrap().to_owned();
+    assert_eq!(first.len(), 43, "32 bytes");
+    assert_ne!(first, second);
+    let cred = r["credentialId"].as_str().unwrap().to_owned();
+
+    let get = |prf: Option<serde_json::Value>, url: &str| {
+        let mut req = serde_json::json!({
+            "type": "passkey_get", "itemId": f.github, "credentialId": cred,
+            "url": url, "rpId": "github.com", "challenge": CHAL,
+        });
+        if let Some(p) = prf {
+            req["prf"] = p;
+        }
+        call(&f, req)
+    };
+    // The same salt gives the same output at sign-in; an Ed25519 signature
+    // is 64 raw bytes (86 base64url characters).
+    let signed = get(
+        Some(serde_json::json!({"first": "AQID"})),
+        "https://github.com/",
+    );
+    assert_eq!(signed["result"]["prf"]["first"], first);
+    assert!(signed["result"]["prf"].get("second").is_none());
+    assert_eq!(signed["result"]["signature"].as_str().unwrap().len(), 86);
+    // No input, no outputs.
+    let plain = get(None, "https://github.com/");
+    assert!(plain["result"].get("prf").is_none(), "{plain}");
+    // Another site gets nothing, PRF or not.
+    let evil = get(
+        Some(serde_json::json!({"first": "AQID"})),
+        "https://evil.com/",
+    );
+    assert_eq!(evil["error"]["code"], "denied");
+
+    // A passkey made without `prf` has no PRF secret: no outputs, ES256 by
+    // default.
+    let legacy = create_passkey(&f, "https://github.com/", None);
+    assert_eq!(legacy["result"]["publicKeyAlgorithm"], -7);
+    assert!(legacy["result"].get("prf").is_none());
+    let legacy_item = {
+        let found = call(
+            &f,
+            serde_json::json!({
+                "type": "find_passkeys", "url": "https://github.com/", "rpId": "github.com",
+                "allowCredentials": [legacy["result"]["credentialId"]],
+            }),
+        );
+        found["result"]["passkeys"][0]["itemId"].clone()
+    };
+    let out = call(
+        &f,
+        serde_json::json!({
+            "type": "passkey_get", "itemId": legacy_item,
+            "credentialId": legacy["result"]["credentialId"],
+            "url": "https://github.com/", "rpId": "github.com", "challenge": CHAL,
+            "prf": {"first": "AQID"},
+        }),
+    );
+    assert!(out["result"]["signature"].is_string(), "{out}");
+    assert!(out["result"].get("prf").is_none());
+
+    // Nothing HavenKeys supports: refused, nothing stored.
+    let rsa = call(
+        &f,
+        serde_json::json!({
+            "type": "passkey_create", "url": "https://github.com/", "rpId": "github.com",
+            "challenge": CHAL, "userHandle": "Ag", "userName": "x", "displayName": null,
+            "itemId": null, "conditional": false, "algorithms": [-257],
+        }),
+    );
+    assert_eq!(rsa["error"]["code"], "invalid_input", "{rsa}");
+}
+
+#[test]
 fn passkey_attacks_through_the_bridge() {
     let f = online_fixture();
     let created = create_passkey(&f, "https://github.com/", Some(f.github));
@@ -2944,6 +3035,8 @@ fn an_offline_clean_up_still_answers() {
                         user_handle: &[1],
                         user_name: "octo",
                         display_name: None,
+                        algorithms: &[],
+                        prf: None,
                         item_id: Some(f.github),
                         conditional: false,
                     },

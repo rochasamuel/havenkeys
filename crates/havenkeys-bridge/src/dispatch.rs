@@ -15,7 +15,9 @@ use havenkeys_core::card::CardExpiry;
 use havenkeys_core::card_page::{CardFrame as CoreCardFrame, CardRole as CoreCardRole, NewCard};
 use havenkeys_core::generator::{generate, GeneratorOptions};
 use havenkeys_core::identity::FillRole;
-use havenkeys_core::passkey::{encode_b64url, B64Url, CreateQuery, PasskeyCreate, Upgrade};
+use havenkeys_core::passkey::{
+    encode_b64url, B64Url, CreateQuery, PasskeyCreate, PrfCreate, PrfInput, PrfOutput, Upgrade,
+};
 use havenkeys_core::password_rules::{
     followed_for_page, generate_for_page, FieldConstraints, RuleSource as CoreRuleSource,
 };
@@ -24,7 +26,8 @@ use havenkeys_core::{Error, SecretString};
 use havenkeys_protocol::{
     lookalike_site_ok, CardFrameValues, CardMatch, CardValue, Entitlement, ErrorCode,
     IdentityValue, Match, PasskeyCandidate, PasskeyMatch, PasswordConstraints, PasswordOptions,
-    Request, ResultBody, RuleSource, SaveAction, UpgradeHint, WireSecret, MAX_MATCHES,
+    PrfCreateOutput, PrfResults, PrfValues, Request, ResultBody, RuleSource, SaveAction,
+    UpgradeHint, WireSecret, MAX_MATCHES,
 };
 use uuid::Uuid;
 
@@ -89,6 +92,33 @@ fn bytes(s: &str) -> Result<Vec<u8>, ErrorCode> {
 
 fn byte_list(v: &[String]) -> Result<Vec<Vec<u8>>, ErrorCode> {
     v.iter().map(|s| bytes(s)).collect()
+}
+
+/// A request's PRF salts, decoded: `(first, second)`.
+fn prf_salts(v: &PrfValues) -> Result<(Vec<u8>, Option<Vec<u8>>), ErrorCode> {
+    Ok((
+        bytes(&v.first)?,
+        v.second.as_deref().map(bytes).transpose()?,
+    ))
+}
+
+fn prf_input(salts: &(Vec<u8>, Option<Vec<u8>>)) -> PrfInput<'_> {
+    PrfInput {
+        first: &salts.0,
+        second: salts.1.as_deref(),
+    }
+}
+
+/// PRF outputs for the wire. The base64url strings live in `WireSecret`s,
+/// which zeroize on drop; the core's arrays zeroize too.
+fn prf_results(out: &PrfOutput) -> PrfResults {
+    PrfResults {
+        first: WireSecret::new(encode_b64url(&out.first[..])),
+        second: out
+            .second
+            .as_ref()
+            .map(|s| WireSecret::new(encode_b64url(&s[..]))),
+    }
 }
 
 fn wire_secret(s: &SecretString) -> WireSecret {
@@ -469,7 +499,9 @@ pub(crate) fn dispatch_with(
             top_url,
             rp_id,
             challenge,
+            prf,
         } => {
+            let salts = prf.as_ref().map(prf_salts).transpose()?;
             let a = v
                 .passkey_assert(
                     item_id,
@@ -478,6 +510,7 @@ pub(crate) fn dispatch_with(
                     url,
                     top_url.as_deref(),
                     &bytes(challenge)?,
+                    salts.as_ref().map(prf_input).as_ref(),
                 )
                 .map_err(item_code)?;
             Ok(Dispatched::Done(ResultBody::PasskeyGet {
@@ -486,6 +519,7 @@ pub(crate) fn dispatch_with(
                 client_data_json: encode_b64url(&a.client_data_json),
                 signature: encode_b64url(&a.signature),
                 user_handle: encode_b64url(&a.user_handle),
+                prf: a.prf.as_ref().map(|o| Box::new(prf_results(o))),
             }))
         }
         Request::CheckPasskeyCreate {
@@ -545,9 +579,16 @@ pub(crate) fn dispatch_with(
             display_name,
             item_id,
             conditional,
+            algorithms,
+            prf,
         } => {
             let challenge = bytes(challenge)?;
             let user_handle = bytes(user_handle)?;
+            let eval = prf
+                .as_ref()
+                .and_then(|p| p.eval.as_ref())
+                .map(prf_salts)
+                .transpose()?;
             let staged = v
                 .stage_passkey_create(
                     PasskeyCreate {
@@ -558,6 +599,10 @@ pub(crate) fn dispatch_with(
                         user_handle: &user_handle,
                         user_name,
                         display_name: display_name.as_deref(),
+                        algorithms,
+                        prf: prf.as_ref().map(|_| PrfCreate {
+                            eval: eval.as_ref().map(prf_input),
+                        }),
                         item_id: *item_id,
                         conditional: *conditional,
                     },
@@ -571,7 +616,13 @@ pub(crate) fn dispatch_with(
                 client_data_json: encode_b64url(&r.client_data_json),
                 authenticator_data: encode_b64url(&r.authenticator_data),
                 public_key: encode_b64url(&r.public_key),
-                public_key_algorithm: havenkeys_protocol::COSE_ES256,
+                public_key_algorithm: r.public_key_algorithm,
+                prf: r.prf.as_ref().map(|p| {
+                    Box::new(PrfCreateOutput {
+                        enabled: p.enabled,
+                        results: p.results.as_ref().map(prf_results),
+                    })
+                }),
             };
             Ok(Dispatched::Write {
                 write: staged.write,

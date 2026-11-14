@@ -1384,6 +1384,7 @@ dependencies = [
  "cfg-if",
  "cpufeatures 0.3.1",
  "curve25519-dalek-derive",
+ "digest 0.11.3",
  "fiat-crypto 0.3.0",
  "rustc_version",
  "subtle",
@@ -1860,6 +1861,31 @@ dependencies = [
  "rfc6979",
  "signature",
  "spki 0.8.0",
+ "zeroize",
+]
+
+[[package]]
+name = "ed25519"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "29fcf32e6c73d1079f83ab4d782de2d81620346a5f38c6237a86a22f8368980a"
+dependencies = [
+ "pkcs8",
+ "signature",
+]
+
+[[package]]
+name = "ed25519-dalek"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ebaa1a2bf1290ab3bfe5a7b771d050ebffab2711c19a81691c683a5144a25de"
+dependencies = [
+ "curve25519-dalek 5.0.0",
+ "ed25519",
+ "serde",
+ "sha2 0.11.0",
+ "signature",
+ "subtle",
  "zeroize",
 ]
 
@@ -2834,6 +2860,7 @@ dependencies = [
  "ciborium",
  "csv",
  "data-encoding",
+ "ed25519-dalek",
  "havenkeys-core",
  "havenkeys-opaque",
  "hkdf 0.13.0",
@@ -2845,6 +2872,7 @@ dependencies = [
  "percent-encoding",
  "psl",
  "rand 0.10.2",
+ "ring",
  "rusqlite",
  "serde",
  "serde_json",

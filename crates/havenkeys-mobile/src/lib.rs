@@ -217,6 +217,8 @@ pub mod testing {
                     user_handle: &[1, 2, 3],
                     user_name: "octo",
                     display_name: None,
+                    algorithms: &[],
+                    prf: None,
                     item_id: None,
                     conditional: false,
                 },

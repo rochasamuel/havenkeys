@@ -511,6 +511,136 @@ fn passkey_results_round_trip_and_validate() {
     assert!(Outgoing::parse(excluded_with_candidates.as_bytes()).is_none());
 }
 
+/// 32 bytes of base64url: one PRF output.
+const OUT: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
+#[test]
+fn passkey_parity_requests_parse() {
+    let create = |extra: &str| {
+        format!(
+            r#"{{"v":1,"id":4,"request":{{"type":"passkey_create","url":"https://github.com/","rpId":"github.com","challenge":"{CHAL}","userHandle":"AQ","userName":"octo","displayName":null,"itemId":null,"conditional":false{extra}}}}}"#
+        )
+    };
+    let get = |extra: &str| {
+        format!(
+            r#"{{"v":1,"id":2,"request":{{"type":"passkey_get","itemId":"{ITEM}","credentialId":"{CRED}","url":"https://github.com/","rpId":"github.com","challenge":"{CHAL}"{extra}}}}}"#
+        )
+    };
+    let big_salt = "A".repeat(1366); // 1024 bytes and a bit: 1366 chars → 1024 bytes
+    let ok = [
+        create(r#","algorithms":[-8,-7]"#),
+        create(r#","algorithms":[-257,-19]"#),
+        create(r#","prf":{}"#),
+        create(r#","prf":{"eval":{"first":"AQID"}}"#),
+        create(r#","prf":{"eval":{"first":"","second":"AQ"}}"#),
+        create(&format!(
+            r#","algorithms":[-8],"prf":{{"eval":{{"first":"{big_salt}"}}}}"#
+        )),
+        get(r#","prf":{"first":"AQID"}"#),
+        get(r#","prf":{"first":"AQID","second":"BAUG"}"#),
+    ];
+    for s in &ok {
+        assert!(parse(s).is_ok(), "{s}");
+    }
+    let env = parse(&get(r#","prf":{"first":"AQID"}"#)).unwrap();
+    let Request::PasskeyGet { prf, .. } = env.request else {
+        panic!("not passkey_get");
+    };
+    assert_eq!(
+        prf,
+        Some(PrfValues {
+            first: "AQID".into(),
+            second: None
+        })
+    );
+    // Round trip: absent fields stay absent, so an older desktop reads it.
+    let env = parse(&create("")).unwrap();
+    let out = serde_json::to_string(&env).unwrap();
+    assert!(!out.contains("algorithms") && !out.contains("prf"), "{out}");
+
+    let too_many = format!(r#","algorithms":[{}]"#, vec!["-7"; 17].join(","));
+    let bad = [
+        create(&too_many),
+        create(r#","algorithms":[-7.5]"#),
+        create(r#","algorithms":"-7""#),
+        create(r#","prf":{"evalByCredential":{}}"#),
+        create(r#","prf":{"eval":{"first":"a+b"}}"#),
+        create(r#","prf":{"eval":{"second":"AQ"}}"#),
+        create(&format!(
+            r#","prf":{{"eval":{{"first":"{}"}}}}"#,
+            "A".repeat(1368)
+        )),
+        create(r#","prf":true"#),
+        get(r#","prf":{"first":"AQ","third":"AQ"}"#),
+        get(r#","prf":{"first":"AQ","second":"a/b"}"#),
+        get(&format!(
+            r#","prf":{{"first":"AQ","second":"{}"}}"#,
+            "A".repeat(1368)
+        )),
+        get(r#","prf":null,"x":1"#),
+    ];
+    for s in &bad {
+        assert!(parse(s).is_err(), "{s}");
+    }
+}
+
+#[test]
+fn passkey_parity_results_validate() {
+    let create = |alg: i64, extra: &str| {
+        format!(
+            r#"{{"v":1,"id":1,"result":{{"type":"passkey_create","credentialId":"{CRED}","attestationObject":"oA","clientDataJson":"e30","authenticatorData":"AA","publicKey":"MA","publicKeyAlgorithm":{alg}{extra}}}}}"#
+        )
+    };
+    let get = |extra: &str| {
+        format!(
+            r#"{{"v":1,"id":1,"result":{{"type":"passkey_get","credentialId":"{CRED}","authenticatorData":"AA","clientDataJson":"e30","signature":"MEU","userHandle":"AQ"{extra}}}}}"#
+        )
+    };
+    let good = [
+        create(-7, ""),
+        create(-9, ""),
+        create(-8, ""),
+        create(-19, ""),
+        create(-7, r#","prf":{"enabled":true}"#),
+        create(-7, r#","prf":{"enabled":false}"#),
+        create(
+            -8,
+            &format!(r#","prf":{{"enabled":true,"results":{{"first":"{OUT}"}}}}"#),
+        ),
+        create(
+            -8,
+            &format!(r#","prf":{{"enabled":true,"results":{{"first":"{OUT}","second":"{OUT}"}}}}"#),
+        ),
+        get(&format!(r#","prf":{{"first":"{OUT}"}}"#)),
+        get(&format!(r#","prf":{{"first":"{OUT}","second":"{OUT}"}}"#)),
+    ];
+    for m in &good {
+        assert!(Outgoing::parse(m.as_bytes()).is_some(), "{m}");
+    }
+    let bad = [
+        create(-257, ""),
+        create(-49, ""),
+        create(
+            -7,
+            &format!(r#","prf":{{"enabled":false,"results":{{"first":"{OUT}"}}}}"#),
+        ),
+        create(-7, r#","prf":{"enabled":true,"results":{"first":"AQ"}}"#),
+        create(-7, r#","prf":{"results":{}}"#),
+        get(r#","prf":{"first":"AQ"}"#),
+        get(&format!(r#","prf":{{"first":"{OUT}A"}}"#)),
+        get(&format!(r#","prf":{{"first":"{OUT}","x":1}}"#)),
+    ];
+    for m in &bad {
+        assert!(Outgoing::parse(m.as_bytes()).is_none(), "{m}");
+    }
+    // PRF outputs never show in Debug.
+    let r = PrfResults {
+        first: WireSecret::new(OUT.into()),
+        second: None,
+    };
+    assert_eq!(format!("{r:?}"), "PrfResults(<redacted>)");
+}
+
 #[test]
 fn passkey_upgrade_fields_parse_exactly() {
     let ok = [
@@ -653,6 +783,10 @@ fn fuzz_parse_request_never_panics() {
         r#"{"v":1,"id":14,"request":{"type":"check_passkey_create","url":"https://github.com/","rpId":"github.com","userName":"octo","excludeCredentials":[],"conditional":false}}"#.to_string(),
         format!(r#"{{"v":1,"id":15,"request":{{"type":"passkey_create","url":"https://github.com/","rpId":"github.com","challenge":"{CHAL}","userHandle":"AQ","userName":"octo","displayName":null,"itemId":null,"conditional":false}}}}"#),
         r#"{"v":1,"id":16,"request":{"type":"passkey_status","url":"https://github.com/"}}"#.to_string(),
+        format!(r#"{{"v":1,"id":20,"request":{{"type":"passkey_create","url":"https://github.com/","rpId":"github.com","challenge":"{CHAL}","userHandle":"AQ","userName":"octo","displayName":null,"itemId":null,"conditional":false,"algorithms":[-8,-7],"prf":{{"eval":{{"first":"AQ","second":"Ag"}}}}}}}}"#),
+        format!(r#"{{"v":1,"id":21,"request":{{"type":"passkey_get","itemId":"{ITEM}","credentialId":"{CRED}","url":"https://github.com/","rpId":"github.com","challenge":"{CHAL}","prf":{{"first":"AQ","second":""}}}}}}"#),
+        format!(r#"{{"v":1,"id":22,"result":{{"type":"passkey_get","credentialId":"{CRED}","authenticatorData":"AA","clientDataJson":"e30","signature":"MEU","userHandle":"AQ","prf":{{"first":"{OUT}","second":"{OUT}"}}}}}}"#),
+        format!(r#"{{"v":1,"id":23,"result":{{"type":"passkey_create","credentialId":"{CRED}","attestationObject":"oA","clientDataJson":"e30","authenticatorData":"AA","publicKey":"MA","publicKeyAlgorithm":-19,"prf":{{"enabled":true,"results":{{"first":"{OUT}"}}}}}}}}"#),
         format!(r#"{{"v":1,"id":17,"request":{{"type":"start_sso","itemId":"{ITEM}","url":"https://a.com/"}}}}"#),
         r#"{"v":1,"id":18,"request":{"type":"save_sso","url":"https://a.com/","provider":"google","account":"a","itemId":null}}"#.to_string(),
         r#"{"v":1,"id":19,"request":{"type":"show_unlock"}}"#.to_string(),

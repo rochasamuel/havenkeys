@@ -10,14 +10,20 @@
 // background takes the page URL from the browser, never from a message.
 
 import {
+  COSE_ALGORITHMS,
   CREDENTIAL_ID_BYTES,
+  MAX_ALGORITHMS,
   MAX_CHALLENGE_BYTES,
   MAX_CREDENTIAL_LIST,
+  MAX_PRF_SALT_BYTES,
   MAX_RP_ID_BYTES,
   MAX_USER_HANDLE_BYTES,
   isB64Url,
   isUuid,
+  parsePrfResults,
   type PasskeyCandidate,
+  type PrfResults,
+  type PrfValues,
 } from "@havenkeys/protocol";
 import { TOKEN } from "../messaging/inline";
 
@@ -37,8 +43,22 @@ export const NOTICE_MS = 4_000;
 /** Largest CustomEvent detail accepted from the page. */
 export const MAX_EVENT_CHARS = 16_384;
 const MAX_NAME_CHARS = 512;
-const MAX_ALGS = 16;
+const MAX_ALGS = MAX_ALGORITHMS;
 const REQ_ID = /^[0-9a-f]{32}$/;
+
+/** The site's `prf` request at creation; `eval` evaluated at once when given. */
+export interface PrfCreateOptions {
+  eval: PrfValues | null;
+}
+
+/**
+ * The site's `prf` request at sign-in: `eval` for any credential, and the
+ * `evalByCredential` entries for ours (16-byte IDs the site also allowed).
+ */
+export interface PrfGetOptions {
+  eval: PrfValues | null;
+  byCredential: Array<{ credentialId: string; values: PrfValues }>;
+}
 
 export interface CreateOptions {
   rpId: string | null;
@@ -53,6 +73,8 @@ export interface CreateOptions {
   timeoutMs: number | null;
   /** `mediation: "conditional"`: the site's automatic passkey upgrade. */
   conditional: boolean;
+  /** `extensions.prf`; null when the site did not ask. */
+  prf: PrfCreateOptions | null;
 }
 
 export interface GetOptions {
@@ -61,6 +83,8 @@ export interface GetOptions {
   allowCredentials: string[];
   conditional: boolean;
   timeoutMs: number | null;
+  /** `extensions.prf`; null when the site did not ask. */
+  prf: PrfGetOptions | null;
 }
 
 export type PageRequest =
@@ -78,6 +102,8 @@ export interface CreatedCredential {
   authenticatorData: string;
   publicKey: string;
   publicKeyAlgorithm: number;
+  /** The `prf` output, only when the site asked for it. Results are secrets. */
+  prf?: { enabled: boolean; results?: PrfResults };
 }
 
 export interface AssertedCredential {
@@ -87,6 +113,8 @@ export interface AssertedCredential {
   authenticatorData: string;
   signature: string;
   userHandle: string;
+  /** The `prf` output, only when the site asked for it. Results are secrets. */
+  prf?: { results?: PrfResults };
 }
 
 export type Outcome =
@@ -203,26 +231,89 @@ const isTimeout = (v: unknown): v is number | null =>
   v === null || (typeof v === "number" && Number.isFinite(v) && v >= 0);
 const isCredList = (v: unknown): v is string[] => Array.isArray(v) && v.length <= MAX_CREDENTIAL_LIST && v.every(isCred);
 const ERROR_NAMES: readonly ErrorName[] = ["NotAllowedError", "InvalidStateError", "SecurityError", "AbortError"];
+const isSalt = (v: unknown): v is string => isB64Url(v, 0, MAX_PRF_SALT_BYTES);
+
+/** `{ first, second? }` PRF salts, each 0–1024 bytes of base64url. */
+export function parsePrfValues(v: unknown): PrfValues | null {
+  const o = obj(v);
+  if (!o || !(keysAre(o, ["first"]) || keysAre(o, ["first", "second"])) || !isSalt(o.first)) return null;
+  if (o.second === undefined) return { first: o.first };
+  return isSalt(o.second) ? { first: o.first, second: o.second } : null;
+}
+
+function parsePrfCreateOptions(v: unknown): PrfCreateOptions | null | undefined {
+  if (v === null) return null;
+  const o = obj(v);
+  if (!o || !keysAre(o, ["eval"])) return undefined;
+  if (o.eval === null) return { eval: null };
+  const values = parsePrfValues(o.eval);
+  return values ? { eval: values } : undefined;
+}
+
+function parsePrfGetOptions(v: unknown, allow: string[]): PrfGetOptions | null | undefined {
+  if (v === null) return null;
+  const o = obj(v);
+  if (!o || !keysAre(o, ["eval", "byCredential"])) return undefined;
+  const values = o.eval === null ? null : parsePrfValues(o.eval);
+  if (o.eval !== null && !values) return undefined;
+  const list = o.byCredential;
+  if (!Array.isArray(list) || list.length > MAX_CREDENTIAL_LIST) return undefined;
+  const byCredential: PrfGetOptions["byCredential"] = [];
+  for (const e of list) {
+    const entry = obj(e);
+    if (!entry || !keysAre(entry, ["credentialId", "values"]) || !isCred(entry.credentialId)) return undefined;
+    // Only credentials the site allowed, each once.
+    if (!allow.includes(entry.credentialId) || byCredential.some((b) => b.credentialId === entry.credentialId)) return undefined;
+    const ev = parsePrfValues(entry.values);
+    if (!ev) return undefined;
+    byCredential.push({ credentialId: entry.credentialId, values: ev });
+  }
+  return { eval: values, byCredential };
+}
 
 function parseCreateOptions(v: unknown): CreateOptions | null {
   const o = obj(v);
-  const keys = ["rpId", "challenge", "userId", "userName", "userDisplayName", "algs", "excludeCredentials", "timeoutMs", "conditional"];
+  const keys = ["rpId", "challenge", "userId", "userName", "userDisplayName", "algs", "excludeCredentials", "timeoutMs", "conditional", "prf"];
   if (!o || !keysAre(o, keys)) return null;
   const { rpId, challenge, userId, userName, userDisplayName, algs, excludeCredentials, timeoutMs, conditional } = o;
   if (!isRpId(rpId) || !isChallenge(challenge) || !isB64Url(userId, 1, MAX_USER_HANDLE_BYTES)) return null;
   if (!isName(userName) || !(userDisplayName === null || isName(userDisplayName))) return null;
   if (!Array.isArray(algs) || algs.length > MAX_ALGS || !algs.every((a) => Number.isInteger(a))) return null;
   if (!isCredList(excludeCredentials) || !isTimeout(timeoutMs) || typeof conditional !== "boolean") return null;
-  return { rpId, challenge, userId, userName, userDisplayName, algs: algs as number[], excludeCredentials, timeoutMs, conditional };
+  const prf = parsePrfCreateOptions(o.prf);
+  if (prf === undefined) return null;
+  return { rpId, challenge, userId, userName, userDisplayName, algs: algs as number[], excludeCredentials, timeoutMs, conditional, prf };
 }
 
 function parseGetOptions(v: unknown): GetOptions | null {
   const o = obj(v);
-  if (!o || !keysAre(o, ["rpId", "challenge", "allowCredentials", "conditional", "timeoutMs"])) return null;
+  if (!o || !keysAre(o, ["rpId", "challenge", "allowCredentials", "conditional", "timeoutMs", "prf"])) return null;
   const { rpId, challenge, allowCredentials, conditional, timeoutMs } = o;
   if (!isRpId(rpId) || !isChallenge(challenge) || !isCredList(allowCredentials)) return null;
   if (typeof conditional !== "boolean" || !isTimeout(timeoutMs)) return null;
-  return { rpId, challenge, allowCredentials, conditional, timeoutMs };
+  const prf = parsePrfGetOptions(o.prf, allowCredentials);
+  if (prf === undefined) return null;
+  return { rpId, challenge, allowCredentials, conditional, timeoutMs, prf };
+}
+
+/** A creation's `prf` output: `{ enabled }` or `{ enabled: true, results }`. */
+function parsePrfCreated(v: unknown): CreatedCredential["prf"] | null {
+  const o = obj(v);
+  if (!o || typeof o.enabled !== "boolean") return null;
+  if (keysAre(o, ["enabled"])) return { enabled: o.enabled };
+  if (!keysAre(o, ["enabled", "results"]) || !o.enabled) return null;
+  const results = parsePrfResults(o.results);
+  return results && { enabled: true, results };
+}
+
+/** A sign-in's `prf` output: `{}` or `{ results }`. */
+function parsePrfAsserted(v: unknown): AssertedCredential["prf"] | null {
+  const o = obj(v);
+  if (!o) return null;
+  if (keysAre(o, [])) return {};
+  if (!keysAre(o, ["results"])) return null;
+  const results = parsePrfResults(o.results);
+  return results && { results };
 }
 
 function parseJsonString(raw: unknown): unknown {
@@ -261,17 +352,24 @@ function parseCredential(v: unknown): CreatedCredential | AssertedCredential | n
   if (!o) return null;
   if (o.type === "create") {
     const keys = ["type", "credentialId", "clientDataJson", "attestationObject", "authenticatorData", "publicKey", "publicKeyAlgorithm"];
-    if (!keysAre(o, keys)) return null;
+    if (!keysAre(o, keys) && !keysAre(o, [...keys, "prf"])) return null;
     const { credentialId, clientDataJson, attestationObject, authenticatorData, publicKey, publicKeyAlgorithm } = o;
     if (!isCred(credentialId) || !isBlob(clientDataJson) || !isBlob(attestationObject) || !isBlob(authenticatorData) || !isBlob(publicKey)) return null;
-    if (publicKeyAlgorithm !== -7) return null;
-    return { type: "create", credentialId, clientDataJson, attestationObject, authenticatorData, publicKey, publicKeyAlgorithm };
+    if (typeof publicKeyAlgorithm !== "number" || !COSE_ALGORITHMS.includes(publicKeyAlgorithm)) return null;
+    const base: CreatedCredential = { type: "create", credentialId, clientDataJson, attestationObject, authenticatorData, publicKey, publicKeyAlgorithm };
+    if (o.prf === undefined) return base;
+    const prf = parsePrfCreated(o.prf);
+    return prf ? { ...base, prf } : null;
   }
   if (o.type === "get") {
-    if (!keysAre(o, ["type", "credentialId", "clientDataJson", "authenticatorData", "signature", "userHandle"])) return null;
+    const keys = ["type", "credentialId", "clientDataJson", "authenticatorData", "signature", "userHandle"];
+    if (!keysAre(o, keys) && !keysAre(o, [...keys, "prf"])) return null;
     const { credentialId, clientDataJson, authenticatorData, signature, userHandle } = o;
     if (!isCred(credentialId) || !isBlob(clientDataJson) || !isBlob(authenticatorData) || !isBlob(signature) || !isBlob(userHandle)) return null;
-    return { type: "get", credentialId, clientDataJson, authenticatorData, signature, userHandle };
+    const base: AssertedCredential = { type: "get", credentialId, clientDataJson, authenticatorData, signature, userHandle };
+    if (o.prf === undefined) return base;
+    const prf = parsePrfAsserted(o.prf);
+    return prf ? { ...base, prf } : null;
   }
   return null;
 }

@@ -23,7 +23,7 @@
 // the worker awake and to notice a loss, and a card whose session is gone
 // can still be closed (see `handleFrame`).
 
-import type { PasskeyCandidate, Request, RequestType, ResultFor } from "@havenkeys/protocol";
+import { chooseAlgorithm, COSE_ES256, MAX_ALGORITHMS, type PasskeyCandidate, type PrfValues, type Request, type RequestType, type ResultFor } from "@havenkeys/protocol";
 import type { InlineReply } from "../messaging/inline";
 import { BridgeError } from "../messaging/native";
 import { t } from "../i18n";
@@ -32,6 +32,7 @@ import {
   clampTimeout,
   MAX_TIMEOUT_MS,
   NOTICE_MS,
+  type AssertedCredential,
   type BgWaResult,
   type CreatedCredential,
   type CreateOptions,
@@ -49,7 +50,6 @@ export const SESSION_TTL_MS = MAX_TIMEOUT_MS;
 export const CONDITIONAL_TTL_MS = 30 * 60_000;
 /** How long the "passkey saved" notice can still ask for its site. */
 export const NOTICE_TTL_MS = NOTICE_MS + 10_000;
-const ES256 = -7;
 
 type Client = {
   request<T extends RequestType>(r: Extract<Request, { type: T }>): Promise<ResultFor<T>>;
@@ -85,8 +85,9 @@ function fail(e: unknown): { ok: false; message: string } {
   return { ok: false, message: e instanceof BridgeError ? e.message : t.errors.generic };
 }
 
-function created(r: ResultFor<"passkey_create">): CreatedCredential {
-  return {
+/** The credential for the page. `prf` only when the site asked: `enabled: false` if the desktop gave none. */
+function created(r: ResultFor<"passkey_create">, options: CreateOptions): CreatedCredential {
+  const c: CreatedCredential = {
     type: "create",
     credentialId: r.credentialId,
     clientDataJson: r.clientDataJson,
@@ -95,7 +96,31 @@ function created(r: ResultFor<"passkey_create">): CreatedCredential {
     publicKey: r.publicKey,
     publicKeyAlgorithm: r.publicKeyAlgorithm,
   };
+  if (options.prf) c.prf = r.prf ?? { enabled: false };
+  return c;
 }
+
+/**
+ * The fields `passkey_create` carries beyond the original protocol, each
+ * only when needed, so an older desktop (which refuses unknown fields)
+ * still creates ordinary ES256 passkeys: `algorithms` when ES256 is not the
+ * site's first supported algorithm, `prf` when the site asked for it.
+ */
+function createExtras(options: CreateOptions): { algorithms?: number[]; prf?: { eval?: PrfValues } } {
+  const out: { algorithms?: number[]; prf?: { eval?: PrfValues } } = {};
+  if (chooseAlgorithm(options.algs) !== COSE_ES256) out.algorithms = options.algs.slice(0, MAX_ALGORITHMS);
+  if (options.prf) out.prf = options.prf.eval ? { eval: options.prf.eval } : {};
+  return out;
+}
+
+/** The site's PRF input for one credential: its `evalByCredential` entry, else `eval`. */
+function prfInputFor(options: GetOptions, credentialId: string): PrfValues | null {
+  if (!options.prf) return null;
+  return options.prf.byCredential.find((b) => b.credentialId === credentialId)?.values ?? options.prf.eval;
+}
+
+/** An older desktop refuses a request with fields it does not know as malformed. */
+const refusedAsUnknown = (e: unknown) => e instanceof BridgeError && e.code === "malformed";
 
 export interface WebAuthnDeps extends Omit<InlineDeps, "sendToTab"> {
   client: Client;
@@ -207,17 +232,7 @@ export function createWebAuthnHandler(deps: WebAuthnDeps) {
     }
     let r: ResultFor<"passkey_create">;
     try {
-      r = await deps.client.request({
-        type: "passkey_create",
-        ...frameFields(frame),
-        rpId,
-        challenge: options.challenge,
-        userHandle: options.userId,
-        userName: options.userName,
-        displayName: options.userDisplayName,
-        itemId: upgrade.itemId,
-        conditional: true,
-      });
+      r = await createPasskey(frame, rpId, options, upgrade.itemId, true);
     } catch {
       return FALLBACK;
     }
@@ -227,11 +242,40 @@ export function createWebAuthnHandler(deps: WebAuthnDeps) {
       if (notices.get(frame.tabId)?.token === token) notices.delete(frame.tabId);
     }, NOTICE_TTL_MS);
     notices.set(frame.tabId, { token, site: displayHost(frame.url) ?? "", timer });
-    return { ok: true, token, ui: "saved", credential: created(r) };
+    return { ok: true, token, ui: "saved", credential: created(r, options) };
+  }
+
+  /**
+   * `passkey_create`, with the newer fields when the site needs them. An
+   * older desktop refuses those as malformed: then once more without
+   * `prf` (the site learns `prf: { enabled: false }`), and without
+   * `algorithms` only when the site also accepts ES256 itself.
+   */
+  async function createPasskey(frame: FrameRef, rpId: string, options: CreateOptions, itemId: string | null, conditional: boolean): Promise<ResultFor<"passkey_create">> {
+    const base = {
+      type: "passkey_create" as const,
+      ...frameFields(frame),
+      rpId,
+      challenge: options.challenge,
+      userHandle: options.userId,
+      userName: options.userName,
+      displayName: options.userDisplayName,
+      itemId,
+      conditional,
+    };
+    const extras = createExtras(options);
+    if (extras.algorithms === undefined && extras.prf === undefined) return deps.client.request(base);
+    try {
+      return await deps.client.request({ ...base, ...extras });
+    } catch (e) {
+      if (!refusedAsUnknown(e) || (extras.algorithms !== undefined && !options.algs.includes(COSE_ES256))) throw e;
+      return deps.client.request(base);
+    }
   }
 
   async function beginCreate(frame: FrameRef, options: CreateOptions): Promise<WaReply> {
-    if (!options.algs.includes(ES256)) return FALLBACK;
+    // Nothing HavenKeys can create (RSA only, ML-DSA, ...): the browser's.
+    if (chooseAlgorithm(options.algs) === null) return FALLBACK;
     const rpId = rpIdFor(frame, options.rpId);
     if (options.conditional) return beginUpgrade(frame, options, rpId);
     let candidates: PasskeyCandidate[] = [];
@@ -266,25 +310,37 @@ export function createWebAuthnHandler(deps: WebAuthnDeps) {
     if (s.busy) return BUSY;
     s.busy = true;
     try {
-      const r = await deps.client.request({
-        type: "passkey_get",
+      const base = {
+        type: "passkey_get" as const,
         itemId,
         credentialId,
         ...frameFields(s.frame),
         rpId: s.rpId,
         challenge: s.options.challenge,
-      });
-      finish(s.frame.tabId, s.token, {
-        outcome: "credential",
-        credential: {
-          type: "get",
-          credentialId: r.credentialId,
-          clientDataJson: r.clientDataJson,
-          authenticatorData: r.authenticatorData,
-          signature: r.signature,
-          userHandle: r.userHandle,
-        },
-      });
+      };
+      const prf = prfInputFor(s.options, credentialId);
+      let r: ResultFor<"passkey_get">;
+      if (prf === null) r = await deps.client.request(base);
+      else {
+        try {
+          r = await deps.client.request({ ...base, prf });
+        } catch (e) {
+          // An older desktop: sign in without PRF outputs.
+          if (!refusedAsUnknown(e)) throw e;
+          r = await deps.client.request(base);
+        }
+      }
+      const credential: AssertedCredential = {
+        type: "get",
+        credentialId: r.credentialId,
+        clientDataJson: r.clientDataJson,
+        authenticatorData: r.authenticatorData,
+        signature: r.signature,
+        userHandle: r.userHandle,
+      };
+      // Only when the site asked; no results for a passkey without a PRF secret.
+      if (s.options.prf) credential.prf = r.prf ? { results: r.prf } : {};
+      finish(s.frame.tabId, s.token, { outcome: "credential", credential });
       return { ok: true, value: null };
     } catch (e) {
       return fail(e);
@@ -300,21 +356,11 @@ export function createWebAuthnHandler(deps: WebAuthnDeps) {
     if (s.busy) return BUSY;
     s.busy = true;
     try {
-      const r = await deps.client.request({
-        type: "passkey_create",
-        ...frameFields(s.frame),
-        rpId: s.rpId,
-        challenge: s.options.challenge,
-        userHandle: s.options.userId,
-        userName: s.options.userName,
-        displayName: s.options.userDisplayName,
-        itemId,
-        // A click on the card, even for the site's automatic upgrade.
-        conditional: false,
-      });
+      // conditional: false — a click on the card, even for the site's automatic upgrade.
+      const r = await createPasskey(s.frame, s.rpId, s.options, itemId, false);
       // The page may have aborted meanwhile; finish() is then a no-op and
       // the passkey stays in the vault, visible in the desktop app.
-      finish(s.frame.tabId, s.token, { outcome: "credential", credential: created(r) });
+      finish(s.frame.tabId, s.token, { outcome: "credential", credential: created(r, s.options) });
       return { ok: true, value: null };
     } catch (e) {
       return fail(e);

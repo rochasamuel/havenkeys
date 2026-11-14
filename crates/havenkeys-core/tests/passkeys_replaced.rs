@@ -21,6 +21,8 @@ fn create_req<'a>(user: &'a str, handle: &'a [u8], item: Option<Uuid>) -> Passke
         user_handle: handle,
         user_name: user,
         display_name: None,
+        algorithms: &[],
+        prf: None,
         item_id: item,
         conditional: false,
     }
@@ -56,7 +58,7 @@ fn tidy(v: &mut VaultService, rev: &mut i64, page: &str, allow: &[Vec<u8>]) -> b
 }
 
 fn signs_in(v: &VaultService, id: &Uuid, cred: &[u8]) -> bool {
-    v.passkey_assert(id, cred, "github.com", GH, None, &[3; 32])
+    v.passkey_assert(id, cred, "github.com", GH, None, &[3; 32], None)
         .is_ok()
 }
 

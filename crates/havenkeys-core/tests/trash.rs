@@ -374,6 +374,8 @@ fn live_github(v: &mut havenkeys_core::vault::VaultService) -> (uuid::Uuid, Vec<
                 user_handle: &[1],
                 user_name: "octo",
                 display_name: None,
+                algorithms: &[],
+                prf: None,
                 item_id: Some(id),
                 conditional: false,
             },
@@ -439,7 +441,7 @@ fn a_trashed_login_is_offered_to_no_app_and_no_passkey_request() {
     );
     assert!(v.has_passkey_for_page(GH, None).unwrap());
     assert!(v
-        .passkey_assert(&id, &cred, "github.com", GH, None, &[3; 32])
+        .passkey_assert(&id, &cred, "github.com", GH, None, &[3; 32], None)
         .is_ok());
     trash(&mut v, &id);
 
@@ -452,7 +454,7 @@ fn a_trashed_login_is_offered_to_no_app_and_no_passkey_request() {
         .is_empty());
     assert!(!v.has_passkey_for_page(GH, None).unwrap());
     assert!(v
-        .passkey_assert(&id, &cred, "github.com", GH, None, &[3; 32])
+        .passkey_assert(&id, &cred, "github.com", GH, None, &[3; 32], None)
         .is_err());
     let cred_b64 = havenkeys_core::passkey::encode_b64url(&cred);
     assert!(v.stage_remove_passkey(&id, &cred_b64, NOW).is_err());

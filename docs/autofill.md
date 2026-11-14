@@ -1097,7 +1097,9 @@ the site's scripts, and wraps `navigator.credentials.create`,
 It turns a request into plain data for the isolated-world bridge, and turns
 the answer back into a `PublicKeyCredential`-shaped object (`rawId`, `type`,
 `authenticatorAttachment: "platform"`, `toJSON()`,
-`getClientExtensionResults()` returning `{}`, and on create
+`getClientExtensionResults()` returning only the extension outputs the site
+asked for and HavenKeys produced (`credProps: { rk: true }` on create,
+`prf`; spec 2026-11-14-passkey-parity), and on create
 `getPublicKey()`, `getPublicKeyAlgorithm()`, `getAuthenticatorData()`,
 `getTransports()`).
 
