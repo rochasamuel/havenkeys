@@ -855,6 +855,23 @@ Spec: `docs/superpowers/specs/2026-11-03-bank-account-design.md`.
   Android the framework holds the offered values for the session unless
   "Confirm before filling" is on.
 
+### T16 — Change on website
+
+Spec: `docs/superpowers/specs/2026-11-14-change-password-url-design.md`;
+`security-review.md` CP1–CP4.
+
+* **A site that answers 200 to everything** (or redirects every path to a
+  200 page) cannot make HavenKeys believe its well-known URL: the "should
+  not exist" path is asked first.
+* **A saved website, redirect or DNS answer aimed at the user's network**
+  (loopback, router, metadata address) gets no request: only https DNS
+  names under a public suffix, resolving to public addresses, are reached.
+* **Learning which sites the user saved.** Nothing is asked in the
+  background; the one probe follows the user's click on that login and
+  precedes the browser's own visit.
+* *Residual:* a wrong entry in the compiled table opens that listed https
+  page; a probed site sees a `havenkeys` User-Agent.
+
 ### Account deletion
 
 * **A stolen session token** cannot delete the account: the route also

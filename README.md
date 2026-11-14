@@ -64,6 +64,9 @@ What the desktop app does today:
   recoverable (last 5)
 * Passkeys: a login shows the passkeys it holds (site, account, created),
   and each can be deleted
+* Change on website: a login (and Vault health's password rows) opens the
+  site's change-password page, from a compiled list or, on that click only,
+  the site's `/.well-known/change-password`; otherwise the website
 * From version 0.9.0: checks GitHub Releases for signed updates (Settings →
   Updates, on by default, can be turned off) and installs one on your click,
   on Windows, macOS and the Linux AppImage. `.deb`/`.rpm` installs get a

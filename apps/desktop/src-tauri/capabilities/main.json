@@ -67,6 +67,7 @@
     "allow-get-totp-code",
     "allow-copy-secret",
     "allow-open-website",
+    "allow-open-change-password",
     "allow-health-report",
     "allow-set-health-ignored",
     "allow-open-health-help",

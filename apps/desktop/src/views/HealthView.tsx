@@ -3,6 +3,7 @@ import { api, ApiError } from "../lib/api";
 import type { HealthCheck, HealthReport, ItemOverview } from "../lib/types";
 import { CHECK_ORDER, countOf, dismissedFor, rowsFor, totalIssues, type HealthFilter, type HealthRow } from "../lib/health";
 import { monogram } from "../lib/format";
+import { ChangePasswordButton } from "../components/ChangePasswordButton";
 import { HealthChips } from "../components/HealthChips";
 import { Icon } from "../components/Icon";
 import { useToast } from "../components/Toast";
@@ -149,6 +150,7 @@ export function HealthView({ items, report, loading, readOnly, onOpen, onEdit, o
               {t.health.changePassword}
             </button>
           )}
+          {passwordFix && <ChangePasswordButton item={item} />}
           {help && (
             <button type="button" className="btn btn-small" onClick={() => void openHelp(row.itemId, help)}>
               {t.health.howToEnable}

@@ -15,6 +15,7 @@ pub mod attachment;
 pub mod bank;
 pub mod card;
 pub mod card_page;
+pub mod change_password;
 pub mod crypto;
 pub mod custom_field;
 mod equivalent;

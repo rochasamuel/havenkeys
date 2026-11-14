@@ -4328,3 +4328,80 @@ their plaintext (`Zeroizing`) in memory until that upload returns.
       device and open it there.
 - [ ] Export a backup with attachments and restore it into a new vault.
 - [ ] An older desktop opens an item with attachments without losing them.
+
+# Security Review: Change on website (2026-11-14)
+
+Spec: `docs/superpowers/specs/2026-11-14-change-password-url-design.md`.
+Code: `crates/havenkeys-core/src/change_password.rs`,
+`apps/desktop/src-tauri/src/change_password.rs`.
+
+### CP1. A new outbound request from the desktop (Low, accepted)
+**Component:** `open_change_password`, the well-known probe.
+**Attack scenario:** the request tells a site, or someone watching the
+network, which site the user keeps a login for; a background check would
+tell it for the whole vault.
+**Mitigation:** the curated table is tried first, offline. The probe runs
+only on the user's click on one login, for that login's first probe-able
+website, and the browser opens that same site right after, so the site
+learns nothing a visit would not tell it (IP address, time) beyond the
+`havenkeys` User-Agent on two `/.well-known/` paths. No cookie store, no
+`Authorization`, no Referer, no vault data; no third party (no HavenKeys
+service, list or icon service) is contacted. Nothing is probed in the
+background, on unlock or for Vault health's report.
+**Remaining limitations:** the site (and a network observer, via SNI) sees
+the probe a moment before the browser's visit, from the app instead of the
+browser; a user behind a mandatory proxy gets no probe (it is built with
+`no_proxy`) and falls back to the website.
+
+### CP2. Server-side request forgery against the user's network (Medium, mitigated)
+**Component:** probe client (`client`, `PublicResolver`, redirect policy).
+**Attack scenario:** a saved website, a redirect or a DNS answer points the
+probe at `localhost`, the router (`192.168.0.1`), a cloud metadata address
+(`169.254.169.254`) or another internal service, to make it act on a
+GET or to learn from the timing whether it exists.
+**Mitigation:** only `https`, default port, DNS names under a known public
+suffix are requested, the first request and every redirect alike
+(`probe_may_request`); IP literals, `localhost`, single labels, `.local`,
+`.internal` and explicit ports are never probed. The resolver keeps only
+globally routed unicast addresses (`is_public_address`, including the IPv6
+forms that embed an IPv4 address), and every connection resolves through
+it, so a rebinding answer between the two requests gets nothing. At most 5
+redirects, 3 s connect, 4 s per request, 8 s in all; no body is read; only a
+2xx status is used. Tests: the production client never opens a connection
+to a local listener for http, https IP-literal or `localhost` targets.
+**Remaining limitations:** the probe can still reach any public https
+server a redirect names (as the browser would); a GET to it carries nothing
+of the user's.
+
+### CP3. A false or hostile change-password page (Low, mitigated)
+**Component:** curated table, probe result.
+**Attack scenario:** a site that answers 200 to everything, or a page from
+a tampered table, sends the user to a phishing page to "change" their
+password.
+**Mitigation:** the "should not exist" request must not answer 2xx (after
+redirects) before the well-known answer is believed. What opens is the
+well-known URL on the login's own host, never an address taken from a
+response. The table is compiled in from a reviewed file (no runtime fetch);
+entries that are not https with a DNS host are dropped, a test fails the
+build of a file with any, and a key matches only its host and that host's
+subdomains down to the registrable domain (a public-suffix key such as
+`gov.br` only itself). The page opens in the user's browser, where the
+browser's own checks apply; HavenKeys fills nothing there by itself.
+**Remaining limitations:** the table is third-party data (Apple's, MIT): a
+wrong entry sends the user to that wrong but listed https page until the
+next refresh.
+
+### CP4. Renderer input (Info, mitigated)
+**Component:** `open_change_password(id)`.
+**Attack scenario:** a compromised renderer asks Rust to open or probe an
+arbitrary URL.
+**Mitigation:** the command takes an item id only; every address comes from
+that login's saved websites (through `normalize_url`) or the compiled table.
+The capability is granted to the main window only.
+
+### Manual checks (owner)
+- [ ] A login for a listed site (`google.com`) opens its curated page with
+      no network request (watch with a proxy or `ss`).
+- [ ] A login for a site that serves `/.well-known/change-password` and
+      404s the "should not exist" path opens the well-known URL.
+- [ ] A login for an intranet name or IP opens its website directly.

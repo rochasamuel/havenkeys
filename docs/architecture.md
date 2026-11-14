@@ -340,6 +340,24 @@ dismissal staging). The directories are plain JSON in
 `scripts/update-twofactor-directory.mjs`; the extension imports the same
 passkey file.
 
+## Change on website
+
+`crates/havenkeys-core/src/change_password.rs` turns a login's websites into
+a plan (no network): the page for its site in
+`crates/havenkeys-core/data/change-password-urls.json` (Apple's Password
+Manager Resources, embedded with `include_str!`, refreshed by
+`scripts/update-change-password-urls.mjs`), the `https://<host>/` the
+desktop may probe, and the website to fall back to. The desktop command
+`open_change_password` (`apps/desktop/src-tauri/src/change_password.rs`)
+probes `/.well-known/change-password` with its own restricted `reqwest`
+client only when the table has no page, then opens the result with the
+opener. Spec: `docs/superpowers/specs/2026-11-14-change-password-url-design.md`.
+
+Bundled site data, all in `crates/havenkeys-core/data/` and never fetched at
+runtime: `passkey-sites.json` and `twofactor-sites.json` (Vault health),
+`change-password-urls.json` (Change on website), `equivalent-domains.json`
+(autofill ranking), `android-browsers.json` (Android).
+
 The client computes off the vault lock: `HavenClient::health_report`
 (`crates/havenkeys-client/src/health.rs`) returns a fresh cached report, or
 takes a snapshot under the lock, releases it, runs `compute` (zxcvbn, a few

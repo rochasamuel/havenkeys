@@ -541,6 +541,13 @@ export type UpdateStatus = UpdatePhase & {
 
 export type HealthCheck = "weak" | "reused" | "old" | "passkey" | "two_factor" | "insecure" | "duplicate";
 
+/**
+ * What "Change on website" opened (spec 2026-11-14-change-password-url):
+ * the curated change-password page, the site's verified
+ * `/.well-known/change-password`, or, with neither, the login's website.
+ */
+export type ChangePasswordSource = "curated" | "well_known" | "website";
+
 export interface HealthCounts {
   weak: number;
   reused: number;

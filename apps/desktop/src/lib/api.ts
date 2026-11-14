@@ -21,6 +21,7 @@ import type {
   CardNumberCheck,
   CardRevealField,
   CardView,
+  ChangePasswordSource,
   CopyField,
   CopyResult,
   DeviceEntry,
@@ -136,6 +137,12 @@ export const api = {
   copy: (id: string, field: CopyField) => call<CopyResult>("copy_secret", { id, field }),
   /** Rust opens it only if `url` is one of the item's saved websites. */
   openWebsite: (id: string, url: string) => call<void>("open_website", { id, url }),
+  /**
+   * Rust picks the page from the login's saved websites: a curated
+   * change-password page, else the site's verified well-known URL (one probe
+   * of the site, only on this click), else the website itself.
+   */
+  openChangePassword: (id: string) => call<ChangePasswordSource>("open_change_password", { id }),
   healthReport: () => call<HealthReport>("health_report"),
   setHealthIgnored: (id: string, checks: HealthCheck[]) => call<void>("set_health_ignored", { id, checks }),
   openHealthHelp: (id: string, check: HealthCheck) => call<void>("open_health_help", { id, check }),

@@ -173,6 +173,29 @@ documentation links are removed, and fields not used by HavenKeys are left
 out. It is compiled into the core (`include_str!`), so it ships in the
 desktop app and the Android library (Vault health).
 
+### Password Manager Resources (change-password URLs)
+
+`crates/havenkeys-core/data/change-password-urls.json` is derived from
+`quirks/change-password-URLs.json` in
+[Password Manager Resources by Apple](https://github.com/apple/password-manager-resources)
+(site domains and their change-password pages; snapshot taken on
+2026-11-14). Changes: entries whose key is not a lowercase DNS name or whose
+page is not an https URL with a host are dropped (none were in this
+snapshot), URLs are written in the URL parser's normal form, and the keys
+are sorted (`scripts/update-change-password-urls.mjs`). It is compiled into
+the core (`include_str!`), so it ships in the desktop app (Change on
+website) and in any other build of the core that keeps it. It is licensed under the MIT License:
+
+```text
+Copyright 2020 - 2026 Apple Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```
+
 ## Images
 
 ### Card network logos

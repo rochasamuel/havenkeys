@@ -6,11 +6,13 @@ import type { HealthCheck, HealthReport, ItemOverview } from "../lib/types";
 
 const setHealthIgnored = vi.fn<(id: string, c: HealthCheck[]) => Promise<void>>();
 const openHealthHelp = vi.fn<(id: string, c: HealthCheck) => Promise<void>>();
+const openChangePassword = vi.fn<(id: string) => Promise<string>>();
 vi.mock("../lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/api")>()),
   api: {
     setHealthIgnored: (id: string, c: HealthCheck[]) => setHealthIgnored(id, c),
     openHealthHelp: (id: string, c: HealthCheck) => openHealthHelp(id, c),
+    openChangePassword: (id: string) => openChangePassword(id),
     setUiLanguage: () => Promise.resolve(),
   },
 }));
@@ -55,11 +57,11 @@ const onOpen = vi.fn();
 const onEdit = vi.fn();
 const onChanged = vi.fn();
 
-function render(r: HealthReport | null, loading = false, readOnly = false) {
+function render(r: HealthReport | null, loading = false, readOnly = false, list = items) {
   act(() =>
     root.render(
       <ToastProvider>
-        <HealthView items={items} report={r} loading={loading} readOnly={readOnly} onOpen={onOpen} onEdit={onEdit} onChanged={onChanged} />
+        <HealthView items={list} report={r} loading={loading} readOnly={readOnly} onOpen={onOpen} onEdit={onEdit} onChanged={onChanged} />
       </ToastProvider>,
     ),
   );
@@ -73,6 +75,7 @@ const button = (text: string) => {
 beforeEach(() => {
   setHealthIgnored.mockReset().mockResolvedValue(undefined);
   openHealthHelp.mockReset().mockResolvedValue(undefined);
+  openChangePassword.mockReset().mockResolvedValue("well_known");
   [onOpen, onEdit, onChanged].forEach((f) => f.mockReset());
   host = document.createElement("div");
   document.body.append(host);
@@ -200,6 +203,30 @@ describe("HealthView", () => {
     render({ ...report, counts: { weak: 0, reused: 0, old: 0, passkey: 0, twoFactor: 0, insecure: 0, duplicate: 0 }, issues: [], dismissed: [] });
     expect(host.textContent).toContain(en.health.empty);
     expect(host.textContent?.toLowerCase()).not.toContain("secure.");
+  });
+
+  it("offers Change on website on password rows of logins with a website", async () => {
+    const withSite = items.map((i) =>
+      i.id === "a" || i.id === "b" ? { ...i, urls: [{ url: `https://${i.id}.example.com/`, matchType: "domain" as const }] } : i,
+    );
+    const r: HealthReport = {
+      ...report,
+      issues: [
+        { itemId: "a", checks: ["weak"], reusedGroup: null, duplicateGroup: null, help: false },
+        { itemId: "b", checks: ["passkey"], reusedGroup: null, duplicateGroup: null, help: true },
+      ],
+    };
+    render(r, false, true, withSite);
+    const buttons = Array.from(host.querySelectorAll("button")).filter((b) => b.textContent?.includes(en.detail.changeOnWebsite));
+    expect(buttons).toHaveLength(1); // the weak password, not the passkey row
+    expect(buttons[0]?.disabled).toBe(false); // only opens a page: fine while read-only
+    await act(async () => buttons[0]?.click());
+    expect(openChangePassword).toHaveBeenCalledWith("a");
+  });
+
+  it("offers no Change on website for a login without a website", () => {
+    render(report);
+    expect(button(en.detail.changeOnWebsite)).toBeUndefined();
   });
 
   it("shows the loading state, not a partial report", () => {
