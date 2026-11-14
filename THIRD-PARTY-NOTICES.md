@@ -186,6 +186,19 @@ sorted by domain and gathered under one `rules` key
 (`include_str!`), so it ships in the desktop app and the Android library;
 the desktop uses it to generate passwords a site accepts.
 
+### Password Manager Resources (change-password URLs)
+
+`crates/havenkeys-core/data/change-password-urls.json` is derived from
+`quirks/change-password-URLs.json` in
+[Password Manager Resources by Apple](https://github.com/apple/password-manager-resources)
+(site domains and their change-password pages; snapshot taken on
+2026-11-14). Changes: entries whose key is not a lowercase DNS name or whose
+page is not an https URL with a host are dropped (none were in this
+snapshot), URLs are written in the URL parser's normal form, and the keys
+are sorted (`scripts/update-change-password-urls.mjs`). It is compiled into
+the core (`include_str!`), so it ships in the desktop app (Change on
+website) and in any other build of the core that keeps it. Both files are licensed under the MIT License below.
+
 ```text
 Copyright 2020 - 2026 Apple Inc.
 

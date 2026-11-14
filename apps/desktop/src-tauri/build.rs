@@ -60,6 +60,7 @@ const COMMANDS: &[&str] = &[
     "get_totp_code",
     "copy_secret",
     "open_website",
+    "open_change_password",
     "health_report",
     "set_health_ignored",
     "open_health_help",

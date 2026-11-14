@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const reveal = vi.fn();
 const itemFields = vi.fn();
 const listPasskeys = vi.fn();
+const openChangePassword = vi.fn();
 
 // Every other command answers null; event subscriptions return an unlisten.
 vi.mock("../lib/api", async (importOriginal) => {
@@ -14,6 +15,7 @@ vi.mock("../lib/api", async (importOriginal) => {
     reveal: (...a: unknown[]) => reveal(...a),
     itemFields: (...a: unknown[]) => itemFields(...a),
     listPasskeys: (...a: unknown[]) => listPasskeys(...a),
+    openChangePassword: (...a: unknown[]) => openChangePassword(...a),
   };
   return {
     ...original,
@@ -131,5 +133,64 @@ describe("ItemDetail passkeys", () => {
     await act(async () => (old.querySelector("button") as HTMLButtonElement).click());
     expect(old.textContent).toContain("The newer passkey stays.");
     expect(old.textContent).not.toContain("lose access");
+  });
+});
+
+describe("ItemDetail change on website", () => {
+  const site: ItemOverview = {
+    ...note,
+    id: "l2",
+    itemType: "login",
+    title: "Shop",
+    username: "me",
+    hasPassword: true,
+    urls: [{ url: "https://shop.example.com/login", matchType: "domain" }],
+  };
+  const renderLogin = (item: ItemOverview, readOnly = false) =>
+    act(async () =>
+      root.render(
+        <ToastProvider>
+          <ItemDetail item={item} revision={0} readOnly={readOnly} onEdit={() => undefined} onDelete={() => undefined} onOpen={() => undefined} />
+        </ToastProvider>,
+      ),
+    );
+  const changeButton = () =>
+    [...host.querySelectorAll("button")].find((b) => b.textContent?.includes("Change on website")) as HTMLButtonElement | undefined;
+
+  beforeEach(() => openChangePassword.mockReset().mockResolvedValue("curated"));
+
+  it("asks Rust to open the page by item id only, even while read-only", async () => {
+    await renderLogin(site, true);
+    const b = changeButton()!;
+    expect(b.disabled).toBe(false);
+    await act(async () => b.click());
+    expect(openChangePassword).toHaveBeenCalledWith("l2");
+    expect(openChangePassword.mock.calls[0]).toHaveLength(1);
+    expect(host.textContent).not.toContain("doesn't point to a change-password page");
+  });
+
+  it("says when only the website could be opened", async () => {
+    openChangePassword.mockResolvedValue("website");
+    await renderLogin(site);
+    await act(async () => changeButton()!.click());
+    expect(host.textContent).toContain("doesn't point to a change-password page");
+  });
+
+  it("is disabled while Rust looks for the page", async () => {
+    let finish: (v: string) => void = () => undefined;
+    openChangePassword.mockReturnValue(new Promise((r) => (finish = r)));
+    await renderLogin(site);
+    await act(async () => changeButton()!.click());
+    expect(changeButton()!.disabled).toBe(true);
+    await act(async () => finish("well_known"));
+    expect(changeButton()!.disabled).toBe(false);
+  });
+
+  it("is not offered without an http(s) website or on a note", async () => {
+    await renderLogin({ ...site, urls: [] });
+    expect(changeButton()).toBeUndefined();
+    reveal.mockResolvedValue("");
+    await renderNote();
+    expect(changeButton()).toBeUndefined();
   });
 });

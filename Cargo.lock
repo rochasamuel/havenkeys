@@ -2867,6 +2867,7 @@ version = "0.35.0"
 dependencies = [
  "apple-native-keyring-store",
  "arboard",
+ "axum",
  "gethostname",
  "havenkeys-bridge",
  "havenkeys-client",
@@ -2879,6 +2880,7 @@ dependencies = [
  "objc2",
  "objc2-app-kit",
  "qrcode",
+ "reqwest 0.12.28",
  "rxing",
  "serde",
  "serde_json",
@@ -2893,6 +2895,7 @@ dependencies = [
  "tauri-plugin-updater",
  "tempfile",
  "tokio",
+ "url",
  "uuid",
  "windows-native-keyring-store",
  "xcap",

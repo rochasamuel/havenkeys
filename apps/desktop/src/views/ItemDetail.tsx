@@ -8,6 +8,7 @@ import { CopyButton } from "../components/CopyButton";
 import { Field, IconButton, TotpField } from "../components/Field";
 import { HealthChips } from "../components/HealthChips";
 import { Attachments } from "../components/Attachments";
+import { ChangePasswordButton } from "../components/ChangePasswordButton";
 import { Icon } from "../components/Icon";
 import { SsoRow } from "../components/SsoRow";
 import { useToast } from "../components/Toast";
@@ -219,6 +220,8 @@ export function ItemDetail({ item, revision, health, readOnly, onTag, onEdit, on
           <p className="item-kind">{item.itemType === "login" ? (host ?? t.common.login) : t.common.secureNote}</p>
         </div>
         <div className="item-head-actions">
+          {/* Not disabled when read-only: it only opens a page. */}
+          <ChangePasswordButton item={item} />
           <button className="btn btn-small" onClick={onEdit} disabled={readOnly}>
             <Icon name="edit" size={15} /> {t.common.edit}
           </button>

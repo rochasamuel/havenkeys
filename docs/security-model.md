@@ -21,6 +21,9 @@ This document describes *how* HavenKeys enforces the properties listed in
    (§13). Reads work offline from the local encrypted replica. The Android
    app adds one more, for sites already in the vault: their
    `assetlinks.json` (§22.7), behind a setting that is on by default.
+   The desktop's "Change on website" may, on that click only, ask the
+   login's own site for its `/.well-known/change-password` URL when the
+   compiled change-password table has no page for it (§28).
 
 ## 2. What is protected
 
@@ -2330,3 +2333,28 @@ Spec: `docs/superpowers/specs/2026-11-03-bank-account-design.md`. Threats:
 * **Limitations.** The values reach the page's JavaScript once filled, as a
   login's do. The Android framework holds the offered values for the fill
   session unless "Confirm before filling" is on.
+
+## 28. Change on website
+
+Spec: `docs/superpowers/specs/2026-11-14-change-password-url-design.md`.
+Review: `security-review.md` CP1–CP4.
+
+* **What it does.** A login's detail view and Vault health's password rows
+  offer "Change on website" (desktop). Rust opens, in order: the page for
+  the login's site in a compiled table
+  (`crates/havenkeys-core/data/change-password-urls.json`, from Apple's
+  Password Manager Resources, never fetched); else the site's
+  `https://<host>/.well-known/change-password`, if a probe confirms it; else
+  the login's website.
+* **The probe** is the one request this adds, and it runs only on the
+  user's click, for that login. It asks first for a path that must not
+  exist (a site answering 2xx to everything gives no signal), then for the
+  well-known URL, which must end in a 2xx. https only; DNS names under a
+  known public suffix only, never IP addresses, `localhost`, `.local` or
+  explicit ports; names resolve to public addresses only (no loopback,
+  private, link-local or metadata addresses, rebinding included); at most 5
+  redirects, each checked the same way; 3 s to connect, 8 s in all; no
+  cookies, credentials, Referer or proxy; bodies are not read. The site
+  learns what the browser visit right after tells it.
+* **Input.** The renderer sends the item id only; addresses come from the
+  login's saved websites or the table.

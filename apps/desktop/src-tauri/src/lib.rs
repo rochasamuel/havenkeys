@@ -10,6 +10,7 @@ mod attachments;
 mod autostart;
 mod bank;
 mod card;
+mod change_password;
 mod clipboard;
 mod commands;
 mod confirm;
@@ -379,6 +380,7 @@ pub fn run() {
             commands::get_totp_code,
             commands::copy_secret,
             commands::open_website,
+            change_password::open_change_password,
             health::health_report,
             health::set_health_ignored,
             health::open_health_help,

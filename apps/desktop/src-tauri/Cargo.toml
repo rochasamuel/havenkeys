@@ -27,8 +27,14 @@ havenkeys-client = { path = "../../../crates/havenkeys-client" }
 # Rust only; the capability grants the renderer none of their commands.
 tauri = { version = "2", features = ["tray-icon"] }
 serde = { version = "1", features = ["derive"] }
-# Only for a timer (the unlock fallback); already in the tree through Tauri.
-tokio = { version = "1", features = ["time"] }
+# A timer (the unlock fallback) and the change-password probe's DNS lookup
+# (change_password.rs); already in the tree through Tauri.
+tokio = { version = "1", features = ["time", "net"] }
+# The change-password probe (change_password.rs), and nothing else: the same
+# version and features as havenkeys-sync-client (rustls, no cookie store), so
+# no new crate. Built with no proxy and a resolver that keeps public addresses.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "http2"] }
+url = "2"
 serde_json = "1"
 uuid = { version = "1.20", features = ["serde", "v4"] }
 # Clipboard is handled in Rust so copied secrets never transit the renderer.
@@ -79,5 +85,8 @@ objc2-app-kit = { version = "0.3", default-features = false, features = ["std", 
 zbus-secret-service-keyring-store = { version = "1.0", features = ["crypto-rust"] }
 
 [dev-dependencies]
+# The change-password probe's tests run it against a local server.
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 havenkeys-client = { path = "../../../crates/havenkeys-client", features = ["testing"] }
 tempfile = "3"
