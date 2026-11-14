@@ -30,7 +30,7 @@
 //   Typed cards wait for the user's save in memory only, for at most
 //   CARD_SAVE_TTL_MS; the number goes to Rust only on Save.
 
-import type { Match, PasswordOptions, Request, ResultFor, RequestType } from "@havenkeys/protocol";
+import type { Match, PasswordConstraints, PasswordFieldRules, PasswordOptions, Request, ResultFor, RequestType, RuleSource } from "@havenkeys/protocol";
 import {
   brandOf,
   CARD_BRAND_NAMES,
@@ -189,6 +189,10 @@ interface MenuSession {
   host: Pick<FrameRef, "tabId" | "frameId"> | null;
   /** The saved site this page only looks like: the menu shows only the warning. */
   lookalikeOf: string | null;
+  /** A new-password field's passwordrules/minlength/maxlength (page content, bounded). */
+  fieldRules?: PasswordFieldRules;
+  /** Rust says a password generated here follows these rules: the row says so. */
+  rules?: RuleSource;
   expires: number;
 }
 
@@ -595,6 +599,7 @@ export function createInlineHandler(deps: InlineDeps) {
     ancestry: Ancestry | null = null,
     viewport: Viewport | null = null,
     passwordBox = false,
+    passwordRules?: PasswordFieldRules,
   ): Promise<OpenMenuReply> {
     if (deps.suggestionsOn && !(await deps.suggestionsOn())) {
       // The user hid the menu under login fields; saving and passkeys go on.
@@ -660,7 +665,53 @@ export function createInlineHandler(deps: InlineDeps) {
     if ((nothing || (locked && kind === "bank")) && !explicit) return { ok: false };
     const extra =
       kind === "login" && !locked && items.length > 0 && passkeys.length === 0 ? await passkeyHint(frame) : { hint: null, help: null };
+    if (kind === "new_password") {
+      // Rust says, before any password exists, whether one will follow the field's or the site's rules.
+      const rules = locked ? null : await rulesFollowed(frame, passwordRules);
+      const reply = register(frame, kind, locked, items, passkeys, extra, roles, identity);
+      const m = menus.get(frame.tabId);
+      if (reply.ok && m?.token === reply.token) {
+        if (passwordRules) m.fieldRules = passwordRules;
+        if (rules) m.rules = rules;
+      }
+      return reply;
+    }
     return register(frame, kind, locked, items, passkeys, extra, roles, identity);
+  }
+
+  /** What a new password on `frame` must meet: the browser's URL for the frame, and the field's own rules. */
+  function constraintsFor(frame: FrameRef, fieldRules: PasswordFieldRules | undefined): PasswordConstraints {
+    return { url: frame.url, ...(fieldRules ?? {}) };
+  }
+
+  /**
+   * Which rules a password generated for this field would follow, or null.
+   * Any error (an older desktop that rejects the constraints as malformed,
+   * locked meanwhile, rate limited) is no note: Rust decides, and the answer
+   * only changes a line of text in our own menu.
+   */
+  async function rulesFollowed(frame: FrameRef, fieldRules: PasswordFieldRules | undefined): Promise<RuleSource | null> {
+    try {
+      return (await deps.client.request({ type: "generator_options", constraints: constraintsFor(frame, fieldRules) })).followed;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * A new password for the field of menu `m`, following its rules. A desktop
+   * older than the constraints rejects them as malformed (or, should our
+   * bounds ever differ, as invalid input): ask again without them, which is
+   * exactly the request it knew.
+   */
+  async function generateFor(m: MenuSession, options: PasswordOptions | undefined): Promise<string> {
+    const base = { type: "generate_password" as const, ...(options ? { options } : {}) };
+    try {
+      return (await deps.client.request({ ...base, constraints: constraintsFor(m.frame, m.fieldRules) })).password;
+    } catch (e) {
+      if (!(e instanceof BridgeError) || (e.code !== "malformed" && e.code !== "invalid_input")) throw e;
+    }
+    return (await deps.client.request(base)).password;
   }
 
   function register(
@@ -869,6 +920,7 @@ export function createInlineHandler(deps: InlineDeps) {
           req.ancestry ?? null,
           req.viewport ?? null,
           req.passwordBox === true,
+          req.passwordRules,
         );
       case "cs_close_menu": {
         const m = menus.get(frame.tabId);
@@ -922,7 +974,10 @@ export function createInlineHandler(deps: InlineDeps) {
         }
         const site = displayHost(m.frame.url) ?? "";
         const items = m.items.map((i) => ({ id: i.id, title: i.title, username: i.username, provider: i.provider, tags: i.tags, ...(i.bank ? { bank: i.bank } : {}) }));
-        return { ok: true, value: { state: "ready", kind: m.kind, site, items, passkeys: m.passkeys, hint: m.hint, identity: m.identity } };
+        return {
+          ok: true,
+          value: { state: "ready", kind: m.kind, site, items, passkeys: m.passkeys, hint: m.hint, identity: m.identity, ...(m.rules ? { rules: m.rules } : {}) },
+        };
       }
       case "menu_pick_card": {
         const m = liveMenu(tabId, req.token);
@@ -1000,8 +1055,8 @@ export function createInlineHandler(deps: InlineDeps) {
         if (!m || m.locked || m.kind !== "new_password") return { ok: false, message: t.errors.menuExpired };
         closeMenu(tabId);
         try {
-          const g = await deps.client.request({ type: "generate_password", ...(req.options ? { options: req.options } : {}) });
-          await pickFill(m.frame, m.token, { kind: "generated", password: g.password }, null);
+          const password = await generateFor(m, req.options);
+          await pickFill(m.frame, m.token, { kind: "generated", password }, null);
         } catch (e) {
           return fail(e);
         }

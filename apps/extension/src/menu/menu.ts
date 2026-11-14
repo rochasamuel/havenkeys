@@ -2,7 +2,7 @@
 // codes go from the background straight to the content script and never
 // pass through this page.
 
-import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, SSO_PROVIDERS, type IdentityRole, type PasswordOptions } from "@havenkeys/protocol";
+import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, SSO_PROVIDERS, type IdentityRole, type PasswordOptions, type RuleSource } from "@havenkeys/protocol";
 import { applyDocumentLang, t as msg } from "../i18n";
 import { MENU_MAX_HEIGHT, MENU_MAX_ROWS, MENU_MIN_HEIGHT, type CardRowView, type IdentityRowView, type MenuItemView, type MenuView } from "../messaging/inline";
 import { tagChips } from "../shared/tags";
@@ -191,12 +191,14 @@ const CLASSES: ReadonlyArray<{ key: CharClass; text: string; label: () => string
  * applies to this password only and is not saved. The password itself never
  * passes through this page.
  */
-function generateRows(t: string): HTMLElement[] {
+function generateRows(t: string, rules: RuleSource | undefined): HTMLElement[] {
   /** The panel's policy while it is open. */
   let chosen: PasswordOptions | null = null;
   const generate = (): Promise<void> => pick({ type: "menu_generate", token: t, ...(chosen ? { options: { ...chosen } } : {}) });
 
-  const genRow = row(sparkle(), msg.menu.generateTitle, msg.menu.generateBody, generate, { title: true, detail: true });
+  // Rust said the password will follow the field's or the site's rules (whatever the panel picks).
+  const detail = rules ? msg.menu.generateFollowsRules : msg.menu.generateBody;
+  const genRow = row(sparkle(), msg.menu.generateTitle, detail, generate, { title: true, detail: true });
   const toggle = h("button", { className: "icon-btn gen-toggle" }, switchesIcon());
   toggle.type = "button";
   toggle.title = msg.menu.generateSettings;
@@ -415,7 +417,7 @@ function render(t: string, view: MenuView): void {
     return;
   }
   if (view.kind === "new_password") {
-    main.replaceChildren(...generateRows(t));
+    main.replaceChildren(...generateRows(t, view.rules));
     return;
   }
   if (view.kind === "identity") {

@@ -31,6 +31,10 @@ export const MAX_USERNAME_BYTES = 4 * 512;
 /** Generated password length bounds (the Rust core generator's). */
 export const MIN_PASSWORD_LENGTH = 8;
 export const MAX_PASSWORD_LENGTH = 128;
+/** A password field's `passwordrules` attribute, in bytes (page text). */
+export const MAX_PASSWORD_RULES_BYTES = 1024;
+/** A password field's `minlength`/`maxlength`, at most (page values). */
+export const MAX_FIELD_LENGTH = 1024;
 
 /** Credential IDs HavenKeys creates, and the only length it accepts. */
 export const CREDENTIAL_ID_BYTES = 16;
@@ -65,6 +69,33 @@ export function isPasswordOptions(v: unknown): v is PasswordOptions {
 }
 
 /**
+ * What a password field says about its password: its `passwordrules`
+ * attribute and its `minlength`/`maxlength`. Page-controlled, so bounded;
+ * it can only shape the password that same page receives.
+ */
+export type PasswordFieldRules = { rules?: string; minLength?: number; maxLength?: number };
+
+/** `url`: the field's frame, from the browser (never the page). */
+export type PasswordConstraints = PasswordFieldRules & { url: string };
+
+/** Which rules a generated password followed: the field's own, or HavenKeys' table of sites. */
+export type RuleSource = "field" | "site";
+const RULE_SOURCES: readonly RuleSource[] = ["field", "site"];
+
+const isFieldLength = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= MAX_FIELD_LENGTH;
+
+/** Exactly a PasswordFieldRules: only its keys, each optional and in bounds. */
+export function isPasswordFieldRules(v: unknown): v is PasswordFieldRules {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return false;
+  const o = v as Record<string, unknown>;
+  if (!Object.keys(o).every((k) => k === "rules" || k === "minLength" || k === "maxLength")) return false;
+  if ("rules" in o && !(typeof o.rules === "string" && o.rules.length > 0 && utf8Length(o.rules) <= MAX_PASSWORD_RULES_BYTES)) return false;
+  if ("minLength" in o && !isFieldLength(o.minLength)) return false;
+  if ("maxLength" in o && !isFieldLength(o.maxLength)) return false;
+  return true;
+}
+
+/**
  * `topUrl` is set when `url` is an iframe: the tab's top-level page. The
  * desktop then only serves logins that match both.
  */
@@ -77,10 +108,10 @@ export type Request =
   | { type: "fill_item"; itemId: string; url: string; topUrl?: string }
   | { type: "open_item"; itemId: string; url: string; topUrl?: string }
   | { type: "get_totp"; itemId: string; url: string; topUrl?: string }
-  /** The desktop generator's saved policy. */
-  | { type: "generator_options" }
-  /** Without `options`: the desktop generator's saved policy. */
-  | { type: "generate_password"; options?: PasswordOptions }
+  /** The desktop generator's saved policy; with `constraints`, also which rules a generate would follow. */
+  | { type: "generator_options"; constraints?: PasswordConstraints }
+  /** Without `options`: the desktop generator's saved policy. `constraints`: follow the field's (else the site's) rules. */
+  | { type: "generate_password"; options?: PasswordOptions; constraints?: PasswordConstraints }
   | { type: "check_login"; url: string; topUrl?: string; username: string | null; password: string; currentPassword?: string }
   | {
       type: "save_login";
@@ -211,8 +242,9 @@ export type Result =
   | { type: "check_lookalike"; lookalikeOf: string | null }
   | { type: "fill_item"; username: string | null; password: string | null; bank: BankValues | null; autoSubmit: boolean }
   | { type: "get_totp"; code: string; period: number; secondsRemaining: number; autoSubmit: boolean }
-  | { type: "generator_options"; options: PasswordOptions }
-  | { type: "generate_password"; password: string }
+  /** `followed` is null when the desktop sent none (no constraints, none followed, or an older desktop). */
+  | { type: "generator_options"; options: PasswordOptions; followed: RuleSource | null }
+  | { type: "generate_password"; password: string; followed: RuleSource | null }
   | { type: "check_login"; action: SaveAction; itemId: string | null }
   | { type: "save_login"; itemId: string }
   | { type: "find_passkeys"; passkeys: PasskeyMatch[] }
@@ -475,6 +507,12 @@ function parseMatch(v: unknown): Match | null {
   };
 }
 
+/** A result's optional `followed`: absent is null; anything but a known source is undefined (reject). */
+function parseFollowed(v: Obj): RuleSource | null | undefined {
+  if (!Object.prototype.hasOwnProperty.call(v, "followed")) return null;
+  return RULE_SOURCES.includes(v.followed as RuleSource) ? (v.followed as RuleSource) : undefined;
+}
+
 function parseResult(v: unknown): Result | null {
   if (!isObj(v)) return null;
   switch (v.type) {
@@ -524,13 +562,18 @@ function parseResult(v: unknown): Result | null {
       if (!isBool(v.autoSubmit)) return null;
       return { type: "get_totp", code: v.code, period: v.period, secondsRemaining: v.secondsRemaining, autoSubmit: v.autoSubmit };
     case "generator_options": {
-      if (!hasExactKeys(v, ["type", "options"]) || !isPasswordOptions(v.options)) return null;
+      const followed = parseFollowed(v);
+      if (followed === undefined || !hasExactKeys(v, followed ? ["type", "options", "followed"] : ["type", "options"])) return null;
+      if (!isPasswordOptions(v.options)) return null;
       const { length, uppercase, lowercase, digits, symbols, avoidAmbiguous } = v.options;
-      return { type: "generator_options", options: { length, uppercase, lowercase, digits, symbols, avoidAmbiguous } };
+      return { type: "generator_options", options: { length, uppercase, lowercase, digits, symbols, avoidAmbiguous }, followed };
     }
-    case "generate_password":
-      if (!hasExactKeys(v, ["type", "password"]) || !isStr(v.password) || v.password.length === 0) return null;
-      return { type: "generate_password", password: v.password };
+    case "generate_password": {
+      const followed = parseFollowed(v);
+      if (followed === undefined || !hasExactKeys(v, followed ? ["type", "password", "followed"] : ["type", "password"])) return null;
+      if (!isStr(v.password) || v.password.length === 0) return null;
+      return { type: "generate_password", password: v.password, followed };
+    }
     case "check_login": {
       if (!hasExactKeys(v, ["type", "action", "itemId"])) return null;
       const { action, itemId } = v;

@@ -16,14 +16,32 @@ use havenkeys_core::card_page::{CardFrame as CoreCardFrame, CardRole as CoreCard
 use havenkeys_core::generator::{generate, GeneratorOptions};
 use havenkeys_core::identity::FillRole;
 use havenkeys_core::passkey::{encode_b64url, B64Url, CreateQuery, PasskeyCreate, Upgrade};
+use havenkeys_core::password_rules::{
+    followed_for_page, generate_for_page, FieldConstraints, RuleSource as CoreRuleSource,
+};
 use havenkeys_core::vault::{ConfirmUpdate, SaveTarget, StagedWrite, VaultService};
 use havenkeys_core::{Error, SecretString};
 use havenkeys_protocol::{
     lookalike_site_ok, CardFrameValues, CardMatch, CardValue, Entitlement, ErrorCode,
-    IdentityValue, Match, PasskeyCandidate, PasskeyMatch, PasswordOptions, Request, ResultBody,
-    SaveAction, UpgradeHint, WireSecret, MAX_MATCHES,
+    IdentityValue, Match, PasskeyCandidate, PasskeyMatch, PasswordConstraints, PasswordOptions,
+    Request, ResultBody, RuleSource, SaveAction, UpgradeHint, WireSecret, MAX_MATCHES,
 };
 use uuid::Uuid;
+
+fn field_constraints(c: &PasswordConstraints) -> FieldConstraints<'_> {
+    FieldConstraints {
+        rules: c.rules.as_deref(),
+        min_length: c.min_length,
+        max_length: c.max_length,
+    }
+}
+
+fn wire_rule_source(s: CoreRuleSource) -> RuleSource {
+    match s {
+        CoreRuleSource::Field => RuleSource::Field,
+        CoreRuleSource::Site => RuleSource::Site,
+    }
+}
 
 fn code(e: Error) -> ErrorCode {
     match e {
@@ -287,9 +305,17 @@ pub(crate) fn dispatch_with(
                 auto_submit,
             }))
         }
-        Request::GeneratorOptions {} => {
+        Request::GeneratorOptions { constraints } => {
             let saved = v.settings().map_err(code)?.generator;
+            // Page-shaped, so it only ever says what the page's own password follows.
+            let followed = match constraints {
+                Some(c) => followed_for_page(&saved, &c.url, &field_constraints(c))
+                    .map_err(code)?
+                    .map(wire_rule_source),
+                None => None,
+            };
             Ok(Dispatched::Done(ResultBody::GeneratorOptions {
+                followed,
                 options: PasswordOptions {
                     length: u32::try_from(saved.length).map_err(|_| ErrorCode::Internal)?,
                     uppercase: saved.uppercase,
@@ -300,7 +326,10 @@ pub(crate) fn dispatch_with(
                 },
             }))
         }
-        Request::GeneratePassword { options } => {
+        Request::GeneratePassword {
+            options,
+            constraints,
+        } => {
             // Without options: the policy saved in the desktop's generator tab.
             let policy = match options {
                 Some(o) => GeneratorOptions {
@@ -313,9 +342,20 @@ pub(crate) fn dispatch_with(
                 },
                 None => v.settings().map_err(code)?.generator,
             };
-            let generated = generate(&policy).map_err(code)?;
+            // Constraints come from the page the password goes to: they can
+            // only shape (weaken) that page's own password. Without them,
+            // exactly the policy, as before.
+            let (generated, followed) = match constraints {
+                Some(c) => {
+                    let p =
+                        generate_for_page(&policy, &c.url, &field_constraints(c)).map_err(code)?;
+                    (p.generated, p.followed.map(wire_rule_source))
+                }
+                None => (generate(&policy).map_err(code)?, None),
+            };
             Ok(Dispatched::Done(ResultBody::GeneratePassword {
                 password: wire_secret(&generated.password),
+                followed,
             }))
         }
         Request::CheckLogin {

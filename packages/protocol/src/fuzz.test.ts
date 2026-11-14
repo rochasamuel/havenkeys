@@ -27,6 +27,8 @@ const SEEDS: unknown[] = [
   { v: 1, id: 5, result: { type: "check_login", action: "update", itemId: ID } },
   { v: 1, id: 6, result: { type: "save_login", itemId: ID } },
   { v: 1, id: 7, result: { type: "generate_password", password: "x" } },
+  { v: 1, id: 7, result: { type: "generate_password", password: "x", followed: "site" } },
+  { v: 1, id: 7, result: { type: "generator_options", options: { length: 20, uppercase: true, lowercase: true, digits: true, symbols: false, avoidAmbiguous: false }, followed: "field" } },
   { v: 1, id: 8, error: { code: "denied", message: "m" } },
   { v: 1, event: { type: "locked" } },
   { v: 1, id: 1, result: { type: "find_passkeys", passkeys: [{ itemId: ID, credentialId: CRED, title: "GitHub", userName: "octo" }] } },

@@ -88,9 +88,9 @@ impl GeneratorOptions {
     }
 }
 
-pub fn generate(options: &GeneratorOptions) -> Result<GeneratedPassword> {
-    options.validate()?;
-    let classes: Vec<Vec<u8>> = [
+/// The policy's enabled classes, each filtered for `avoid_ambiguous`.
+pub(crate) fn policy_classes(options: &GeneratorOptions) -> Vec<Vec<u8>> {
+    [
         (options.uppercase, UPPER),
         (options.lowercase, LOWER),
         (options.digits, DIGITS),
@@ -99,33 +99,84 @@ pub fn generate(options: &GeneratorOptions) -> Result<GeneratedPassword> {
     .into_iter()
     .filter(|(enabled, _)| *enabled)
     .map(|(_, chars)| class(chars, options.avoid_ambiguous))
-    .collect();
+    .collect()
+}
+
+pub(crate) fn is_ambiguous(c: u8) -> bool {
+    AMBIGUOUS.contains(&c)
+}
+
+pub fn generate(options: &GeneratorOptions) -> Result<GeneratedPassword> {
+    options.validate()?;
+    let classes = policy_classes(options);
     if classes.is_empty() {
         return Err(Error::InvalidInput("select at least one character type"));
     }
     let alphabet: Vec<u8> = classes.concat();
+    build(&classes, &alphabet, options.length, None)
+}
 
+/// Attempts at a password that keeps every required class after
+/// `max_consecutive` resampling, before giving up.
+const BUILD_ATTEMPTS: usize = 64;
+
+/// The generator itself: one character from each of `required` (a set
+/// each), the rest from `alphabet`, shuffled with Fisher–Yates. With
+/// `max_consecutive`, a character that would make a run of more than that
+/// many identical characters is drawn again from the alphabet without the
+/// repeated character; a result that thereby lost a required class is
+/// discarded and built again. Every draw is an unbiased `Uniform` sample.
+///
+/// The caller bounds `length`; it must hold the required characters.
+pub(crate) fn build(
+    required: &[Vec<u8>],
+    alphabet: &[u8],
+    length: usize,
+    max_consecutive: Option<usize>,
+) -> Result<GeneratedPassword> {
+    if length == 0 || required.len() > length || alphabet.is_empty() {
+        return Err(Error::InvalidInput("password length out of range"));
+    }
     let mut rng = UnwrapErr(SysRng);
-    let mut out = Zeroizing::new(Vec::with_capacity(options.length));
-    for set in &classes {
-        out.push(pick(&mut rng, set)?);
+    for _ in 0..BUILD_ATTEMPTS {
+        let mut out = Zeroizing::new(Vec::with_capacity(length));
+        for set in required {
+            out.push(pick(&mut rng, set)?);
+        }
+        while out.len() < length {
+            out.push(pick(&mut rng, alphabet)?);
+        }
+        // Fisher–Yates with unbiased index selection.
+        for i in (1..out.len()).rev() {
+            let j = Uniform::new_inclusive(0, i)
+                .map_err(|_| Error::InvalidInput("shuffle"))?
+                .sample(&mut rng);
+            out.swap(i, j);
+        }
+        if let Some(n) = max_consecutive.filter(|n| *n > 0) {
+            for i in n..out.len() {
+                if out[i - n..i].iter().all(|c| *c == out[i]) {
+                    let prev = out[i - 1];
+                    let others: Zeroizing<Vec<u8>> =
+                        Zeroizing::new(alphabet.iter().copied().filter(|c| *c != prev).collect());
+                    out[i] = pick(&mut rng, &others)?;
+                }
+            }
+            if !required
+                .iter()
+                .all(|set| out.iter().any(|c| set.contains(c)))
+            {
+                continue;
+            }
+        }
+        let password =
+            String::from_utf8(out.to_vec()).map_err(|_| Error::InvalidInput("charset"))?;
+        return Ok(GeneratedPassword {
+            password: SecretString::new(password),
+            entropy_bits: length as f64 * (alphabet.len() as f64).log2(),
+        });
     }
-    while out.len() < options.length {
-        out.push(pick(&mut rng, &alphabet)?);
-    }
-    // Fisher–Yates with unbiased index selection.
-    for i in (1..out.len()).rev() {
-        let j = Uniform::new_inclusive(0, i)
-            .map_err(|_| Error::InvalidInput("shuffle"))?
-            .sample(&mut rng);
-        out.swap(i, j);
-    }
-
-    let password = String::from_utf8(out.to_vec()).map_err(|_| Error::InvalidInput("charset"))?;
-    Ok(GeneratedPassword {
-        password: SecretString::new(password),
-        entropy_bits: options.length as f64 * (alphabet.len() as f64).log2(),
-    })
+    Err(Error::InvalidInput("password rules cannot be met"))
 }
 
 #[cfg(test)]

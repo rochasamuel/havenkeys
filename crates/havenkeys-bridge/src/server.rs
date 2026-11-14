@@ -632,7 +632,7 @@ fn request_class(req: &Request) -> Option<RequestClass> {
         Request::Status {} | Request::Lock {} => None,
         Request::FindMatches { .. }
         | Request::CheckLookalike { .. }
-        | Request::GeneratorOptions {}
+        | Request::GeneratorOptions { .. }
         | Request::GeneratePassword { .. }
         | Request::FindPasskeys { .. }
         | Request::CheckPasskeyCreate { .. }

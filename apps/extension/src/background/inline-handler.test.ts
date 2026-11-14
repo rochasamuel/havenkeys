@@ -530,14 +530,101 @@ describe("suggestion menus", () => {
     await h.handleContent(frame(), { type: "cs_open_menu", kind: "new_password" });
     const options = { length: 40, uppercase: false, lowercase: true, digits: true, symbols: false, avoidAmbiguous: false };
     await h.handleInline(1, { type: "menu_generate", token: T1, options });
-    expect(requests.at(-1)).toEqual({ type: "generate_password", options });
+    expect(requests.at(-1)).toEqual({ type: "generate_password", options, constraints: { url: "https://github.com/login" } });
   });
 
   it("without options, leaves the policy to the desktop's generator tab", async () => {
     const { h, requests } = setup();
     await h.handleContent(frame(), { type: "cs_open_menu", kind: "new_password" });
     await h.handleInline(1, { type: "menu_generate", token: T1 });
-    expect(requests.at(-1)).toEqual({ type: "generate_password" });
+    expect(requests.at(-1)).toEqual({ type: "generate_password", constraints: { url: "https://github.com/login" } });
+  });
+
+  describe("password rules", () => {
+    const passwordRules = { rules: "minlength: 8; required: digit;", maxLength: 16 };
+    const signup = frame({ url: "https://signup.example/join", origin: "https://signup.example" });
+
+    it("sends the field's rules with the browser's URL, and the menu says Rust will follow them", async () => {
+      const { h, requests, sent } = setup((r) =>
+        r.type === "generator_options" ? { ...(defaultAnswer(r) as object), followed: "field" } : defaultAnswer(r),
+      );
+      await h.handleContent(signup, { type: "cs_open_menu", kind: "new_password", passwordRules });
+      const constraints = { url: "https://signup.example/join", ...passwordRules };
+      expect(requests).toContainEqual({ type: "generator_options", constraints });
+      expect(await h.handleInline(1, { type: "menu_state", token: T1 })).toMatchObject({ value: { kind: "new_password", rules: "field" } });
+      await h.handleInline(1, { type: "menu_generate", token: T1 });
+      expect(requests.at(-1)).toEqual({ type: "generate_password", constraints });
+      expect(sent.at(-1)?.msg).toMatchObject({ fill: { kind: "generated", password: "Gen!" } });
+    });
+
+    it("says nothing when Rust follows no rules or cannot say", async () => {
+      for (const generatorOptions of [
+        (r: Request) => defaultAnswer(r),
+        () => {
+          throw new BridgeError("malformed", "x");
+        },
+      ]) {
+        const { h } = setup((r) => (r.type === "generator_options" ? generatorOptions(r) : defaultAnswer(r)));
+        expect(await h.handleContent(signup, { type: "cs_open_menu", kind: "new_password", passwordRules })).toMatchObject({ ok: true });
+        const state = await h.handleInline(1, { type: "menu_state", token: T1 });
+        expect(state).toMatchObject({ ok: true, value: { kind: "new_password" } });
+        expect((state as { value: object }).value).not.toHaveProperty("rules");
+      }
+    });
+
+    it("asks a locked desktop nothing about rules", async () => {
+      const { h, requests } = setup((r) => {
+        if (r.type === "find_matches") throw new BridgeError("locked", "x");
+        return defaultAnswer(r);
+      });
+      await h.handleContent(signup, { type: "cs_open_menu", kind: "new_password", passwordRules });
+      expect(requests.map((r) => r.type)).toEqual(["find_matches"]);
+    });
+
+    it("retries without constraints when an older desktop rejects them", async () => {
+      const options = { length: 20, uppercase: true, lowercase: true, digits: true, symbols: false, avoidAmbiguous: false };
+      const { h, requests, sent } = setup((r) => {
+        if ((r.type === "generate_password" || r.type === "generator_options") && "constraints" in r) throw new BridgeError("malformed", "x");
+        return defaultAnswer(r);
+      });
+      await h.handleContent(signup, { type: "cs_open_menu", kind: "new_password", passwordRules });
+      expect(await h.handleInline(1, { type: "menu_generate", token: T1, options })).toEqual({ ok: true, value: null });
+      expect(requests.slice(-2)).toEqual([
+        { type: "generate_password", options, constraints: { url: "https://signup.example/join", ...passwordRules } },
+        { type: "generate_password", options },
+      ]);
+      expect(sent.at(-1)?.msg).toMatchObject({ fill: { kind: "generated", password: "Gen!" } });
+    });
+
+    it("does not retry other errors", async () => {
+      const { h, requests } = setup((r) => {
+        if (r.type === "generate_password") throw new BridgeError("locked", "x");
+        return defaultAnswer(r);
+      });
+      await h.handleContent(signup, { type: "cs_open_menu", kind: "new_password" });
+      expect((await h.handleInline(1, { type: "menu_generate", token: T1 })).ok).toBe(false);
+      expect(requests.filter((r) => r.type === "generate_password")).toHaveLength(1);
+    });
+
+    it("accepts rules from a new-password field only, in bounds", () => {
+      expect(parseContentRequest({ type: "cs_open_menu", kind: "new_password", passwordRules })).toEqual({
+        type: "cs_open_menu",
+        kind: "new_password",
+        passwordRules,
+      });
+      for (const bad of [
+        { type: "cs_open_menu", kind: "login", passwordRules },
+        { type: "cs_open_menu", kind: "new_password", passwordRules: {} },
+        { type: "cs_open_menu", kind: "new_password", passwordRules: { rules: "" } },
+        { type: "cs_open_menu", kind: "new_password", passwordRules: { rules: "x".repeat(1025) } },
+        { type: "cs_open_menu", kind: "new_password", passwordRules: { maxLength: 0 } },
+        { type: "cs_open_menu", kind: "new_password", passwordRules: { minLength: 1025 } },
+        { type: "cs_open_menu", kind: "new_password", passwordRules: { url: "https://evil.example/" } },
+        { type: "cs_open_menu", kind: "new_password", passwordRules: "minlength: 8" },
+      ]) {
+        expect(parseContentRequest(bad), JSON.stringify(bad)).toBeNull();
+      }
+    });
   });
 
   it("reads the desktop generator's saved policy for a new-password menu only", async () => {

@@ -16,6 +16,7 @@ import {
   isB64Url,
   isCardRole,
   isIdentityRole,
+  isPasswordFieldRules,
   isPasswordOptions,
   isUuid,
   MAX_CARD_ROLES,
@@ -30,7 +31,9 @@ import {
   type CardValue,
   type IdentityRole,
   type IdentityValue,
+  type PasswordFieldRules,
   type PasswordOptions,
+  type RuleSource,
   type SsoProvider,
 } from "@havenkeys/protocol";
 import type { PasskeyRow } from "../webauthn/messages";
@@ -89,11 +92,13 @@ export type ContentRequest =
   /**
    * `explicit`: the user clicked the field's HavenKeys icon, so answer even
    * with no matches. `passwordBox`: a login menu on a password box, which
-   * also lists the site's bank accounts.
+   * also lists the site's bank accounts. `passwordRules`: a new-password
+   * field's own passwordrules/minlength/maxlength (page content, bounded).
    */
   | {
       type: "cs_open_menu";
       kind: MenuKind;
+      passwordRules?: PasswordFieldRules;
       explicit?: true;
       passwordBox?: true;
       roles?: IdentityRole[];
@@ -254,7 +259,11 @@ export type IdentityRolesReply = { roles: IdentityRole[] };
 
 export type MenuView =
   | { state: "locked" }
-  | { state: "ready"; kind: MenuKind; site: string; items: MenuItemView[]; passkeys: PasskeyRow[]; hint: MenuHint | null; identity: IdentityRowView | null }
+  /**
+   * `rules`: a new-password menu's password will follow the field's own rules
+   * or the site's (Rust's answer to generator_options), so the row says so.
+   */
+  | { state: "ready"; kind: MenuKind; site: string; items: MenuItemView[]; passkeys: PasskeyRow[]; hint: MenuHint | null; identity: IdentityRowView | null; rules?: RuleSource }
   | { state: "cards"; site: string; cards: CardRowView[]; insecure: boolean }
   /** The page only looks like a saved site (spec 2026-10-13-lookalike-warning §5): one warning, nothing to fill. */
   | { state: "lookalike"; site: string; lookalikeOf: string };
@@ -416,9 +425,19 @@ export function parseContentRequest(msg: unknown): ContentRequest | null {
       if (!MENU_KINDS.includes(o.kind as MenuKind)) return null;
       const kind = o.kind as MenuKind;
       const keys = Object.keys(o).filter((k) => k !== "type" && k !== "kind");
-      const allowed = ["explicit", "passwordBox", "roles", "cardRoles", "anchor", "ancestry", "viewport"];
+      const allowed = ["explicit", "passwordBox", "roles", "cardRoles", "anchor", "ancestry", "viewport", "passwordRules"];
       if (keys.some((k) => !allowed.includes(k))) return null;
       if ("explicit" in o && o.explicit !== true) return null;
+      let passwordRules: PasswordFieldRules | undefined;
+      if ("passwordRules" in o) {
+        if (kind !== "new_password" || !isPasswordFieldRules(o.passwordRules) || Object.keys(o.passwordRules).length === 0) return null;
+        const { rules, minLength, maxLength } = o.passwordRules;
+        passwordRules = {
+          ...(rules !== undefined ? { rules } : {}),
+          ...(minLength !== undefined ? { minLength } : {}),
+          ...(maxLength !== undefined ? { maxLength } : {}),
+        };
+      }
       if ("passwordBox" in o && (o.passwordBox !== true || kind !== "login")) return null;
       let roles: IdentityRole[] | undefined;
       if ("roles" in o) {
@@ -454,6 +473,7 @@ export function parseContentRequest(msg: unknown): ContentRequest | null {
       return {
         type: "cs_open_menu",
         kind,
+        ...(passwordRules ? { passwordRules } : {}),
         ...(o.explicit === true ? { explicit: true as const } : {}),
         ...(o.passwordBox === true ? { passwordBox: true as const } : {}),
         ...(roles ? { roles } : {}),

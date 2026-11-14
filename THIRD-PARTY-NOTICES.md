@@ -7,7 +7,7 @@ material redistributed with it requires.
 Rust and npm dependencies are linked or bundled under permissive licences
 (MIT, Apache-2.0, BSD, ISC, Zlib) whose notices travel in the crates and
 packages themselves; `cargo deny check licenses` enforces the allowed set.
-Five crates (`cssparser`, `cssparser-macros`, `dtoa-short`, `option-ext`,
+Six crates (`colored`, `cssparser`, `cssparser-macros`, `dtoa-short`, `option-ext`,
 `selectors`) are MPL-2.0, a file-level copyleft satisfied by their being
 redistributed unmodified from crates.io. Among the MIT crates, `zxcvbn`
 (Copyright (c) 2016 Joshua Holmer; the Rust port by shssoichiro of Dropbox's
@@ -172,6 +172,41 @@ entries that offer TOTP codes with a valid hostname are kept, non-https
 documentation links are removed, and fields not used by HavenKeys are left
 out. It is compiled into the core (`include_str!`), so it ships in the
 desktop app and the Android library (Vault health).
+
+### Password rules (Apple Password Manager Resources)
+
+`crates/havenkeys-core/data/password-rules.json` is derived from
+`quirks/password-rules.json` in
+[Password Manager Resources by Apple](https://github.com/apple/password-manager-resources)
+(each domain's password rules, in the `passwordrules` syntax; snapshot taken
+on 2026-11-14), licensed under the MIT License below. Changes: the
+`{ "password-rules": … }` wrapper of each entry is removed, entries are
+sorted by domain and gathered under one `rules` key
+(`scripts/update-password-rules.mjs`). It is compiled into the core
+(`include_str!`), so it ships in the desktop app and the Android library;
+the desktop uses it to generate passwords a site accepts.
+
+```text
+Copyright 2020 - 2026 Apple Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
 
 ## Images
 
