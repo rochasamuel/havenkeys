@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Env } from "./group";
-import { findIdentityGroup, identityGroupFor, identityRoleOf, rolesOf } from "./identity";
+import { findIdentityGroup, identityGroupFor, identityRoleOf, isIdentityFillable, rolesOf } from "./identity";
 
 function visible(el: HTMLElement): boolean {
   for (let n: HTMLElement | null = el; n; n = n.parentElement) {
@@ -297,5 +297,23 @@ describe("identity groups", () => {
   it("refuses fields inside a search landmark", () => {
     page(`<form role="search"><input id="d" name="cidade"><input id="z" name="cep"></form>`);
     expect(identityGroupFor($("#z"), env)).toBeNull();
+  });
+});
+
+describe("field detection signals (spec 2026-11-14)", () => {
+  it("an aria-hidden or aria-disabled field takes no part in the identity group", () => {
+    page(`<form><input id="d" name="cidade"><input id="z" name="cep">
+      <div aria-hidden="true"><input id="t" name="telefone" type="tel"></div>
+      <input id="n" name="nome" aria-disabled="true"></form>`);
+    expect(rolesOf(identityGroupFor($("#z"), env)!)).toEqual(["city", "postalCode"]);
+    expect(isIdentityFillable($("#t"), env)).toBe(false);
+    expect(isIdentityFillable($("#n"), env)).toBe(false);
+    expect(isIdentityFillable($("#z"), env)).toBe(true);
+  });
+
+  it("a table row's preceding cell names the field", () => {
+    page(`<table><tr><td>CEP</td><td><input id="z" name="f7"></td></tr><tr><td>Cidade</td><td><input id="d" name="f8"></td></tr></table>`);
+    expect(role("#z")).toBe("postalCode");
+    expect(role("#d")).toBe("city");
   });
 });

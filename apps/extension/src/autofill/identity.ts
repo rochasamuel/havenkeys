@@ -6,6 +6,7 @@
 // Bounded like login groups: at most MAX_GROUP_INPUTS elements per group.
 
 import { DOCUMENT_ROLES, MAX_IDENTITY_ROLES, type IdentityRole } from "@havenkeys/protocol";
+import { isUnavailable } from "./aria";
 import { bankRoles } from "./bank";
 import { cardKindOf } from "./card-kind";
 import { groupRoot, MAX_CLIMB, MAX_FORM_INPUTS, MAX_GROUP_INPUTS, type Env } from "./group";
@@ -198,9 +199,9 @@ export function identityRoleOf(el: IdentityElement): { role: IdentityRole; confi
   return null;
 }
 
-/** Visible, enabled, editable. */
+/** Visible, enabled, editable, not aria-disabled or aria-hidden (aria.ts). */
 export function isIdentityFillable(el: IdentityElement, env: Env): boolean {
-  if (el.disabled) return false;
+  if (isUnavailable(el)) return false;
   if (!(env.strictVisible ? env.strictVisible(el) : env.isVisible(el))) return false;
   if (el instanceof HTMLSelectElement) return true;
   if (el.readOnly) return false;

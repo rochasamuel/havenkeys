@@ -211,7 +211,10 @@ the desktop had nothing to offer.
 ### Usable inputs
 
 An input is considered only if it is not disabled, not read-only, not of a
-non-text type (hidden, checkbox, date, and so on), and **visible**: rendered
+non-text type (hidden, checkbox, date, and so on), not marked unavailable to
+the user by the page (`aria-disabled="true"` on the field, `aria-hidden="true"`
+on the field or any ancestor up to 128 levels, shadow hosts included, or a
+`<fieldset disabled>` around it: `autofill/aria.ts`), and **visible**: rendered
 with a size of at least 4×4 px, and not hidden by `display`, `visibility`,
 `opacity` or `content-visibility` (`checkVisibility`). Hidden "honeypot"
 fields hidden that way are never classified or filled. A password-type
@@ -219,7 +222,12 @@ field must also pass the stricter check identity and card fields use
 (`autofill/visibility.ts`): not off the page, not below 10% combined
 opacity, not clipped or cut off by an `overflow: hidden` ancestor. A field
 covered by another element still counts as visible (see the security
-model's limitations). Automatic sign-in never presses a button whose
+model's limitations). The aria rule is the same for every classifier and
+every write: login (`usable.ts` `isFillable`, and through it
+`isStrictlyFillable` in `fill.ts`), card (`isCardFillable`), identity
+(`isIdentityFillable`) and bank (`bank.ts`), so an aria-hidden honeypot is
+neither counted, classified nor filled, and a field that turns
+aria-disabled after the menu opened gets nothing. Automatic sign-in never presses a button whose
 `formaction`, or whose form's `action`, sends to another origin; the
 fields stay filled and the user presses.
 
@@ -235,15 +243,17 @@ Each field gets a score per role. No single heuristic decides.
 | `autocomplete=new-password` | ignored: sites set it on every field to switch off browser autofill (gov.br's CPF box) | |
 | `type=email` | +80 | |
 | Strong keyword in `name`/`id` (username, login, email, account, usuario, operador…) or a document-number word (CPF, CNPJ, RG, documento, matrícula, NIF, NIE, DNI, CIF, RUT, CUIT/CUIL, CURP, RFC, cédula, passport, national id, codice fiscale) | +50 | |
-| Strong keyword in placeholder, aria-label, title, `<label>`, `aria-labelledby`, or a floating label (below) | +40 | |
+| Strong keyword in placeholder, aria-label, title, `<label>`, `aria-labelledby`, a floating label, or neighbouring text (below) | +40 | |
 | Weak keyword (user, mail, phone…) | +25 / +20 | |
+| Strong / weak username keyword in a test hook (`data-testid`, `data-test-id`, `data-test`, `data-qa`, `data-cy`, `data-automation-id`), only when `name`/`id` have none; does not count as "worded" for the username-only bonus | +30 / +15 | |
 | OTP keyword (otp, 2fa, verification code, token, sms code…) / weak (code, código, pin) | | +70 / +30 |
+| Strong OTP keyword in a test hook, when name, id and label have no strong one (replaces the weak +30) | | +40 (never enough alone) |
 | Placeholder that is only a code mask (4–8 of `-`, `_`, `•`, `0`: `------`, `000000`) | | +30 (never enough alone) |
 | `maxlength` 4–8, numeric input mode | | +15, +10 |
 | 4–8 adjacent single-character boxes, or 4–8 adjacent look-alike boxes (same type and class) without a `maxlength` one of which is `maxlength=1` or scores as an OTP field on its own (split code) | | +65 |
 | Last text field before the first password field | +40 | |
 | Username-only step on a form whose intent is login, for a field with any username or document word | +30 | |
-| Negative words (search, buscar, coupon, cupom, newsletter, name…; `address` unless the field also says email) | −80 | 0 for postal/zip/promo/CVV, código postal / de rastreio / de barras / do operador… |
+| Negative words (search, buscar, coupon, cupom, newsletter, name…; `address` unless the field also says email), in name/id, label text or a test hook | −80 | 0 for postal/zip/promo/CVV, código postal / de rastreio / de barras / do operador… |
 | Card or address `autocomplete` tokens | disqualifies | disqualifies |
 | Strong card claims (`cc-*` autocomplete, card-number words or shape, expiry words, cvv/cvc/csc words) | refused; the card classifier owns them (see Cards) | refused; same |
 
@@ -254,7 +264,36 @@ A field with no linked `<label>` reads a **floating label**: an unlinked
 each) whose only control is that field. React forms such as Shopee's
 add-card page draw their labels this way. A wrapper holding a second
 control lends no label, so a field never takes its neighbour's. The login,
-card and identity classifiers all read it (`autofill/labels.ts`).
+card, identity and bank classifiers all read it (`autofill/labels.ts`).
+
+A field with neither reads **neighbouring text** (`neighbourText`): short
+plain text right before it, else right after it, the way old table layouts
+(`<td>Username:</td><td><input></td>`) and `<span>Password</span><input>`
+siblings label fields. It reads the field's own siblings, then those of up
+to two wrappers whose only control is the field; a table cell's preceding
+cell in the same row counts, a cell never climbs into the row above. Rules,
+so text is never taken from another field:
+
+* Text between two controls belongs to the one after it. Text after a field
+  counts only when no control follows it among its siblings.
+* A heading, link, button, legend, table, list or another control between
+  the text and the field ends the search on that side; so does a `<label>`
+  linked to another control.
+* Hidden (`hidden`, `aria-hidden`) and decorative (`<br>`) siblings are read
+  past, so a hidden decoy word cannot become the label.
+* Text over 60 characters is prose, not a label, and is ignored.
+* Bounded: 3 levels, 8 sibling nodes a side, 12 nodes inside one sibling,
+  60 elements per "holds another control" check.
+
+Like every page string it is only compared against the keyword lists.
+
+**Test hooks.** The values of six `data-*` attributes developers write to
+name a field for their own test suites (`data-testid`, `data-test-id`,
+`data-test`, `data-qa`, `data-cy`, `data-automation-id`; 64 characters each,
+200 in all) feed the username and OTP scores as a signal weaker than
+`name`/`id` and never enough alone (table above). Free-form attributes such
+as `data-name` or `data-field` are not read: frameworks and analytics put
+anything there. Password roles do not read them.
 Dotted single letters join first, so `C.P.F.` → `cpf` and `R.G.` → `rg`
 (but `e.mail` → `e mail`). English, Portuguese and Spanish are covered.
 
@@ -349,7 +388,8 @@ password-only step, username-only step, form-less SPA markup, open shadow
 roots, fields inserted after load, multiple forms on one page, signup with
 confirmation, single-password signup, three-field change-password,
 single-box and split-box OTP. It also covers the negative cases: hidden,
-disabled and read-only fields, search boxes, newsletter boxes, and postal
+disabled, aria-disabled, aria-hidden and read-only fields, text that belongs
+to another field, search boxes, newsletter boxes, and postal
 codes.
 
 ## Filling
@@ -592,7 +632,7 @@ Two ways a next step can appear:
 Watching (`autofill/watch.ts`) checks once immediately with the same bounded
 page lookup the popup fill uses (`findLoginGroup` / `findOtpGroup`, at most
 200 candidates), then observes `document` with one `MutationObserver`
-(`childList` + `subtree`, plus `class`/`style`/`hidden`/`disabled`/`type`
+(`childList` + `subtree`, plus `class`/`style`/`hidden`/`disabled`/`type`/`aria-hidden`/`aria-disabled`
 attributes), debounced to at most one check per 150 ms. A field counts only
 once the same connected, visible, enabled element is found on two
 consecutive checks, one debounce (about 150 ms) apart, so a field that
@@ -1284,7 +1324,7 @@ and "titular" refuse a field only inside a card group, see Cards), words that me
 something other than the person's data (order and account numbers, tracking,
 coupon, quantity, "nome da mae", "titular" and holder), search boxes
 (`type=search`, `role=search`), input types other than text, email, tel,
-number, url and date, and hidden, disabled or read-only fields.
+number, url and date, and hidden, disabled, aria-disabled, aria-hidden or read-only fields.
 `autocomplete="new-password"` or `current-password` on a text field does not
 refuse it (checkouts set it on address fields to keep the browser's own
 autofill away; password-type fields are excluded by type). The login
@@ -1566,7 +1606,7 @@ Roles: `bankBranch`, `bankBranchDigit`, `bankAccount`, `bankAccountDigit`.
    `maxlength` of 1–2, or a `BANK_DIGIT` word on a box with no `maxlength`;
    it takes that box's digit role. A longer box ("Conta com dígito",
    `maxlength` 8) is the number itself.
-4. **Never bank.** Password, hidden, disabled and read-only boxes, and boxes
+4. **Never bank.** Password, hidden, disabled and read-only boxes (in the extension also aria-disabled and aria-hidden ones), and boxes
    with a card or identity claim. An `autocomplete` token that names no real
    autofill field (`nope`, `off`, `chrome-off`) is neutral; a real one
    (`username`, `cc-number`, `given-name`, `one-time-code`) refuses the box.

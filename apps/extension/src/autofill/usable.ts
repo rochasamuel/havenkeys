@@ -2,6 +2,7 @@
 // menu and the login refusal never disagree. Type imports only: group.ts and
 // bank.ts both import this module.
 
+import { isUnavailable } from "./aria";
 import { cardKindOf } from "./card-kind";
 import type { Env } from "./group";
 
@@ -27,8 +28,13 @@ export const IGNORED_TYPES = new Set([
   "time",
 ]);
 
+/**
+ * Enabled, editable, a text-like type, not marked unavailable to the user
+ * (`aria-disabled`, an `aria-hidden` subtree, `<fieldset disabled>`: aria.ts)
+ * and visible.
+ */
 export function isFillable(el: HTMLInputElement, env: Env): boolean {
-  return !el.disabled && !el.readOnly && !IGNORED_TYPES.has(el.type) && env.isVisible(el);
+  return !el.readOnly && !IGNORED_TYPES.has(el.type) && !isUnavailable(el) && env.isVisible(el);
 }
 
 /** Fillable inputs under `root` that are not card boxes, in document order, capped. */

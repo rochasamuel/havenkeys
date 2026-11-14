@@ -180,7 +180,8 @@ to message the extension. Mitigations (detailed in `security-model.md` and
   the page cannot read or script. Clicks are ignored until the menu has been
   visible for 400 ms and, on Chromium, only while it is unobscured.
 * Fills go only to visible, enabled fields of the group the user clicked.
-  Hidden fields are never filled.
+  Hidden fields are never filled, nor fields the page marks `aria-disabled`
+  or puts inside an `aria-hidden` subtree (`autofill/aria.ts`).
 * Fills go to one frame, only if that frame is still on the matched origin.
 * Synthetic events are ignored.
 * A save is offered only for passwords the user typed, so a page cannot use

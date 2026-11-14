@@ -104,7 +104,7 @@ export function watchNext(o: {
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ["class", "style", "hidden", "disabled", "type"],
+    attributeFilter: ["class", "style", "hidden", "disabled", "type", "aria-hidden", "aria-disabled"],
   });
   check();
   return cancel;

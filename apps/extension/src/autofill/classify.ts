@@ -42,11 +42,14 @@ import {
   USERNAME_WORD_IN_ATTRS_WEAK,
   USERNAME_WORD_IN_TEXT,
   USERNAME_WORD_IN_TEXT_WEAK,
+  USERNAME_WORD_IN_DATA,
+  USERNAME_WORD_IN_DATA_WEAK,
   USERNAME_NEGATIVE_PENALTY,
   USERNAME_LAST_BEFORE_PASSWORD,
   OTP_AC,
   OTP_WORD,
   OTP_WORD_WEAK,
+  OTP_WORD_IN_DATA,
   OTP_LENGTH,
   OTP_NUMERIC,
   OTP_CODE_MASK,
@@ -73,6 +76,11 @@ export interface FieldFeatures {
   attrs: string;
   /** Normalized placeholder, aria-label, title and label text. */
   text: string;
+  /**
+   * Normalized values of the test/automation attributes in DATA_ATTRIBUTES
+   * (`data-testid="login-email"`). Weaker than `name`/`id`, never enough alone.
+   */
+  data?: string;
   /** `maxLength`, or -1 when unset. */
   maxLength: number;
   inputMode: string;
@@ -160,9 +168,16 @@ export function usernameScore(f: FieldFeatures, ctx: UsernameContext): number {
   if (ac.includes("tel")) s += USERNAME_AC_TEL;
   if (f.type === "email") s += USERNAME_EMAIL_INPUT;
   let worded = true;
+  const data = f.data ?? "";
   if (hasAny(f.attrs, USERNAME_STRONG_ALL)) s += USERNAME_WORD_IN_ATTRS;
   else if (hasAny(f.attrs, USERNAME_WEAK)) s += USERNAME_WORD_IN_ATTRS_WEAK;
-  else worded = false;
+  else {
+    worded = false;
+    // A test hook names the field only when name/id do not (no double count),
+    // and does not make it "worded" for the username-only login bonus.
+    if (hasAny(data, USERNAME_STRONG_ALL)) s += USERNAME_WORD_IN_DATA;
+    else if (hasAny(data, USERNAME_WEAK)) s += USERNAME_WORD_IN_DATA_WEAK;
+  }
   if (hasAny(f.text, USERNAME_STRONG_ALL)) {
     s += USERNAME_WORD_IN_TEXT;
     worded = true;
@@ -170,7 +185,7 @@ export function usernameScore(f: FieldFeatures, ctx: UsernameContext): number {
     s += USERNAME_WORD_IN_TEXT_WEAK;
     worded = true;
   }
-  const names = (list: readonly string[]) => hasAny(f.attrs, list) || hasAny(f.text, list);
+  const names = (list: readonly string[]) => hasAny(f.attrs, list) || hasAny(f.text, list) || hasAny(data, list);
   if (names(USERNAME_NEGATIVE) || (names(USERNAME_NEGATIVE_UNLESS_EMAIL) && !names(EMAIL_WORDS))) s -= USERNAME_NEGATIVE_PENALTY;
   if (ctx.lastBeforePassword) s += USERNAME_LAST_BEFORE_PASSWORD;
   if (!ctx.hasPassword && ctx.loginIntent && worded) s += USERNAME_LOGIN_INTENT_BONUS;
@@ -181,10 +196,14 @@ export function otpScore(f: FieldFeatures, inSplitGroup: boolean): number {
   if (!TEXT_TYPES.has(f.type) && f.type !== "password") return 0;
   if (isCardField(f)) return 0;
   const words = `${f.attrs} ${f.text}`;
-  if (hasAny(words, OTP_NEGATIVE)) return 0;
+  const data = f.data ?? "";
+  if (hasAny(words, OTP_NEGATIVE) || hasAny(data, OTP_NEGATIVE)) return 0;
   let s = 0;
   if (f.autocomplete.includes("one-time-code")) s += OTP_AC;
   if (hasAny(words, OTP_STRONG)) s += OTP_WORD;
+  // A test hook (`data-testid="otp-input"`) counts less than name, id or
+  // label, more than a weak "code" label it may sit beside; never enough alone.
+  else if (hasAny(data, OTP_STRONG)) s += OTP_WORD_IN_DATA;
   else if (hasAny(words, OTP_WEAK)) s += OTP_WORD_WEAK;
   if (f.maxLength >= OTP_MIN_LENGTH && f.maxLength <= OTP_MAX_LENGTH) s += OTP_LENGTH;
   if (f.inputMode === "numeric" || f.type === "tel" || f.type === "number") s += OTP_NUMERIC;

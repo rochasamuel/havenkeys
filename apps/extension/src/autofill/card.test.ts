@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { Env } from "./group";
 import { groupFor } from "./group";
 import { identityRoleOf } from "./identity";
-import { cardFieldsForFill, cardGroupFor, cardRolesOf } from "./card";
+import { cardFieldsForFill, cardGroupFor, cardRolesOf, isCardFillable } from "./card";
 import { cardKindOf } from "./card-kind";
 
 const env: Env = { isVisible: (el) => !el.hidden, path: "/" };
@@ -220,5 +220,23 @@ describe("card classifier", () => {
     expect(cardGroupFor($("#b"), env)).toBeNull();
     page(`<form><input id="b" name="dt" placeholder="DD/MM/YY" autocomplete="bday"></form>`);
     expect(identityRoleOf($("#b"))?.role).toBe("birthDate");
+  });
+});
+
+describe("field detection signals (spec 2026-11-14)", () => {
+  it("an aria-hidden or aria-disabled card box is never filled", () => {
+    page(`<form><input id="n" autocomplete="cc-number"><input id="e" autocomplete="cc-exp">
+      <span aria-hidden="true"><input id="h" autocomplete="cc-csc"></span>
+      <input id="c" autocomplete="cc-name" aria-disabled="true"></form>`);
+    expect(kinds("#n")).toEqual([["n", "number"], ["e", "expiry"]]);
+    expect(isCardFillable($("#h"), env)).toBe(false);
+    expect(isCardFillable($("#c"), env)).toBe(false);
+  });
+
+  it("a table row's preceding cell names a card box", () => {
+    page(`<table><tr><td>Card number</td><td><input id="n" name="f1"></td></tr>
+      <tr><td>CVV</td><td><input id="c" name="f2"></td></tr></table>`);
+    expect(cardKindOf($("#n"), false)?.kind).toBe("number");
+    expect(cardKindOf($("#c"), true)?.kind).toBe("verificationNumber");
   });
 });

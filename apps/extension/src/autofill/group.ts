@@ -90,6 +90,17 @@ function labelsOf(el: HTMLInputElement): string {
 /** A one-time code's placeholder mask: 4 to 8 of `-`, `_`, `•` or `0`. */
 const CODE_MASK = /^[-_•0]{4,8}$/;
 
+/**
+ * Test and automation hooks a developer writes to name a field for their own
+ * test suite (Testing Library, Cypress, Playwright, QA and Workday tooling).
+ * Like `name`/`id` they describe the field's role, unlike free-form data-*
+ * attributes (`data-name`, `data-field`, `data-value`), which frameworks and
+ * analytics fill with anything and are left out.
+ */
+export const DATA_ATTRIBUTES = ["data-testid", "data-test-id", "data-test", "data-qa", "data-cy", "data-automation-id"] as const;
+/** Characters read from each of DATA_ATTRIBUTES. */
+export const MAX_DATA_CHARS = 64;
+
 export function features(el: HTMLInputElement): FieldFeatures {
   const attr = (n: string) => (el.getAttribute(n) ?? "").slice(0, MAX_HINT_CHARS);
   return {
@@ -97,6 +108,7 @@ export function features(el: HTMLInputElement): FieldFeatures {
     autocomplete: attr("autocomplete").toLowerCase().split(/\s+/).filter(Boolean),
     attrs: normalize(`${attr("name")} ${attr("id")}`),
     text: normalize(`${attr("placeholder")} ${attr("aria-label")} ${attr("title")} ${labelsOf(el)}`, MAX_HINT_CHARS * 3),
+    data: normalize(DATA_ATTRIBUTES.map((n) => attr(n).slice(0, MAX_DATA_CHARS)).join(" "), MAX_HINT_CHARS),
     maxLength: el.maxLength,
     inputMode: attr("inputmode").toLowerCase(),
     codeMask: CODE_MASK.test(attr("placeholder").trim()),

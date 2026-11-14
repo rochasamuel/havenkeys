@@ -7,7 +7,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { classifyPasswords, groupIntent, OTP_THRESHOLD, otpScore, USERNAME_THRESHOLD, usernameScore, type FieldFeatures } from "./classify";
 import { fillLogin, fillNewPassword, fillOtp, markUserEdit, setValue } from "./fill";
-import { classifyGroup, features, fieldsOf, groupFor, MAX_GROUP_INPUTS, type Env } from "./group";
+import { isAriaHidden, MAX_ARIA_ANCESTORS } from "./aria";
+import { classifyGroup, DATA_ATTRIBUTES, features, fieldsOf, groupFor, isFillable, MAX_DATA_CHARS, MAX_GROUP_INPUTS, type Env } from "./group";
+import { labelText } from "./labels";
 import { findLoginGroup, findOtpGroup, readSubmission } from "./page";
 import { hasPhrase, normalize } from "./text";
 
@@ -647,5 +649,199 @@ describe("submissions", () => {
     $('[name="p"]').value = "x".repeat(5000);
     markUserEdit($('[name="p"]'));
     expect(readSubmission(group('[name="p"]'))).toBeNull();
+  });
+});
+
+// ------------------------------------------------ 1Password parity signals
+// Spec 2026-11-14-field-detection-signals-design.
+
+describe("aria-disabled and aria-hidden fields are not fillable", () => {
+  it("an aria-hidden honeypot is neither classified nor filled", () => {
+    page(`<form><input name="hp" type="email" aria-hidden="true" tabindex="-1">
+      <input name="email" type="email"><input name="pw" type="password"></form>`);
+    const { group } = groupFor($('[name="pw"]'), env());
+    expect(group.fields.map((f) => f.el.name)).toEqual(["email", "pw"]);
+    expect(fillLogin(group, { username: "octo", password: "pw-1" }, env())).toBe(2);
+    expect($('[name="hp"]').value).toBe("");
+    expect($('[name="email"]').value).toBe("octo");
+  });
+
+  it("aria-hidden is inherited by the whole subtree, also across a shadow root", () => {
+    page(`<form><div aria-hidden="true"><div><input name="decoy" type="email"></div></div>
+      <input name="email" type="email"><input name="pw" type="password"></form>`);
+    expect(kinds('[name="pw"]')).toEqual({ email: "username", pw: "password" });
+    expect(isFillable($('[name="decoy"]'), env())).toBe(false);
+
+    page(`<div id="host" aria-hidden="TRUE"></div>`);
+    const shadow = (document.getElementById("host") as HTMLElement).attachShadow({ mode: "open" });
+    shadow.innerHTML = `<div><input name="inner" type="email"></div>`;
+    expect(isAriaHidden(shadow.querySelector("input") as HTMLInputElement)).toBe(true);
+  });
+
+  it("aria-hidden=false, and an aria-hidden sibling, change nothing", () => {
+    page(`<form aria-hidden="false"><span aria-hidden="true">*</span><input name="email" type="email"><input name="pw" type="password"></form>`);
+    expect(kinds('[name="pw"]')).toEqual({ email: "username", pw: "password" });
+  });
+
+  it("an aria-disabled field, or one in a disabled fieldset, gets nothing", () => {
+    page(`<form><input name="email" type="email" aria-disabled="true"><input name="pw" type="password"></form>`);
+    const { group } = groupFor($('[name="pw"]'), env());
+    expect(group.fields.map((f) => f.el.name)).toEqual(["pw"]);
+    expect(fillLogin(group, { username: "octo", password: "pw-1" }, env())).toBe(1);
+    expect($('[name="email"]').value).toBe("");
+
+    page(`<form><fieldset disabled><input name="email" type="email"></fieldset><input name="pw" type="password" aria-disabled="false"></form>`);
+    expect(isFillable($('[name="email"]'), env())).toBe(false);
+    expect(isFillable($('[name="pw"]'), env())).toBe(true);
+
+    // HTML's rule: a disabled fieldset's first legend stays enabled.
+    page(`<fieldset disabled><legend><input name="in-legend"></legend><legend><input name="second"></legend>
+      <div><input name="nested"></div></fieldset>`);
+    for (const name of ["in-legend", "second", "nested"]) {
+      expect(isFillable($(`[name="${name}"]`), env()), name).toBe($(`[name="${name}"]`).matches(":enabled"));
+    }
+    expect(isFillable($('[name="in-legend"]'), env())).toBe(true);
+  });
+
+  it("a password that turns aria-disabled after classification is not filled", () => {
+    page(`<form><input name="email" type="email"><input name="pw" type="password"></form>`);
+    const { group } = groupFor($('[name="pw"]'), env());
+    $('[name="pw"]').setAttribute("aria-disabled", "true");
+    expect(fillLogin(group, { username: "octo", password: "pw-1" }, env())).toBe(1);
+    expect($('[name="pw"]').value).toBe("");
+  });
+
+  it("the ancestor walk is bounded", () => {
+    const deep = (n: number) => "<div>".repeat(n) + '<input name="x" type="email">' + "</div>".repeat(n);
+    page(`<div aria-hidden="true">${deep(MAX_ARIA_ANCESTORS - 2)}</div>`);
+    expect(isAriaHidden($('[name="x"]'))).toBe(true);
+    page(`<div aria-hidden="true">${deep(MAX_ARIA_ANCESTORS + 5)}</div>`);
+    expect(isAriaHidden($('[name="x"]'))).toBe(false);
+  });
+});
+
+describe("labels from neighbouring text", () => {
+  it("reads the preceding cell of the same table row", () => {
+    page(`<form><table>
+      <tr><td>Username:</td><td><input name="f1"></td></tr>
+      <tr><th>Password:</th><td><div><input name="f2" type="password"></div></td></tr>
+      </table></form>`);
+    expect(labelText($('[name="f1"]'))).toBe("Username:");
+    expect(labelText($('[name="f2"]'))).toBe("Password:");
+  });
+
+  it("a table-labelled username-only step qualifies", () => {
+    page(`<form><table><tr><td>Usuário</td><td><input name="a1"></td></tr></table><button type="submit">Entrar</button></form>`);
+    expect(kinds('[name="a1"]')).toEqual({ a1: "username" });
+  });
+
+  it("reads a span or a text node right before the field", () => {
+    page(`<div><span>Verification code</span><input name="c1" maxlength="6"></div>`);
+    expect(labelText($('[name="c1"]'))).toBe("Verification code");
+    expect(kinds('[name="c1"]')).toEqual({ c1: "otp" });
+    page(`<p>E-mail <input name="e1"></p>`);
+    expect(labelText($('[name="e1"]'))).toBe("E-mail");
+  });
+
+  it("reads text after the field when nothing precedes it and no control follows", () => {
+    page(`<div class="field"><input name="u"><span class="label">Username</span></div>`);
+    expect(labelText($('[name="u"]'))).toBe("Username");
+  });
+
+  it("text between two fields belongs to the second", () => {
+    page(`<div><input name="a"> <span>Email</span> <input name="b"></div>`);
+    expect(labelText($('[name="a"]'))).toBe("");
+    expect(labelText($('[name="b"]'))).toBe("Email");
+  });
+
+  it("never reads another control's label, a heading, a link, another row or prose", () => {
+    page(`<label for="other">Email</label><input name="a"><input id="other">`);
+    expect(labelText($('[name="a"]'))).toBe("");
+    page(`<div><h2>Sign in</h2><input name="q"></div>`);
+    expect(labelText($('[name="q"]'))).toBe("");
+    page(`<div><a href="#">Forgot your username?</a><input name="q"></div>`);
+    expect(labelText($('[name="q"]'))).toBe("");
+    page(`<table><tr><td>Sign in</td></tr><tr><td><input name="q"></td></tr></table>`);
+    expect(labelText($('[name="q"]'))).toBe("");
+    page(`<div><span>${"Enter the email address you used when you created your account. ".repeat(2)}</span><input name="q"></div>`);
+    expect(labelText($('[name="q"]'))).toBe("");
+    // A wrapper holding a second control lends nothing from outside it.
+    page(`<div><span>Username</span><div><input name="a"><input name="b"></div></div>`);
+    expect(labelText($('[name="b"]'))).toBe("");
+  });
+
+  it("a linked label wins; neighbouring text is only a fallback", () => {
+    page(`<div><span>Username</span><label for="p">Senha</label><input id="p" name="p"></div>`);
+    expect(labelText($('[name="p"]'))).toBe("Senha");
+  });
+
+  it("an aria-hidden or hidden decoy beside the field is read past", () => {
+    page(`<div><span>Search</span><span aria-hidden="true">Username</span><span hidden>Email</span><input name="q"></div>`);
+    expect(labelText($('[name="q"]'))).toBe("Search");
+  });
+
+  it("is bounded: a big neighbour, or too many siblings, give nothing", () => {
+    const big = Array.from({ length: 20 }, () => "<i>x</i>").join("");
+    page(`<div><span>${big}</span><input name="q"></div>`);
+    expect(labelText($('[name="q"]'))).toBe("");
+    const blanks = Array.from({ length: 20 }, () => "<br>").join("");
+    page(`<div><span>Username</span>${blanks}<input name="q"></div>`);
+    expect(labelText($('[name="q"]'))).toBe("");
+  });
+});
+
+describe("data-* test hooks", () => {
+  const f = (over: Partial<FieldFeatures>): FieldFeatures => ({
+    type: "text",
+    autocomplete: [],
+    attrs: "",
+    text: "",
+    maxLength: -1,
+    inputMode: "",
+    codeMask: false,
+    ...over,
+  });
+  const ctx = { hasPassword: true, lastBeforePassword: false };
+
+  it("score below name/id and never double count", () => {
+    expect(usernameScore(f({ data: "login email input" }), ctx)).toBe(30);
+    expect(usernameScore(f({ data: "user field" }), ctx)).toBe(15);
+    expect(usernameScore(f({ attrs: "login", data: "login email input" }), ctx)).toBe(50);
+    expect(usernameScore(f({ data: "newsletter email" }), ctx)).toBeLessThan(0);
+    expect(otpScore(f({ data: "otp input" }), false)).toBe(40);
+    expect(otpScore(f({ text: "code", data: "otp input" }), false)).toBe(40);
+    expect(otpScore(f({ text: "code", data: "promo code" }), false)).toBe(0);
+  });
+
+  it("are never enough alone", () => {
+    expect(usernameScore(f({ data: "username" }), { hasPassword: false, lastBeforePassword: false, loginIntent: true })).toBeLessThan(70);
+    expect(otpScore(f({ data: "verification code" }), false)).toBeLessThan(OTP_THRESHOLD);
+  });
+
+  it("tip a nameless field before a password into a username", () => {
+    page(`<form><input name="f1"><input name="f2" type="password"></form>`);
+    expect(kinds('[name="f2"]')).toEqual({ f1: "unknown", f2: "password" });
+    page(`<form><input name="f1" data-testid="login-email-input"><input name="f2" type="password"></form>`);
+    expect(kinds('[name="f2"]')).toEqual({ f1: "username", f2: "password" });
+    page(`<form><input name="f1" data-automation-id="userName"><input name="f2" type="password"></form>`);
+    expect(kinds('[name="f2"]')).toEqual({ f1: "username", f2: "password" });
+  });
+
+  it("make a code-shaped box an OTP field; alone they do not", () => {
+    page(`<form><input name="c" data-cy="otp-input" maxlength="6" inputmode="numeric"></form>`);
+    expect(kinds('[name="c"]')).toEqual({ c: "otp" });
+    page(`<form><input name="c" data-cy="otp-input"></form>`);
+    expect(kinds('[name="c"]')).toEqual({ c: "unknown" });
+  });
+
+  it("only the allowlisted attributes are read, each bounded", () => {
+    page(`<input name="f1" data-name="username" data-field="email">`);
+    expect(features($('[name="f1"]')).data).toBe("");
+    page(`<input name="f1" data-qa="${"x".repeat(5000)} username">`);
+    const data = features($('[name="f1"]')).data ?? "";
+    expect(data).not.toContain("username");
+    expect(data.length).toBeLessThanOrEqual(MAX_DATA_CHARS);
+    page(`<input name="f1" ${DATA_ATTRIBUTES.map((a) => `${a}="${"y".repeat(100)}"`).join(" ")}>`);
+    expect((features($('[name="f1"]')).data ?? "").length).toBeLessThanOrEqual(200);
   });
 });
