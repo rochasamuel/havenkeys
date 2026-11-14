@@ -29,16 +29,74 @@ data class LoginForm(
 object LoginFormFinder {
     private val LOGIN_ROLES = setOf(FieldRole.USERNAME, FieldRole.PASSWORD, FieldRole.OTP)
     private val NEW_ROLES = setOf(FieldRole.NEW_PASSWORD, FieldRole.CONFIRM_PASSWORD)
+    private val SIGN_IN = setOf(FieldRole.PASSWORD, FieldRole.NEW_PASSWORD, FieldRole.CONFIRM_PASSWORD, FieldRole.OTP)
 
-    /** Null when there is nothing M1 fills (no field, or only a sign-up form). */
-    fun find(fields: List<FieldFacts>): LoginForm? {
+    // Kotlin-side for now (spec 2026-11-14-android-email-username-focused-field
+    // §3.3): what a lone email box is for when it is not a sign-in. The shared
+    // negatives' "code" stays out: "we'll email you a code" is a sign-in.
+    private val NOT_A_SIGN_IN = listOf(
+        "newsletter", "subscribe", "subscription", "unsubscribe", "search", "query", "coupon", "promo",
+        "comment", "feedback", "message", "invite", "referral", "gift", "buscar", "pesquisar", "cupom",
+        "assinar", "inscreva", "inscrever", "novidades", "boletim",
+    )
+
+    /**
+     * The login of the focused field's group ([FieldGroups.focusedGroup]),
+     * [screen] being every field. A group with a password, a code or a bank
+     * box is a login on its own. A group with only a username (an email
+     * box, often) is a first step only when it has login context
+     * (spec 2026-11-14-android-email-username-focused-field §3):
+     * - nothing in its frame outside the group signs in, and its words do
+     *   not say it is something else (a newsletter, a search, a coupon); or
+     * - the whole screen pairs it with a password in another form (a
+     *   username form apart from its password form).
+     * Otherwise the focused box is not a login's (a newsletter's email next
+     * to a sign-in) and there is no login to fill.
+     */
+    fun find(group: List<FieldFacts>, screen: List<FieldFacts>): LoginForm? {
+        val form = find(group)
+        val usernameOnly = form != null && form.usernames.isNotEmpty() &&
+            form.passwords.isEmpty() && form.otps.isEmpty() && form.bank.isEmpty()
+        val focused = group.firstOrNull { it.focused }
+        return when {
+            !usernameOnly -> form
+            focused == null || !signInElsewhere(group, screen, focused) ->
+                form.takeUnless { f -> group.any { it.index == f.usernames.first() && saysNotSignIn(it) } }
+            else -> find(screen, useFocus = false)
+                ?.takeIf { it.usernameTarget == focused.index && it.passwords.isNotEmpty() }
+                ?.copy(focused = focused.index)
+        }
+    }
+
+    /** A password or code field in [focused]'s frame that [group] (a part of [screen]) does not hold. */
+    private fun signInElsewhere(group: List<FieldFacts>, screen: List<FieldFacts>, focused: FieldFacts): Boolean {
+        if (group.size == screen.size) return false
+        val inGroup = group.map { it.index }.toSet()
+        val roles = loginRolesOf(screen)
+        return screen.indices.any {
+            screen[it].index !in inGroup && FieldGroups.sameFrame(screen[it], focused) && roles[it].role in SIGN_IN
+        }
+    }
+
+    /**
+     * Its words say the box is for something other than signing in (a
+     * newsletter, a search, a coupon): a username alone in its group is
+     * then no first step, however it is typed or hinted (an email box).
+     */
+    internal fun saysNotSignIn(f: FieldFacts): Boolean = hasAny(f.words.all, NOT_A_SIGN_IN)
+
+    /**
+     * Null when there is nothing M1 fills (no field, or only a sign-up form).
+     * [useFocus] false: chosen as if nothing were focused.
+     */
+    fun find(fields: List<FieldFacts>, useFocus: Boolean = true): LoginForm? {
         val bank = BankFieldClassifier.roles(fields)
         val roles = loginRolesOf(fields, bank)
         fun positionsOf(role: FieldRole) = fields.indices.filter { roles[it].role == role }
         fun isBank(i: Int) = fields[i].index in bank
         val usernames = positionsOf(FieldRole.USERNAME)
         val passwords = loginPasswords(roles, usernames.isNotEmpty())
-        val focused = fields.indexOfFirst { it.focused }.takeIf { it >= 0 }
+        val focused = fields.indexOfFirst { it.focused }.takeIf { it >= 0 && useFocus }
         val otps = positionsOf(FieldRole.OTP).ifEmpty {
             // A bank's one-character dígito box is no code.
             val start = splitCodeStart(fields, focused?.takeUnless(::isBank))
@@ -105,9 +163,10 @@ object LoginFormFinder {
 
     /**
      * The username before the password (any, without one): the focused one,
-     * else the most confident, nearest the password on a tie. Without a
-     * classified one, the nearest visible text field before the password
-     * when nothing rules it out.
+     * else the most confident, nearest the password on a tie; those in the
+     * password's group ([FieldFacts.group]) first, so a newsletter's email
+     * box is never the login's. Without a classified one, the nearest
+     * visible text field before the password when nothing rules it out.
      */
     @Suppress("LongParameterList")
     private fun usernameOf(
@@ -118,7 +177,9 @@ object LoginFormFinder {
         roles: List<Classification>,
         bank: Map<Int, BankRole>,
     ): Int? {
-        val candidates = usernames.filter { password == null || it < password }
+        val before = usernames.filter { password == null || it < password }
+        val passwordGroup = password?.let { fields[it].group }
+        val candidates = before.filter { passwordGroup == null || fields[it].group == passwordGroup }.ifEmpty { before }
         val classified = candidates.firstOrNull { it == focused }
             ?: candidates.maxWithOrNull(compareBy<Int> { roles[it].confidence }.thenBy { it })
         if (classified != null || password == null) return classified

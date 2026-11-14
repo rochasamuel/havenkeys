@@ -353,6 +353,57 @@ class FillPlannerTest {
         }
     }
 
+    @Test
+    fun theFocusedFormsDatasetsCoverOnlyItsFields() = runTest {
+        // Two sign-ins on one page (personal and business): the one the user is in is filled.
+        val u1 = field(html = webEmail, group = htmlForm(1))
+        val p1 = field(html = webPasswordAttrs, group = htmlForm(1))
+        val u2 = field(html = webEmail, group = htmlForm(2), focused = true)
+        val p2 = field(html = webPasswordAttrs, group = htmlForm(2))
+        val fields = listOf(u1, p1, u2, p2)
+        val form = requireNotNull((FormRouter.route(fields) as Routed.Login).form)
+        assertEquals(listOf(u2.index, p2.index), FillPlanner.fieldsOf(form, match))
+        val entries = FillPlanner.entries(form, fields, FillValues("octo", "hunter2"))
+        assertEquals(listOf(u2.index to "octo", p2.index to "hunter2"), entries)
+        val repo = FakeAutofillRepository().apply {
+            matchList = Outcome.Ok(listOf(match))
+            confirm = false
+            values = Outcome.Ok(FillValues("octo", "hunter2"))
+        }
+        val plan = FillPlanner.plan(form, target, unlocked = true, repo) as FillPlan.Offer
+        assertEquals("hunter2", plan.datasets.single().values?.password)
+    }
+
+    @Test
+    fun withNothingFocusedTheWholeScreenIsPlannedAsBefore() {
+        val u1 = field(html = webEmail, group = htmlForm(1))
+        val p1 = field(html = webPasswordAttrs, group = htmlForm(1))
+        val news = field(html = webEmail + ("name" to "newsletter"), group = htmlForm(2))
+        val form = requireNotNull((FormRouter.route(listOf(u1, p1, news)) as Routed.Login).form)
+        assertEquals(listOf(u1.index, p1.index), FillPlanner.fieldsOf(form, match))
+    }
+
+    @Test
+    fun anEmailFirstStepIsPlannedAsALoginsUsername() = runTest {
+        // A hinted email box alone in its form, a newsletter form elsewhere on the page.
+        val user = field(hints = listOf("emailAddress"), html = webEmail, group = htmlForm(1), focused = true)
+        val name = field(html = mapOf("type" to "text", "autocomplete" to "name"), group = htmlForm(2))
+        val news = field(html = webEmail, group = htmlForm(2))
+        val routed = FormRouter.route(listOf(user, name, news)) as Routed.Login
+        val form = requireNotNull(routed.form)
+        assertEquals(listOf(user.index), FillPlanner.fieldsOf(form, match))
+        assertEquals(user.index, routed.save?.username)
+        val repo = FakeAutofillRepository().apply {
+            matchList = Outcome.Ok(listOf(match))
+            confirm = true
+        }
+        val plan = FillPlanner.plan(form, target, unlocked = true, repo) as FillPlan.Offer
+        assertEquals(listOf("id1"), plan.datasets.map { it.match.id })
+    }
+
+    private val webEmail = mapOf("type" to "email", "autocomplete" to "email")
+    private val webPasswordAttrs = mapOf("type" to "password", "autocomplete" to "current-password")
+
     /** A form with nothing to offer still gets an answer: HavenKeys' pinned icon, which reads nothing. */
     private fun assertOnlyThePinnedIcon(plan: FillPlan) {
         val offer = plan as FillPlan.Offer

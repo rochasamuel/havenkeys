@@ -40,17 +40,25 @@ class StructureParser {
     fun parse(structure: AssistStructure): ParsedScreen {
         val roots = (0 until structure.windowNodeCount).map { structure.getWindowNodeAt(it).rootViewNode }
         val top = Frame(domain = null, scheme = null, visible = true, pageDomain = null, pageScheme = null)
+        // Every visited node gets the next number: its id for grouping.
+        var nodes = 0
         val found = cap(
             roots = roots.map { it to top },
             childCount = { it.childCount },
             childAt = { node, i -> node.getChildAt(i) },
-            context = ::frameOf,
+            context = { node, parent -> frameOf(node, parent, nodes++) },
             accept = { it.autofillId != null && it.autofillType in FILLABLE_TYPES },
         )
         val page = pageOf(found.map { (_, frame) -> frame.pageDomain to frame.pageScheme })
+        val groups = FieldGroups.assign(
+            found.map { (node, frame) ->
+                // The chain starts at the field itself.
+                GroupInput(frame.form, frame.chain.drop(1), FieldGroups.isText(node.autofillType))
+            },
+        )
         return ParsedScreen(
             packageName = structure.activityComponent?.packageName.orEmpty(),
-            fields = found.mapIndexed { index, (node, frame) -> factsOf(index, node, frame) },
+            fields = found.mapIndexed { index, (node, frame) -> factsOf(index, node, frame, groups[index]) },
             ids = found.map { (node, _) -> requireNotNull(node.autofillId) },
             pageDomain = page?.first,
             pageScheme = page?.second,
@@ -80,7 +88,9 @@ class StructureParser {
 
     /**
      * What a node inherits: its frame's web domain and scheme, the outermost
-     * domain (the tab's page), and whether an ancestor hides it.
+     * domain (the tab's page), and whether an ancestor hides it. For
+     * grouping: the nearest HTML form's node id and the node's own id then
+     * its nearest ancestors' ([chain], bounded).
      */
     private data class Frame(
         val domain: String?,
@@ -88,22 +98,27 @@ class StructureParser {
         val visible: Boolean,
         val pageDomain: String?,
         val pageScheme: String?,
+        val form: Int? = null,
+        val chain: List<Int> = emptyList(),
     )
 
     // The domain and scheme are recorded as given (not trimmed): Rust
     // validates them, and a shortened domain could name another site.
-    private fun frameOf(node: ViewNode, parent: Frame): Frame {
+    private fun frameOf(node: ViewNode, parent: Frame, id: Int): Frame {
         val isPage = parent.pageDomain == null && node.webDomain != null
+        val isForm = node.htmlInfo?.tag.equals("form", ignoreCase = true)
         return Frame(
             domain = node.webDomain ?: parent.domain,
             scheme = if (node.webDomain != null) node.webScheme else parent.scheme,
             visible = parent.visible && node.visibility == View.VISIBLE,
             pageDomain = if (isPage) node.webDomain else parent.pageDomain,
             pageScheme = if (isPage) node.webScheme else parent.pageScheme,
+            form = if (isForm) id else parent.form,
+            chain = (listOf(id) + parent.chain).take(FieldGroups.MAX_CLIMB + 1),
         )
     }
 
-    private fun factsOf(index: Int, node: ViewNode, frame: Frame) = FieldFacts(
+    private fun factsOf(index: Int, node: ViewNode, frame: Frame, group: FieldGroup?) = FieldFacts(
         index = index,
         autofillHints = node.autofillHints.orEmpty().take(MAX_HINTS).mapNotNull { it?.take(MAX_TEXT) },
         inputType = node.inputType,
@@ -121,6 +136,7 @@ class StructureParser {
         autofillType = node.autofillType,
         isEmpty = isEmpty(node),
         options = node.autofillOptions.orEmpty().take(MAX_OPTIONS).map { it.toString().take(MAX_TEXT) },
+        group = group,
     )
 
     // Read only to tell an empty field from a filled one; the value is not kept.

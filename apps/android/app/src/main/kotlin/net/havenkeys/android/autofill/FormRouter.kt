@@ -15,21 +15,35 @@ sealed interface Routed {
  * A request goes to cards when the focused field is a card field; to the
  * identity when the focused field is in an identity group that is not a
  * sign-in (no password or code there); otherwise to logins, as in M1.
+ *
+ * Logins and the identity are found in the focused field's group only
+ * ([FieldGroups.focusedGroup]): a screen with a sign-in and a newsletter or
+ * search form answers for the form the user is in. Cards keep the whole
+ * screen (a checkout's boxes sit in several processor frames).
  */
 object FormRouter {
     fun route(fields: List<FieldFacts>): Routed? {
         val card = CardFormFinder.find(fields)
-        val login = LoginFormFinder.find(fields)
-        val save = SaveFormFinder.find(fields, login)
-        val identity = if (card == null) IdentityFormFinder.find(fields) else null
+        val group = FieldGroups.focusedGroup(fields)
+        val login = LoginFormFinder.find(group, fields)
+        val save = SaveFormFinder.find(group, login)
+        val identity = if (card == null) identityOf(group, login) else null
         return when {
             card != null -> Routed.Card(card)
-            identity != null && !signInOwnsFocus(fields, login) && !loneLoginBox(fields, identity, login) ->
+            identity != null && !signInOwnsFocus(group, login) && !loneLoginBox(group, identity, login) ->
                 Routed.Identity(identity, save)
             login != null || save != null -> Routed.Login(login, save)
             else -> null
         }
     }
+
+    /**
+     * The identity group; or, with no login, a focused email box alone
+     * (a newsletter's): without login context an email box is the
+     * identity's (spec 2026-11-14-android-email-username-focused-field §3).
+     */
+    private fun identityOf(group: List<FieldFacts>, login: LoginForm?): IdentityForm? =
+        IdentityFormFinder.find(group) ?: if (login == null) IdentityFormFinder.find(group, loneEmail = true) else null
 
     /**
      * A lone identity box the login finder takes as the username: gov.br's

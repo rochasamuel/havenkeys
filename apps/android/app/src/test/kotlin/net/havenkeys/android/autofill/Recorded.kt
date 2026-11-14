@@ -24,10 +24,15 @@ fun field(
     isEmpty: Boolean = true,
     options: List<String> = emptyList(),
     contentDescription: String? = null,
+    group: FieldGroup? = null,
 ) = FieldFacts(
     next++, hints, inputType, id, hint, contentDescription, tag ?: if (html.isEmpty()) null else "input", html,
-    visible, enabled, focused, domain, scheme, maxTextLength, autofillType, isEmpty, options,
+    visible, enabled, focused, domain, scheme, maxTextLength, autofillType, isEmpty, options, group,
 )
+
+/** An HTML form's group ([FieldGroup.form]), and a native view group's. */
+fun htmlForm(id: Int) = FieldGroup(id, form = true)
+fun viewGroup(id: Int) = FieldGroup(id, form = false)
 
 /** A list (an HTML select or a spinner). */
 fun list(
