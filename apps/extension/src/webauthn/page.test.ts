@@ -257,12 +257,15 @@ describe("page wrapper", () => {
     Object.assign(win, { PublicKeyCredential: PKC });
     install(win);
     await expect(PKC.isUserVerifyingPlatformAuthenticatorAvailable()).resolves.toBe(true);
-    // Only the two platform-authenticator answers change; the rest is the browser's.
+    // Only the two platform-authenticator answers and the extensions
+    // HavenKeys answers change; the rest is the browser's.
     await expect(PKC.getClientCapabilities()).resolves.toEqual({
       conditionalGet: true,
       hybridTransport: true,
       passkeyPlatformAuthenticator: true,
       userVerifyingPlatformAuthenticator: true,
+      "extension:credProps": true,
+      "extension:prf": true,
     });
   });
 
@@ -279,7 +282,12 @@ describe("page wrapper", () => {
     }
     Object.assign(win, { PublicKeyCredential: Failing });
     install(win);
-    await expect(Failing.getClientCapabilities()).resolves.toEqual({ passkeyPlatformAuthenticator: true, userVerifyingPlatformAuthenticator: true });
+    await expect(Failing.getClientCapabilities()).resolves.toEqual({
+      passkeyPlatformAuthenticator: true,
+      userVerifyingPlatformAuthenticator: true,
+      "extension:credProps": true,
+      "extension:prf": true,
+    });
   });
 
   it("rejects a conditional get immediately when the signal is already aborted", async () => {
@@ -292,6 +300,122 @@ describe("page wrapper", () => {
     ).rejects.toBe("gone");
     expect(requests).toEqual([]);
     expect(nativeGet).not.toHaveBeenCalled();
+  });
+});
+
+describe("extensions, algorithms and transports (spec 2026-11-14-passkey-parity)", () => {
+  const OUT = "AQ" + "A".repeat(41); // 32 bytes, first byte 0x01
+  const createdCred = { type: "create", credentialId: CRED, clientDataJson: "e30", attestationObject: "AA", authenticatorData: "AA", publicKey: "AA", publicKeyAlgorithm: -8 };
+  const assertedCred = { type: "get", credentialId: CRED, clientDataJson: "e30", authenticatorData: "AA", signature: "MEU", userHandle: "AQ" };
+  const bytes = (b: unknown) => Array.from(new Uint8Array(b as ArrayBuffer));
+
+  it("answers credProps only when asked, and reports hybrid and internal transports", async () => {
+    const win = fresh();
+    install(win);
+    answer = () => ({ outcome: "credential", credential: createdCred });
+    const asked = (await win.navigator.credentials.create({ publicKey: { ...pk, extensions: { credProps: true } } } as CredentialCreationOptions)) as PublicKeyCredential;
+    expect(asked.getClientExtensionResults()).toEqual({ credProps: { rk: true } });
+    const json = (asked as unknown as { toJSON(): { clientExtensionResults: unknown; response: { transports: string[]; publicKeyAlgorithm: number } } }).toJSON();
+    expect(json.clientExtensionResults).toEqual({ credProps: { rk: true } });
+    expect(json.response.transports).toEqual(["hybrid", "internal"]);
+    expect(json.response.publicKeyAlgorithm).toBe(-8);
+    const response = asked.response as unknown as { getTransports(): string[]; getPublicKeyAlgorithm(): number };
+    expect(response.getTransports()).toEqual(["hybrid", "internal"]);
+    expect(response.getPublicKeyAlgorithm()).toBe(-8);
+
+    const plain = (await win.navigator.credentials.create({ publicKey: pk } as CredentialCreationOptions)) as PublicKeyCredential;
+    expect(plain.getClientExtensionResults()).toEqual({});
+  });
+
+  it("forwards the site's algorithms in order and falls back with no public-key entry", async () => {
+    const win = fresh();
+    install(win);
+    answer = () => ({ outcome: "fallback" });
+    await win.navigator.credentials.create({ publicKey: { ...pk, pubKeyCredParams: [{ type: "public-key", alg: -8 }, { type: "public-key", alg: -7 }] } } as CredentialCreationOptions);
+    expect((requests[0]?.options as { algs: number[] }).algs).toEqual([-8, -7]);
+    await win.navigator.credentials.create({ publicKey: { ...pk, pubKeyCredParams: [] } } as CredentialCreationOptions);
+    expect((requests[1]?.options as { algs: number[] }).algs).toEqual([]);
+    requests = [];
+    await win.navigator.credentials.create({ publicKey: { ...pk, pubKeyCredParams: [{ type: "other", alg: -7 }] } } as unknown as CredentialCreationOptions);
+    expect(requests).toEqual([]);
+  });
+
+  it("sends PRF inputs as base64url and returns PRF outputs as ArrayBuffers", async () => {
+    const win = fresh();
+    install(win);
+    answer = () => ({ outcome: "credential", credential: { ...createdCred, prf: { enabled: true, results: { first: OUT, second: OUT } } } });
+    const c = (await win.navigator.credentials.create({
+      publicKey: { ...pk, extensions: { prf: { eval: { first: Uint8Array.of(1, 2, 3), second: new Uint8Array(0) } } } },
+    } as CredentialCreationOptions)) as PublicKeyCredential;
+    expect((requests[0]?.options as { prf: unknown }).prf).toEqual({ eval: { first: "AQID", second: "" } });
+    const ext = c.getClientExtensionResults() as { prf: { enabled: boolean; results: { first: ArrayBuffer; second: ArrayBuffer } } };
+    expect(ext.prf.enabled).toBe(true);
+    expect(bytes(ext.prf.results.first)).toEqual([1, ...new Array(31).fill(0)]);
+    expect(bytes(ext.prf.results.second)).toHaveLength(32);
+    expect((c as unknown as { toJSON(): { clientExtensionResults: unknown } }).toJSON().clientExtensionResults).toEqual({
+      prf: { enabled: true, results: { first: OUT, second: OUT } },
+    });
+
+    // prf: {} at creation enables PRF without evaluating.
+    answer = () => ({ outcome: "credential", credential: { ...createdCred, prf: { enabled: true } } });
+    const e = (await win.navigator.credentials.create({ publicKey: { ...pk, extensions: { prf: {} } } } as CredentialCreationOptions)) as PublicKeyCredential;
+    expect((requests[1]?.options as { prf: unknown }).prf).toEqual({ eval: null });
+    expect(e.getClientExtensionResults()).toEqual({ prf: { enabled: true } });
+  });
+
+  it("picks our evalByCredential entries and drops foreign ones", async () => {
+    const win = fresh();
+    install(win);
+    answer = () => ({ outcome: "credential", credential: { ...assertedCred, prf: { results: { first: OUT } } } });
+    const ours = new Uint8Array(16).fill(1);
+    const foreign = new Uint8Array(32).fill(2);
+    const c = (await win.navigator.credentials.get({
+      publicKey: {
+        challenge: new Uint8Array(4),
+        allowCredentials: [{ type: "public-key", id: ours }, { type: "public-key", id: foreign }],
+        extensions: {
+          prf: {
+            eval: { first: Uint8Array.of(9) },
+            evalByCredential: { [CRED]: { first: Uint8Array.of(1) }, ["Ag".repeat(21) + "A"]: { first: Uint8Array.of(2) } },
+          },
+        },
+      },
+    } as unknown as CredentialRequestOptions)) as PublicKeyCredential;
+    expect((requests[0]?.options as { prf: unknown }).prf).toEqual({ eval: { first: "CQ" }, byCredential: [{ credentialId: CRED, values: { first: "AQ" } }] });
+    const ext = c.getClientExtensionResults() as { prf: { results: { first: ArrayBuffer } } };
+    expect(bytes(ext.prf.results.first)[0]).toBe(1);
+  });
+
+  it("leaves PRF requests the browser must refuse, or too large ones, to the browser", async () => {
+    const win = fresh();
+    install(win);
+    answer = () => ({ outcome: "fallback" });
+    const big = new Uint8Array(1025);
+    // evalByCredential at creation; a salt over 1024 bytes; a missing first.
+    await win.navigator.credentials.create({ publicKey: { ...pk, extensions: { prf: { evalByCredential: {} } } } } as unknown as CredentialCreationOptions);
+    await win.navigator.credentials.create({ publicKey: { ...pk, extensions: { prf: { eval: { first: big } } } } } as unknown as CredentialCreationOptions);
+    await win.navigator.credentials.create({ publicKey: { ...pk, extensions: { prf: { eval: {} } } } } as unknown as CredentialCreationOptions);
+    // evalByCredential without allowCredentials; a key that is not base64url;
+    // one of ours that the site did not allow.
+    const get = (prf: unknown, allow: unknown[] = []) =>
+      win.navigator.credentials.get({ publicKey: { challenge: new Uint8Array(4), allowCredentials: allow, extensions: { prf } } } as unknown as CredentialRequestOptions);
+    await get({ evalByCredential: { [CRED]: { first: Uint8Array.of(1) } } });
+    await get({ evalByCredential: { "not base64!": { first: Uint8Array.of(1) } } }, [{ type: "public-key", id: new Uint8Array(16).fill(1) }]);
+    await get({ evalByCredential: { ["Ag".repeat(10) + "Ag"]: { first: Uint8Array.of(1) } } }, [{ type: "public-key", id: new Uint8Array(16).fill(1) }]);
+    // Many large salts: more than the bridge accepts in one message.
+    const many: Record<string, unknown> = {};
+    const allow = [];
+    for (let i = 0; i < 20; i++) {
+      const id = new Uint8Array(16).fill(i + 1);
+      allow.push({ type: "public-key", id });
+      let s = "";
+      for (const b of id) s += String.fromCharCode(b);
+      many[btoa(s).replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_")] = { first: new Uint8Array(1024) };
+    }
+    await get({ evalByCredential: many }, allow);
+    expect(requests).toEqual([]);
+    expect(nativeCreate).toHaveBeenCalledTimes(3);
+    expect(nativeGet).toHaveBeenCalledTimes(4);
   });
 });
 

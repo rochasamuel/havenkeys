@@ -23,6 +23,8 @@ fn create_req<'a>(user: &'a str, handle: &'a [u8], item: Option<Uuid>) -> Passke
         user_handle: handle,
         user_name: user,
         display_name: None,
+        algorithms: &[],
+        prf: None,
         item_id: item,
         conditional: false,
     }
@@ -79,7 +81,7 @@ fn create_then_sign_in() {
     assert_eq!(found[0].user_name, "octo");
 
     let a = v
-        .passkey_assert(&id, &cred, "github.com", GH, None, &[3; 32])
+        .passkey_assert(&id, &cred, "github.com", GH, None, &[3; 32], None)
         .unwrap();
     assert_eq!(a.credential_id, cred);
     // From a subdomain, with the parent rpId, too.
@@ -90,6 +92,7 @@ fn create_then_sign_in() {
         "https://accounts.github.com/",
         None,
         &[3; 32],
+        None,
     )
     .unwrap();
 }
@@ -124,7 +127,7 @@ fn attack_wrong_origin_is_denied() {
     ] {
         // Claiming github.com's rpId from another site.
         assert_eq!(
-            v.passkey_assert(&id, &cred, "github.com", page, None, &[1])
+            v.passkey_assert(&id, &cred, "github.com", page, None, &[1], None)
                 .err(),
             Some(Error::Denied),
             "{page}"
@@ -140,7 +143,8 @@ fn attack_wrong_origin_is_denied() {
             .unwrap()
             .to_owned();
         assert_eq!(
-            v.passkey_assert(&id, &cred, &own, page, None, &[1]).err(),
+            v.passkey_assert(&id, &cred, &own, page, None, &[1], None)
+                .err(),
             Some(Error::Denied)
         );
         assert!(v.find_passkeys(&own, page, None, &[]).unwrap().is_empty());
@@ -153,7 +157,8 @@ fn attack_wrong_origin_is_denied() {
             "github.com",
             GH,
             Some("https://evil.com/"),
-            &[1]
+            &[1],
+            None
         )
         .err(),
         Some(Error::Denied)
@@ -173,17 +178,17 @@ fn attack_arbitrary_ids_are_denied() {
         .unwrap();
     let bank = v.commit_write(other, rev.next()).unwrap().unwrap().id;
     assert_eq!(
-        v.passkey_assert(&id, &[0; 16], "github.com", GH, None, &[1])
+        v.passkey_assert(&id, &[0; 16], "github.com", GH, None, &[1], None)
             .err(),
         Some(Error::Denied)
     );
     assert_eq!(
-        v.passkey_assert(&bank, &cred, "github.com", GH, None, &[1])
+        v.passkey_assert(&bank, &cred, "github.com", GH, None, &[1], None)
             .err(),
         Some(Error::Denied)
     );
     assert_eq!(
-        v.passkey_assert(&Uuid::new_v4(), &cred, "github.com", GH, None, &[1])
+        v.passkey_assert(&Uuid::new_v4(), &cred, "github.com", GH, None, &[1], None)
             .err(),
         Some(Error::NotFound)
     );
@@ -209,7 +214,7 @@ fn attack_locked_vault_is_refused() {
         Some(Error::Locked)
     );
     assert_eq!(
-        v.passkey_assert(&id, &cred, "github.com", GH, None, &[1])
+        v.passkey_assert(&id, &cred, "github.com", GH, None, &[1], None)
             .err(),
         Some(Error::Locked)
     );
@@ -254,7 +259,7 @@ fn attach_to_existing_login_and_keep_it_through_edits() {
         .unwrap();
     v.commit_write(edit, rev.next()).unwrap();
     assert!(v.get_item(&gh).unwrap().has_passkey);
-    v.passkey_assert(&gh, &cred, "github.com", GH, None, &[1])
+    v.passkey_assert(&gh, &cred, "github.com", GH, None, &[1], None)
         .unwrap();
 
     // excludeCredentials naming it reports "excluded".
@@ -414,7 +419,7 @@ fn remove_passkey() {
     v.commit_write(w, rev.next()).unwrap();
     assert!(!v.get_item(&id).unwrap().has_passkey);
     assert_eq!(
-        v.passkey_assert(&id, &cred, "github.com", GH, None, &[1])
+        v.passkey_assert(&id, &cred, "github.com", GH, None, &[1], None)
             .err(),
         Some(Error::Denied)
     );
@@ -838,6 +843,7 @@ fn a_browser_supplied_client_data_hash_is_signed_on_the_page_rules() {
             "https://github.com",
             &[3; 32],
             &hash,
+            None,
         )
         .unwrap();
     let mut signed = a.authenticator_data.clone();
@@ -854,7 +860,8 @@ fn a_browser_supplied_client_data_hash_is_signed_on_the_page_rules() {
             "github.com",
             "https://github.com.evil.com",
             &[3; 32],
-            &hash
+            &hash,
+            None
         )
         .err(),
         Some(Error::Denied)
@@ -867,7 +874,8 @@ fn a_browser_supplied_client_data_hash_is_signed_on_the_page_rules() {
             "github.com",
             "https://github.com",
             &[3; 32],
-            &hash
+            &hash,
+            None
         )
         .err(),
         Some(Error::Locked)

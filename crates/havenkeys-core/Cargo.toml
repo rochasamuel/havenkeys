@@ -23,6 +23,9 @@ zeroize = "1.9"
 # OPAQUE (aPAKE) sign-in; the suite lives in our own crate.
 havenkeys-opaque = { path = "../havenkeys-opaque" }
 p256 = { version = "0.14", default-features = false, features = ["ecdsa", "std", "pkcs8"] }
+# Ed25519 passkeys (COSE -8 EdDSA / -19 Ed25519). dalek-cryptography;
+# BSD-3-Clause; on curve25519-dalek 5, already in the tree through HPKE.
+ed25519-dalek = { version = "3", default-features = false, features = ["zeroize", "pkcs8", "alloc"] }
 # --- encoding / parsing ---
 data-encoding = "2.11"
 serde = { version = "1", features = ["derive"] }
@@ -50,6 +53,8 @@ csv = "1.4"
 [dev-dependencies]
 tempfile = "3"
 ciborium = "0.2"
+# An independent verifier for the passkey tests (Ed25519, P-256, HMAC).
+ring = "0.17"
 # Lets this crate's integration tests use the test-util helpers.
 havenkeys-core = { path = ".", features = ["test-util"] }
 

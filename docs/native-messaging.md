@@ -124,9 +124,9 @@ UTF-8 JSON. The length is checked before anything is allocated.
 | `check_login` | `url`, `topUrl`?, `username` (string or null), `password`, `currentPassword`? (a change-password form's current password) | yes | secret |
 | `save_login` | `url`, `topUrl`?, `username`, `password`, `itemId` (UUID or null), `title`? (a new login's name; refused with `itemId`) | yes | secret, plus one update per item per 10 min |
 | `find_passkeys` | `url`, `topUrl`?, `rpId`, `allowCredentials` (list) | yes | lookup |
-| `passkey_get` | `itemId` (UUID), `credentialId`, `url`, `topUrl`?, `rpId`, `challenge` | yes | secret |
+| `passkey_get` | `itemId` (UUID), `credentialId`, `url`, `topUrl`?, `rpId`, `challenge`, `prf`? (`{ first, second? }`: the site's PRF salts for this credential) | yes | secret |
 | `check_passkey_create` | `url`, `topUrl`?, `rpId`, `userName`, `excludeCredentials` (list), `conditional` (bool) | yes | lookup |
-| `passkey_create` | `url`, `topUrl`?, `rpId`, `challenge`, `userHandle`, `userName`, `displayName` (string or null), `itemId` (UUID or null), `conditional` (bool) | yes | secret; a server write |
+| `passkey_create` | `url`, `topUrl`?, `rpId`, `challenge`, `userHandle`, `userName`, `displayName` (string or null), `itemId` (UUID or null), `conditional` (bool), `algorithms`? (the site's `pubKeyCredParams` COSE identifiers in its order, at most 16), `prf`? (`{}` or `{ eval: { first, second? } }`) | yes | secret; a server write |
 | `passkey_status` | `url`, `topUrl`? | yes | lookup |
 | `open_item` | `itemId` (UUID), `url`, `topUrl`? | yes | secret |
 | `find_identity` | `url`, `topUrl`? | yes | lookup |
@@ -329,6 +329,8 @@ match, so the extension must be updated together with the desktop.
 {"v":1,"id":15,"result":{"type":"passkey_get","credentialId":"…","authenticatorData":"…","clientDataJson":"…","signature":"…","userHandle":"…"}}
 {"v":1,"id":16,"result":{"type":"check_passkey_create","excluded":false,"candidates":[{"itemId":"…","title":"GitHub","username":"octo"}],"upgrade":{"kind":"auto","itemId":"…"}}}
 {"v":1,"id":17,"result":{"type":"passkey_create","credentialId":"…","attestationObject":"…","clientDataJson":"…","authenticatorData":"…","publicKey":"…","publicKeyAlgorithm":-7}}
+{"v":1,"id":19,"result":{"type":"passkey_create","credentialId":"…","attestationObject":"…","clientDataJson":"…","authenticatorData":"…","publicKey":"…","publicKeyAlgorithm":-8,"prf":{"enabled":true,"results":{"first":"…"}}}}
+{"v":1,"id":20,"result":{"type":"passkey_get","credentialId":"…","authenticatorData":"…","clientDataJson":"…","signature":"…","userHandle":"…","prf":{"first":"…","second":"…"}}}
 {"v":1,"id":18,"result":{"type":"passkey_status","hasPasskey":true}}
 {"v":1,"id":10,"result":{"type":"open_item"}}
 {"v":1,"id":25,"result":{"type":"show_unlock"}}
@@ -395,6 +397,10 @@ error.
 | `credentialId`, and each `allowCredentials`/`excludeCredentials` entry | exactly 16 bytes | page script (drops others), extension, host, bridge |
 | `allowCredentials`, `excludeCredentials` | at most 64 entries | extension, host, bridge |
 | `challenge` | 1–4096 bytes | page script (hands others to the browser), extension, host, bridge, core |
+| PRF salts (`prf.first`, `prf.second`, `prf.eval.*`) | 0–1024 bytes each, base64url | page script (hands others to the browser), extension, host, bridge, core |
+| `evalByCredential` (page → background only) | at most 64 entries, our 16-byte IDs the site allowed | page script, extension |
+| PRF outputs | exactly 32 bytes each | host, bridge, extension |
+| `algorithms` | at most 16 integers; the core picks the first of -7, -9, -8, -19 | page script, extension, host, bridge, core |
 | `userHandle` | 1–64 bytes | page script, extension, host, bridge, core |
 | `rpId` | 1–253 bytes | page script, extension, host, bridge; the core also requires a valid domain or IP |
 | `userName`, `displayName` | 2 KiB on the wire; 512 characters, no control characters, in the core (the page script cuts them to 512) | page script, host, bridge, core |
@@ -604,10 +610,26 @@ to the frame's host) and is untrusted.
 | Request | Core function | Returns | Checks |
 |---|---|---|---|
 | `find_passkeys` | `find_passkeys` | per passkey: item ID, credential ID, login title, account name. **No secrets** | `authorize_rp(rpId, url, topUrl)`; stored rpId equals it; filtered by `allowCredentials` when non-empty |
-| `passkey_get` | `passkey_assert` | credential ID, authenticator data, `clientDataJSON`, signature, user handle | challenge 1–4096 bytes; `authorize_rp`; the item is a login holding that credential ID with that stored rpId. Anything else is `denied` (an unknown item's `not_found` is mapped to `denied` too) |
+| `passkey_get` | `passkey_assert` | credential ID, authenticator data, `clientDataJSON`, signature (DER ECDSA for P-256 keys, raw 64 bytes for Ed25519), user handle, and `prf` outputs when the request had `prf` and the passkey has a PRF secret | challenge 1–4096 bytes; PRF salts at most 1024 bytes; `authorize_rp`; the item is a login holding that credential ID with that stored rpId. Anything else is `denied` (an unknown item's `not_found` is mapped to `denied` too) |
 | `check_passkey_create` | `check_passkey_create` | `excluded`, logins that could hold the new passkey (ID, title, username; no candidates when `excluded`), and `upgrade` | `authorize_rp`; candidates are logins whose own website rules match the page and that hold fewer than 8 passkeys, same username first. `upgrade` is computed only when `conditional` is true and nothing is excluded: `auto`/`ask` needs a password fill of that same login on that same site within the last 5 minutes (`vault.rs::RecentFill`, `UPGRADE_WINDOW_MS`), a matching (folded) account name or none, and room for another passkey; `auto` when the vault setting `auto_passkey_upgrade` is on, `ask` when it is off; otherwise `none` |
-| `passkey_create` | `stage_passkey_create` | credential ID, attestation object, `clientDataJSON`, authenticator data, SPKI public key, algorithm `-7` | `authorize_rp`; bounds; `itemId`, if given, must be a login offered for the page. When `conditional` is true, the same upgrade decision is recomputed and the request is `denied` unless it is still `auto` for exactly `itemId` — the caller's claim that this is the automatic upgrade is never taken on trust. A conditional request is also `denied` when any login already holds a passkey for the same rpId and user handle (an upgrade only adds), and a successful one spends the fill it relied on (one fill, one silent passkey). If a login anywhere in the vault already holds a passkey for the same rpId and user handle, the new one replaces it **in that login**, whatever `itemId` says. Sent to the server; `offline` if it cannot be, and nothing is stored |
+| `passkey_create` | `stage_passkey_create` | credential ID, attestation object, `clientDataJSON`, authenticator data, SPKI public key, algorithm (`-7` by default; the first of `-7`, `-9`, `-8`, `-19` in `algorithms`), and `prf: { enabled, results? }` when the request had `prf` | `authorize_rp`; bounds; `algorithms` with nothing supported is `invalid_input`; `itemId`, if given, must be a login offered for the page. When `conditional` is true, the same upgrade decision is recomputed and the request is `denied` unless it is still `auto` for exactly `itemId` — the caller's claim that this is the automatic upgrade is never taken on trust. A conditional request is also `denied` when any login already holds a passkey for the same rpId and user handle (an upgrade only adds), and a successful one spends the fill it relied on (one fill, one silent passkey). If a login anywhere in the vault already holds a passkey for the same rpId and user handle, the new one replaces it **in that login**, whatever `itemId` says. Sent to the server; `offline` if it cannot be, and nothing is stored |
 | `passkey_status` | `has_passkey_for_page` | `hasPasskey`: whether any passkey in the vault has a stored rpId `authorize_rp` allows for this page. **No other data** | `authorize_rp` for every stored passkey it checks; no item is named or returned |
+
+**Algorithms, PRF and version skew** (spec
+`docs/superpowers/specs/2026-11-14-passkey-parity-design.md`). `algorithms`
+and `prf` are optional and the extension sends them only when they change
+something: `algorithms` when ES256 is not the site's first supported
+algorithm, `prf` when the site asked for the PRF extension (at creation the
+passkey then gets a PRF secret; at sign-in the input is the chosen
+credential's `evalByCredential` entry, else `eval`). The salts are the
+site's raw values; the core computes `HMAC-SHA-256(secret,
+SHA-256("WebAuthn PRF" || 0x00 || salt))` (WebAuthn L3 §10.1.4). The `prf`
+results are sent only when the request carried `prf`. PRF outputs are
+secrets: `WireSecret` on the Rust side (zeroized, redacted `Debug`), never
+logged. An older desktop rejects the new fields as `malformed`; the
+extension then retries once without `prf`, and without `algorithms` only if
+the site also listed ES256. An older extension never sends them and gets
+results in the old shape.
 
 `find_passkeys`, `check_passkey_create` and `passkey_status` draw from the
 lookup bucket; `passkey_get` and `passkey_create` from the secret bucket.

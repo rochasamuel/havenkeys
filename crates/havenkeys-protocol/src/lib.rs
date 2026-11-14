@@ -98,5 +98,17 @@ pub const MAX_RP_ID_BYTES: usize = 253;
 pub const MAX_LOOKALIKE_BYTES: usize = 253;
 /// `allowCredentials` / `excludeCredentials` entries accepted.
 pub const MAX_CREDENTIAL_LIST: usize = 64;
-/// COSE ES256, the only algorithm HavenKeys creates keys for.
+/// COSE algorithm identifiers HavenKeys creates keys for (spec
+/// 2026-11-14-passkey-parity §4): ES256, ESP256, EdDSA, Ed25519.
 pub const COSE_ES256: i64 = -7;
+pub const COSE_ESP256: i64 = -9;
+pub const COSE_EDDSA: i64 = -8;
+pub const COSE_ED25519: i64 = -19;
+/// Every `publicKeyAlgorithm` a `passkey_create` result may carry.
+pub const COSE_ALGORITHMS: [i64; 4] = [COSE_ES256, COSE_ESP256, COSE_EDDSA, COSE_ED25519];
+/// `pubKeyCredParams` algorithms accepted in `passkey_create`.
+pub const MAX_ALGORITHMS: usize = 16;
+/// Largest PRF salt (`first` / `second`) accepted, in bytes.
+pub const MAX_PRF_SALT_BYTES: usize = 1024;
+/// Every PRF output is one HMAC-SHA-256: 32 bytes.
+pub const PRF_OUTPUT_BYTES: usize = 32;

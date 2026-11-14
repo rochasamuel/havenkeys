@@ -35,6 +35,8 @@ const SEEDS: unknown[] = [
   { v: 1, id: 4, result: { type: "check_passkey_create", excluded: true, candidates: [], upgrade: { kind: "none" } } },
   { v: 1, id: 5, result: { type: "passkey_create", credentialId: CRED, attestationObject: "oA", clientDataJson: "e30", authenticatorData: "AA", publicKey: "MA", publicKeyAlgorithm: -7 } },
   { v: 1, id: 6, result: { type: "passkey_status", hasPasskey: false } },
+  { v: 1, id: 7, result: { type: "passkey_create", credentialId: CRED, attestationObject: "oA", clientDataJson: "e30", authenticatorData: "AA", publicKey: "MA", publicKeyAlgorithm: -8, prf: { enabled: true, results: { first: "A".repeat(43), second: "B".repeat(43) } } } },
+  { v: 1, id: 8, result: { type: "passkey_get", credentialId: CRED, authenticatorData: "AA", clientDataJson: "e30", signature: "MEU", userHandle: "AQ", prf: { first: "A".repeat(43) } } },
   { v: 1, id: 9, result: { type: "start_sso", provider: "google", account: "a@b.c", providerOrigins: ["https://accounts.google.com"], autoChoose: false } },
   { v: 1, id: 10, result: { type: "check_sso", action: "add", itemId: null } },
   { v: 1, id: 11, result: { type: "save_sso", itemId: ID } },
@@ -77,6 +79,9 @@ describe("parseIncoming fuzz", () => {
       }
       if (msg.kind === "result" && msg.result.type === "check_login") {
         expect(msg.result.action === "update").toBe(msg.result.itemId !== null);
+      }
+      if (msg.kind === "result" && msg.result.type === "passkey_create" && msg.result.prf?.results) {
+        expect(msg.result.prf.enabled).toBe(true);
       }
       if (msg.kind === "result" && msg.result.type === "check_sso") {
         expect(msg.result.action === "update").toBe(msg.result.itemId !== null);

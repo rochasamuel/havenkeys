@@ -65,6 +65,8 @@ fn create<'a>(
         user_handle: handle,
         user_name: user,
         display_name: None,
+        algorithms: &[],
+        prf: None,
         item_id: item,
     }
 }
@@ -119,7 +121,7 @@ fn a_vouched_app_creates_and_signs_in_with_its_own_origin() {
     assert_eq!(found[0].credential_id, cred);
 
     let a = v
-        .passkey_assert_for_app(&id, &cred, "github.com", &app, &[3; 32], NOW)
+        .passkey_assert_for_app(&id, &cred, "github.com", &app, &[3; 32], None, NOW)
         .unwrap();
     assert!(verify(
         &spki,
@@ -155,6 +157,7 @@ fn a_passkey_made_in_the_app_works_on_the_website_and_back() {
         "https://github.com/",
         None,
         &[3; 32],
+        None,
     )
     .unwrap();
 
@@ -168,6 +171,8 @@ fn a_passkey_made_in_the_app_works_on_the_website_and_back() {
                 user_handle: &[2],
                 user_name: "hubot",
                 display_name: None,
+                algorithms: &[],
+                prf: None,
                 item_id: None,
                 conditional: false,
             },
@@ -200,7 +205,7 @@ fn attack_an_app_the_site_does_not_vouch_for_gets_nothing() {
         Some(Error::Denied)
     );
     assert_eq!(
-        v.passkey_assert_for_app(&id, &cred, "github.com", &bad, &[3; 32], NOW)
+        v.passkey_assert_for_app(&id, &cred, "github.com", &bad, &[3; 32], None, NOW)
             .err(),
         Some(Error::Denied)
     );
@@ -265,6 +270,8 @@ fn a_site_vouches_only_for_its_own_rp_id() {
                 user_handle: &[2],
                 user_name: "octo",
                 display_name: None,
+                algorithms: &[],
+                prf: None,
                 item_id: None,
                 conditional: false,
             },
@@ -349,8 +356,16 @@ fn a_locked_vault_is_refused_first() {
         Some(Error::Locked)
     );
     assert_eq!(
-        v.passkey_assert_for_app(&Uuid::new_v4(), &[1; 16], "github.com", &app, &[3; 32], NOW)
-            .err(),
+        v.passkey_assert_for_app(
+            &Uuid::new_v4(),
+            &[1; 16],
+            "github.com",
+            &app,
+            &[3; 32],
+            None,
+            NOW
+        )
+        .err(),
         Some(Error::Locked)
     );
 }

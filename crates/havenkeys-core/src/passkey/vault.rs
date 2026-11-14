@@ -8,9 +8,9 @@
 //! for a new passkey.
 
 use super::{
-    assert, authorize_rp, clean_site_name, register, Assertion, B64Url, NewUser, Passkey,
-    Registration, RpContext, CREDENTIAL_ID_LEN, MAX_CHALLENGE_BYTES, MAX_PASSKEYS_PER_LOGIN,
-    MAX_USER_HANDLE_BYTES, MIN_CHALLENGE_BYTES,
+    assert, authorize_rp, choose_algorithm, clean_site_name, register, Assertion, B64Url, NewUser,
+    Passkey, PrfCreate, PrfInput, Registration, RpContext, CREDENTIAL_ID_LEN, MAX_ALGORITHMS,
+    MAX_CHALLENGE_BYTES, MAX_PASSKEYS_PER_LOGIN, MAX_USER_HANDLE_BYTES, MIN_CHALLENGE_BYTES,
 };
 use crate::error::{Error, Result};
 use crate::model::{ItemDetails, ItemInput, ItemOverview, ItemType, MatchType, UrlRule};
@@ -81,6 +81,11 @@ pub struct PasskeyCreate<'a> {
     pub user_handle: &'a [u8],
     pub user_name: &'a str,
     pub display_name: Option<&'a str>,
+    /// The site's `pubKeyCredParams` algorithms, in its order; empty means
+    /// WebAuthn's default (ES256).
+    pub algorithms: &'a [i64],
+    /// The site asked for the `prf` extension.
+    pub prf: Option<PrfCreate<'a>>,
     /// Attach to this login (it must be saved for the page); `None` makes a
     /// new login.
     pub item_id: Option<Uuid>,
@@ -141,6 +146,8 @@ pub(super) struct NewPasskey<'a> {
     pub user_handle: &'a [u8],
     pub user_name: &'a str,
     pub display_name: Option<&'a str>,
+    pub algorithms: &'a [i64],
+    pub prf: Option<PrfCreate<'a>>,
 }
 
 /// Where a new passkey may go, by the caller's own rules.
@@ -291,6 +298,7 @@ impl VaultService {
         ctx: &RpContext,
         challenge: &[u8],
         client_data_hash: Option<&[u8; 32]>,
+        prf: Option<&PrfInput<'_>>,
     ) -> Result<Assertion> {
         let ItemDetails::Login { passkeys, .. } = self.load_details(item_id)? else {
             return Err(Error::Denied);
@@ -299,11 +307,13 @@ impl VaultService {
             .iter()
             .find(|p| p.credential_id.0 == credential_id && p.rp_id == ctx.rp_id)
             .ok_or(Error::Denied)?;
-        assert(passkey, ctx, challenge, client_data_hash)
+        assert(passkey, ctx, challenge, client_data_hash, prf)
     }
 
     /// Sign in: the assertion for one passkey, if and only if it is bound to
-    /// `rp_id` and the page may use `rp_id`.
+    /// `rp_id` and the page may use `rp_id`. `prf`: the site's PRF input for
+    /// this credential, if any.
+    #[allow(clippy::too_many_arguments)]
     pub fn passkey_assert(
         &self,
         item_id: &Uuid,
@@ -312,16 +322,18 @@ impl VaultService {
         page_url: &str,
         top_url: Option<&str>,
         challenge: &[u8],
+        prf: Option<&PrfInput<'_>>,
     ) -> Result<Assertion> {
         self.session()?;
         check_challenge(challenge)?;
         let ctx = authorize_rp(rp_id, page_url, top_url)?;
-        self.assert_for(item_id, credential_id, &ctx, challenge, None)
+        self.assert_for(item_id, credential_id, &ctx, challenge, None, prf)
     }
 
     /// `passkey_assert` for a privileged Android browser that built
     /// `clientDataJSON` itself and sent only its hash (spec §8.1). Never for
     /// an app: an app's hash could name any origin.
+    #[allow(clippy::too_many_arguments)]
     pub fn passkey_assert_with_hash(
         &self,
         item_id: &Uuid,
@@ -330,6 +342,7 @@ impl VaultService {
         page_url: &str,
         challenge: &[u8],
         client_data_hash: &[u8; 32],
+        prf: Option<&PrfInput<'_>>,
     ) -> Result<Assertion> {
         self.session()?;
         check_challenge(challenge)?;
@@ -340,6 +353,7 @@ impl VaultService {
             &ctx,
             challenge,
             Some(client_data_hash),
+            prf,
         )
     }
 
@@ -480,6 +494,11 @@ impl VaultService {
         if new.user_handle.is_empty() || new.user_handle.len() > MAX_USER_HANDLE_BYTES {
             return Err(Error::InvalidInput("invalid user handle"));
         }
+        if new.algorithms.len() > MAX_ALGORITHMS {
+            return Err(Error::InvalidInput("too many algorithms"));
+        }
+        let alg = choose_algorithm(new.algorithms)
+            .ok_or(Error::InvalidInput("no supported passkey algorithm"))?;
         let user_name = clean_site_name(Some(new.user_name))?.unwrap_or_default();
         let display_name = clean_site_name(new.display_name)?.filter(|d| !d.is_empty());
         let (passkey, registration) = register(
@@ -491,6 +510,8 @@ impl VaultService {
                 display_name,
             },
             now_ms,
+            alg,
+            new.prf,
         )?;
         let holder = self.find_passkey_holder(&ctx.rp_id, new.user_handle)?;
         // An upgrade only ever adds a passkey to the login that was filled.
@@ -584,6 +605,8 @@ impl VaultService {
                 user_handle: req.user_handle,
                 user_name: req.user_name,
                 display_name: req.display_name,
+                algorithms: req.algorithms,
+                prf: req.prf,
             },
             Homes {
                 chosen: req.item_id,

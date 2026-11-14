@@ -1802,7 +1802,7 @@ fn bank_id_denied_for_totp_passkey_sso() {
         Some(Error::Denied)
     );
     assert_eq!(
-        v.passkey_assert(&id, &[1; 16], "itau.com.br", ITAU, None, &[3; 32])
+        v.passkey_assert(&id, &[1; 16], "itau.com.br", ITAU, None, &[3; 32], None)
             .err(),
         Some(Error::Denied)
     );
@@ -1814,6 +1814,8 @@ fn bank_id_denied_for_totp_passkey_sso() {
         user_handle: &[1],
         user_name: "maria",
         display_name: None,
+        algorithms: &[],
+        prf: None,
         item_id: Some(id),
         conditional: false,
     };

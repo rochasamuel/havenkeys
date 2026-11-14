@@ -970,6 +970,8 @@ mod tests {
                         user_handle: &[1],
                         user_name: "octo",
                         display_name: None,
+                        algorithms: &[],
+                        prf: None,
                         item_id: Some(id),
                         conditional: false,
                     },

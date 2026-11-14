@@ -10,7 +10,9 @@ the RustCrypto project and the OS random number generator:
 | Authenticated encryption | AES-256-GCM, 96-bit nonce, 128-bit tag | `aes-gcm` (an earlier release was audited by NCC Group in 2020; the current 0.11 line has not been) |
 | Randomness | OS CSPRNG (`getrandom`) | `rand` (`SysRng`) |
 | TOTP | HMAC-SHA-1/256/512 (RFC 4226 / 6238) | `hmac`, `sha1`, `sha2` |
-| Passkeys (WebAuthn ES256) | ECDSA P-256 with SHA-256, RFC 6979 deterministic nonces; SPKI encoding | `p256` 0.14 (`ecdsa`, `pkcs8` features), `sha2` |
+| Passkeys (WebAuthn ES256/ESP256) | ECDSA P-256 with SHA-256, RFC 6979 deterministic nonces; SPKI encoding | `p256` 0.14 (`ecdsa`, `pkcs8` features), `sha2` |
+| Passkeys (WebAuthn EdDSA/Ed25519) | Ed25519 (RFC 8032 PureEdDSA); SPKI encoding | `ed25519-dalek` 3 (`zeroize`, `pkcs8`) |
+| Passkey PRF extension | `HMAC-SHA-256(secret, SHA-256("WebAuthn PRF" ‖ 0x00 ‖ salt))`, a 32-byte per-credential secret | `hmac`, `sha2` |
 | Memory hygiene | Zeroize-on-drop | `zeroize` |
 
 The only code we wrote around these is *composition*: which key encrypts what,
@@ -511,9 +513,13 @@ ignored). `otpauth://totp/...` URIs are parsed with the `url` crate. HOTP
 
 ## Passkeys
 
-HavenKeys acts as a WebAuthn Level 3 authenticator for ES256 (COSE algorithm
-`-7`) only. The code is `crates/havenkeys-core/src/passkey/`; `webauthn.rs` is
-the only place a passkey private key is turned into a signing key. As
+HavenKeys acts as a WebAuthn Level 3 authenticator for ES256 (COSE `-7`),
+ESP256 (`-9`, the same P-256 signatures), EdDSA (`-8`) and Ed25519 (`-19`),
+taking the first of these in the site's `pubKeyCredParams` order (ES256 for
+an empty list), and answers the `prf` extension. The code is
+`crates/havenkeys-core/src/passkey/`; `key.rs` is the only place passkey key
+material is decoded and turned into a signing key, and the only place the
+PRF is computed (spec `2026-11-14-passkey-parity-design.md`). As
 everywhere else, the cryptography comes from RustCrypto; what we wrote is the
 byte layout WebAuthn prescribes around it.
 
@@ -525,6 +531,17 @@ byte layout WebAuthn prescribes around it.
   values not below the curve order. A rejected draw is thrown away and
   redrawn (at most 8 times, then `Error::Rng`), never reduced, so there is no
   bias.
+* **Ed25519 keys** (since 2026-11-14) are 32 bytes from the OS CSPRNG, the
+  RFC 8032 private key, used through `ed25519-dalek`.
+* **PRF secret** (since 2026-11-14): when the site asks for `prf` at
+  creation, 32 more bytes from the OS CSPRNG, stored with the key.
+* **Stored form:** exactly 32 bytes is a P-256 scalar with no PRF secret
+  (every passkey before 2026-11-14, and ES256/ESP256 passkeys made without
+  `prf`). Anything else is the envelope `0x01 ‖ kind (1 P-256, 2 Ed25519) ‖
+  flags (bit 0: PRF secret) ‖ key(32) [‖ prf(32)]`, 35 or 67 bytes. Older
+  versions keep these bytes on every edit and refuse to sign with them
+  (`p256` takes 24–32 bytes only), so they can neither misuse an Ed25519 key
+  nor lose a PRF secret.
 * **Where it lives:** in `Passkey.private_key` (`SecretBytes`: zeroized on
   drop, redacted `Debug`, no `Display`), inside the `passkeys` list of
   `ItemDetails::Login`. That list is sealed with the rest of the login's
@@ -554,7 +571,7 @@ offset  size  field
 37      16    AAGUID = 5fa9623b-c2ff-4166-92da-c011a036bcb0 (HavenKeys)
 53      2     credentialIdLength = 16, big-endian
 55      16    credentialId
-71      77    credentialPublicKey (COSE_Key, below)
+71      77/42 credentialPublicKey (COSE_Key, below: 77 bytes P-256, 42 bytes Ed25519 OKP)
 ```
 
 Flags: `0x01` UP (user present), `0x04` UV (user verified), `0x08` BE (backup
@@ -652,7 +669,10 @@ Android M3 adds the Android callers of Credential Manager
   replaces with its own. For an app a supplied hash is ignored: Rust builds
   `clientDataJSON` itself and signs `authenticatorData || SHA-256` of it.
 * **Response JSON** (`havenkeys-mobile`, `passkey_json.rs`) is public
-  WebAuthn data only: `transports` is `["internal"]` and
+  WebAuthn data only: `transports` is `["hybrid", "internal"]` (as synced
+  platform passkeys report; spec 2026-11-14-passkey-parity §3), the key's
+  `publicKeyAlgorithm` (the first of -7, -9, -8, -19 in the request's
+  `pubKeyCredParams`), and
   `clientExtensionResults` is `{"credProps": {"rk": true}}`. Keys, signing,
   attestation `none`, counter 0 and storage are unchanged.
 

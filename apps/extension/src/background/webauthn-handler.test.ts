@@ -8,8 +8,8 @@ import { createWebAuthnHandler, NOTICE_TTL_MS } from "./webauthn-handler";
 const ITEM = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
 const CRED = "AQEBAQEBAQEBAQEBAQEBAQ";
 const T1 = "0".repeat(31) + "1";
-const getOpts: GetOptions = { rpId: null, challenge: "AQ", allowCredentials: [], conditional: false, timeoutMs: null };
-const createOpts: CreateOptions = { rpId: "github.com", challenge: "AQ", userId: "AQ", userName: "octo", userDisplayName: null, algs: [-7], excludeCredentials: [], timeoutMs: null, conditional: false };
+const getOpts: GetOptions = { rpId: null, challenge: "AQ", allowCredentials: [], conditional: false, timeoutMs: null, prf: null };
+const createOpts: CreateOptions = { rpId: "github.com", challenge: "AQ", userId: "AQ", userName: "octo", userDisplayName: null, algs: [-7], excludeCredentials: [], timeoutMs: null, conditional: false, prf: null };
 const match = { itemId: ITEM, credentialId: CRED, title: "GitHub", userName: "octo", replaced: false };
 const signed = { type: "passkey_get", credentialId: CRED, authenticatorData: "AA", clientDataJson: "e30", signature: "MEU", userHandle: "AQ" };
 const created = { type: "passkey_create", credentialId: CRED, attestationObject: "oA", clientDataJson: "e30", authenticatorData: "AA", publicKey: "MA", publicKeyAlgorithm: -7 };
@@ -173,7 +173,7 @@ describe("create", () => {
     expect(requests.some((r) => r.type === "passkey_create")).toBe(false);
   });
 
-  it("falls back without ES256", async () => {
+  it("falls back without a supported algorithm", async () => {
     expect(await setup(defaults).h.handleContent(frame(), { type: "wa_create", options: { ...createOpts, algs: [-257] } })).toEqual({ ok: false, outcome: { outcome: "fallback" } });
   });
 
@@ -500,5 +500,99 @@ describe("automatic passkey upgrade", () => {
     expect(requests[0]).toMatchObject({ type: "check_passkey_create", conditional: false });
     await h.handleFrame(1, { type: "pk_save", token: T1, itemId: ITEM });
     expect(requests.at(-1)).toMatchObject({ type: "passkey_create", conditional: false });
+  });
+});
+
+describe("algorithms and PRF (spec 2026-11-14-passkey-parity)", () => {
+  const OUT = "A".repeat(43);
+  const malformed = () => {
+    throw new BridgeError("malformed", "x");
+  };
+
+  it("falls back only when no algorithm is supported, and treats an empty list as ES256", async () => {
+    for (const algs of [[-257], [-48, -49], [-37]]) {
+      expect(await setup(defaults).h.handleContent(frame(), { type: "wa_create", options: { ...createOpts, algs } })).toEqual({ ok: false, outcome: { outcome: "fallback" } });
+    }
+    for (const algs of [[], [-8], [-19, -257], [-9]]) {
+      expect(await setup(defaults).h.handleContent(frame(), { type: "wa_create", options: { ...createOpts, algs } })).toMatchObject({ ok: true, ui: "create" });
+    }
+  });
+
+  it("sends algorithms and prf only when they change something", async () => {
+    const plain = setup(defaults);
+    await plain.h.handleContent(frame(), { type: "wa_create", options: { ...createOpts, algs: [-7, -8] } });
+    await plain.h.handleFrame(1, { type: "pk_save", token: T1, itemId: ITEM });
+    const req = plain.requests.at(-1) as Record<string, unknown>;
+    expect("algorithms" in req || "prf" in req).toBe(false);
+
+    const ed = setup((r) => (r.type === "passkey_create" ? { ...created, publicKeyAlgorithm: -8, prf: { enabled: true, results: { first: OUT } } } : defaults(r)));
+    const prf = { eval: { first: "AQID" } };
+    await ed.h.handleContent(frame(), { type: "wa_create", options: { ...createOpts, algs: [-8, -7], prf } });
+    await ed.h.handleFrame(1, { type: "pk_save", token: T1, itemId: ITEM });
+    expect(ed.requests.at(-1)).toMatchObject({ type: "passkey_create", algorithms: [-8, -7], prf: { eval: { first: "AQID" } } });
+    expect(ed.sent.at(-1)).toMatchObject({
+      outcome: { outcome: "credential", credential: { publicKeyAlgorithm: -8, prf: { enabled: true, results: { first: OUT } } } },
+    });
+
+    const enableOnly = setup(defaults);
+    await enableOnly.h.handleContent(frame(), { type: "wa_create", options: { ...createOpts, prf: { eval: null } } });
+    await enableOnly.h.handleFrame(1, { type: "pk_save", token: T1, itemId: ITEM });
+    expect((enableOnly.requests.at(-1) as Record<string, unknown>).prf).toEqual({});
+    // The desktop answered without prf: the site learns enabled: false.
+    expect(enableOnly.sent.at(-1)).toMatchObject({ outcome: { outcome: "credential", credential: { prf: { enabled: false } } } });
+  });
+
+  it("retries an older desktop without the new fields, but never creates an algorithm the site did not list", async () => {
+    let calls = 0;
+    const old = setup((r) => {
+      if (r.type !== "passkey_create") return defaults(r);
+      calls++;
+      return "prf" in r || "algorithms" in r ? malformed() : created;
+    });
+    await old.h.handleContent(frame(), { type: "wa_create", options: { ...createOpts, algs: [-8, -7], prf: { eval: null } } });
+    expect(await old.h.handleFrame(1, { type: "pk_save", token: T1, itemId: ITEM })).toEqual({ ok: true, value: null });
+    expect(calls).toBe(2);
+    expect(old.sent.at(-1)).toMatchObject({ outcome: { outcome: "credential", credential: { publicKeyAlgorithm: -7, prf: { enabled: false } } } });
+
+    calls = 0;
+    const edOnly = setup((r) => {
+      if (r.type !== "passkey_create") return defaults(r);
+      calls++;
+      return "algorithms" in r ? malformed() : created;
+    });
+    await edOnly.h.handleContent(frame(), { type: "wa_create", options: { ...createOpts, algs: [-8] } });
+    expect((await edOnly.h.handleFrame(1, { type: "pk_save", token: T1, itemId: ITEM })).ok).toBe(false);
+    expect(calls).toBe(1);
+  });
+
+  it("evaluates PRF for the picked credential: its own entry first, then eval", async () => {
+    const OTHER = "AgICAgICAgICAgICAgICAg";
+    const withPrf = setup((r) => (r.type === "passkey_get" ? { ...signed, prf: { first: OUT } } : defaults(r)));
+    const prf = { eval: { first: "AQ" }, byCredential: [{ credentialId: CRED, values: { first: "Ag", second: "Aw" } }] };
+    await withPrf.h.handleContent(frame(), { type: "wa_get", options: { ...getOpts, allowCredentials: [CRED, OTHER], prf } });
+    await withPrf.h.handleFrame(1, { type: "pk_pick", token: T1, itemId: ITEM, credentialId: CRED });
+    expect(withPrf.requests.at(-1)).toMatchObject({ type: "passkey_get", prf: { first: "Ag", second: "Aw" } });
+    expect(withPrf.sent.at(-1)).toMatchObject({ outcome: { outcome: "credential", credential: { type: "get", prf: { results: { first: OUT } } } } });
+
+    const evalOnly = setup(defaults);
+    await evalOnly.h.handleContent(frame(), { type: "wa_get", options: { ...getOpts, prf: { eval: { first: "AQ" }, byCredential: [] } } });
+    await evalOnly.h.handleFrame(1, { type: "pk_pick", token: T1, itemId: ITEM, credentialId: CRED });
+    expect(evalOnly.requests.at(-1)).toMatchObject({ prf: { first: "AQ" } });
+    // A passkey without a PRF secret: the site asked, so `prf: {}`.
+    expect(evalOnly.sent.at(-1)).toMatchObject({ outcome: { outcome: "credential", credential: { prf: {} } } });
+
+    const none = setup(defaults);
+    await none.h.handleContent(frame(), { type: "wa_get", options: getOpts });
+    await none.h.handleFrame(1, { type: "pk_pick", token: T1, itemId: ITEM, credentialId: CRED });
+    expect("prf" in (none.requests.at(-1) as Record<string, unknown>)).toBe(false);
+    const cred = (none.sent.at(-1) as { outcome: { credential: Record<string, unknown> } }).outcome.credential;
+    expect("prf" in cred).toBe(false);
+  });
+
+  it("signs in without PRF on an older desktop", async () => {
+    const old = setup((r) => (r.type === "passkey_get" && "prf" in r ? malformed() : defaults(r)));
+    await old.h.handleContent(frame(), { type: "wa_get", options: { ...getOpts, prf: { eval: { first: "AQ" }, byCredential: [] } } });
+    expect(await old.h.handleFrame(1, { type: "pk_pick", token: T1, itemId: ITEM, credentialId: CRED })).toEqual({ ok: true, value: null });
+    expect(old.sent.at(-1)).toMatchObject({ outcome: { outcome: "credential", credential: { type: "get", prf: {} } } });
   });
 });

@@ -15,11 +15,22 @@
 // wrapper. That grants it nothing: it could call WebAuthn itself, and every
 // decision is made by the desktop against the URL the browser reports.
 
-import { CREDENTIAL_ID_BYTES, MAX_CHALLENGE_BYTES, MAX_RP_ID_BYTES, MAX_USER_HANDLE_BYTES } from "@havenkeys/protocol";
-import { bufferSourceBytes, toArrayBuffer, toB64Url } from "./encoding";
+import {
+  CREDENTIAL_ID_BYTES,
+  MAX_ALGORITHMS,
+  MAX_CHALLENGE_BYTES,
+  MAX_CREDENTIAL_LIST,
+  MAX_PRF_SALT_BYTES,
+  MAX_RP_ID_BYTES,
+  MAX_USER_HANDLE_BYTES,
+  type PrfResults,
+  type PrfValues,
+} from "@havenkeys/protocol";
+import { bufferSourceBytes, fromB64Url, toArrayBuffer, toB64Url } from "./encoding";
 import {
   clampTimeout,
   parsePageResponse,
+  MAX_EVENT_CHARS,
   REQUEST_EVENT,
   RESPONSE_EVENT,
   type AssertedCredential,
@@ -29,10 +40,30 @@ import {
   type GetOptions,
   type Outcome,
   type PageRequest,
+  type PrfCreateOptions,
+  type PrfGetOptions,
 } from "./messages";
 
-/** The capabilities HavenKeys provides as this device's passkey store. */
-const PLATFORM = { passkeyPlatformAuthenticator: true, userVerifyingPlatformAuthenticator: true } as const;
+/**
+ * The capabilities HavenKeys provides as this device's passkey store, and
+ * the extensions it answers (WebAuthn L3 §5.1.7 `getClientCapabilities`):
+ * `credProps` (always `rk: true`) and `prf`.
+ */
+const CAPABILITIES = {
+  passkeyPlatformAuthenticator: true,
+  userVerifyingPlatformAuthenticator: true,
+  "extension:credProps": true,
+  "extension:prf": true,
+} as const;
+
+/**
+ * What synced platform passkeys report (Google Password Manager, iCloud
+ * Keychain): usable on this device ("internal") and from another one through
+ * a phone ("hybrid"). A HavenKeys passkey syncs to the user's other devices,
+ * phone included, like theirs; some sites treat "internal" alone as a
+ * device-bound key. Spec 2026-11-14-passkey-parity §3.
+ */
+const TRANSPORTS = ["hybrid", "internal"] as const;
 
 /** How long to wait for the bridge's acknowledgement. */
 const ACK_MS = 1000;
@@ -101,6 +132,64 @@ export function install(win: Win): void {
     return typeof v === "string" && v.length > 0 && v.length <= MAX_RP_ID_BYTES ? v : undefined;
   }
 
+  /** PRF salts as base64url, each at most MAX_PRF_SALT_BYTES; undefined when unreadable or too long. */
+  function readPrfValues(v: unknown): PrfValues | undefined {
+    if (typeof v !== "object" || v === null) return undefined;
+    const { first, second } = v as { first?: unknown; second?: unknown };
+    const f = bufferSourceBytes(first);
+    if (!f || f.length > MAX_PRF_SALT_BYTES) return undefined;
+    if (second === undefined) return { first: toB64Url(f) };
+    const s = bufferSourceBytes(second);
+    if (!s || s.length > MAX_PRF_SALT_BYTES) return undefined;
+    return { first: toB64Url(f), second: toB64Url(s) };
+  }
+
+  /** `extensions.prf` of a create(): null when absent, undefined when the browser should answer it. */
+  function readCreatePrf(ext: unknown): PrfCreateOptions | null | undefined {
+    const prf = (ext as { prf?: unknown } | undefined)?.prf;
+    if (prf === undefined) return null;
+    if (typeof prf !== "object" || prf === null) return undefined;
+    const { eval: ev, evalByCredential } = prf as { eval?: unknown; evalByCredential?: unknown };
+    // evalByCredential at creation is the browser's NotSupportedError to give.
+    if (evalByCredential !== undefined) return undefined;
+    if (ev === undefined) return { eval: null };
+    const values = readPrfValues(ev);
+    return values ? { eval: values } : undefined;
+  }
+
+  /**
+   * `extensions.prf` of a get(): null when absent, undefined when the
+   * browser should answer it (its own errors: evalByCredential without
+   * allowCredentials, a key that is not base64url or not allowed).
+   * `evalByCredential` entries for IDs that cannot be ours are dropped.
+   */
+  function readGetPrf(ext: unknown, siteAllowed: number, ours: string[]): PrfGetOptions | null | undefined {
+    const prf = (ext as { prf?: unknown } | undefined)?.prf;
+    if (prf === undefined) return null;
+    if (typeof prf !== "object" || prf === null) return undefined;
+    const { eval: ev, evalByCredential } = prf as { eval?: unknown; evalByCredential?: unknown };
+    const values = ev === undefined ? null : readPrfValues(ev);
+    if (values === undefined) return undefined;
+    const byCredential: PrfGetOptions["byCredential"] = [];
+    if (evalByCredential !== undefined) {
+      if (typeof evalByCredential !== "object" || evalByCredential === null) return undefined;
+      const keys = Object.keys(evalByCredential);
+      if (keys.length > 0 && siteAllowed === 0) return undefined;
+      if (keys.length > MAX_CREDENTIAL_LIST) return undefined;
+      for (const key of keys) {
+        const bytes = key ? fromB64Url(key) : null;
+        if (!bytes) return undefined;
+        if (bytes.length !== CREDENTIAL_ID_BYTES) continue;
+        const credentialId = toB64Url(bytes);
+        if (!ours.includes(credentialId)) return undefined;
+        const v = readPrfValues((evalByCredential as Record<string, unknown>)[key]);
+        if (!v) return undefined;
+        if (!byCredential.some((b) => b.credentialId === credentialId)) byCredential.push({ credentialId, values: v });
+      }
+    }
+    return { eval: values, byCredential };
+  }
+
   /** A finite, non-negative timeout, or null — never a value `parsePageRequest` would reject. */
   function readTimeout(v: unknown): number | null {
     return typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null;
@@ -116,10 +205,16 @@ export function install(win: Win): void {
       if (rpId === undefined) return null;
       const exclude = ownIds(pk.excludeCredentials);
       if (!exclude) return null;
-      const algs = (pk.pubKeyCredParams ?? [])
+      const params = pk.pubKeyCredParams ?? [];
+      const algs = params
         .filter((p) => p?.type === "public-key" && Number.isInteger(p.alg))
         .map((p) => p.alg)
-        .slice(0, 16);
+        .slice(0, MAX_ALGORITHMS);
+      // A list without one public-key algorithm is the browser's to refuse
+      // (an empty list means WebAuthn's default, ES256).
+      if (params.length > 0 && algs.length === 0) return null;
+      const prf = readCreatePrf(pk.extensions);
+      if (prf === undefined) return null;
       const display = pk.user.displayName;
       return {
         rpId,
@@ -131,6 +226,7 @@ export function install(win: Win): void {
         excludeCredentials: exclude,
         timeoutMs: readTimeout(pk.timeout),
         conditional,
+        prf,
       };
     } catch {
       return null;
@@ -147,12 +243,15 @@ export function install(win: Win): void {
       if ((pk.allowCredentials?.length ?? 0) > 0 && allow.length === 0) return null;
       const rpId = readRpId(pk.rpId);
       if (rpId === undefined) return null;
+      const prf = readGetPrf(pk.extensions, pk.allowCredentials?.length ?? 0, allow);
+      if (prf === undefined) return null;
       return {
         rpId,
         challenge: toB64Url(challenge),
         allowCredentials: allow,
         conditional,
         timeoutMs: readTimeout(pk.timeout),
+        prf,
       };
     } catch {
       return null;
@@ -172,6 +271,11 @@ export function install(win: Win): void {
         return;
       }
       const modal = !(req.kind === "get" && req.options.conditional);
+      // Larger than the bridge accepts (many PRF salts): the browser's.
+      if (stringify(req).length > MAX_EVENT_CHARS) {
+        resolve({ outcome: "fallback" });
+        return;
+      }
       let acked = false;
       let timer: ReturnType<typeof setTimeout> | null = null;
       const end = (o: Outcome) => {
@@ -217,7 +321,29 @@ export function install(win: Win): void {
    */
   const method = (value: () => unknown): PropertyDescriptor => ({ value, writable: true, configurable: true });
 
-  function credential(c: CreatedCredential | AssertedCredential): Credential {
+  /**
+   * The client extension outputs: only those the site asked for and
+   * HavenKeys produced. `binary`: ArrayBuffers for getClientExtensionResults(),
+   * else base64url for toJSON(). PRF results are secrets the site asked for.
+   */
+  function extensionResults(c: CreatedCredential | AssertedCredential, credProps: boolean, binary: boolean): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
+    if (credProps) out.credProps = { rk: true };
+    const prf = c.prf;
+    if (prf) {
+      const p: Record<string, unknown> = {};
+      if (c.type === "create" && c.prf) p.enabled = c.prf.enabled;
+      const r: PrfResults | undefined = prf.results;
+      if (r) {
+        const val = (s: string) => (binary ? toArrayBuffer(s) : s);
+        p.results = r.second === undefined ? { first: val(r.first) } : { first: val(r.first), second: val(r.second) };
+      }
+      out.prf = p;
+    }
+    return out;
+  }
+
+  function credential(c: CreatedCredential | AssertedCredential, credProps = false): Credential {
     const response =
       c.type === "create"
         ? define(create(AttProto), {
@@ -226,7 +352,7 @@ export function install(win: Win): void {
             getAuthenticatorData: method(() => toArrayBuffer(c.authenticatorData)),
             getPublicKey: method(() => toArrayBuffer(c.publicKey)),
             getPublicKeyAlgorithm: method(() => c.publicKeyAlgorithm),
-            getTransports: method(() => ["internal"]),
+            getTransports: method(() => [...TRANSPORTS]),
           })
         : define(create(AssProto), {
             clientDataJSON: { value: toArrayBuffer(c.clientDataJson), enumerable: true },
@@ -242,7 +368,7 @@ export function install(win: Win): void {
             authenticatorData: c.authenticatorData,
             publicKey: c.publicKey,
             publicKeyAlgorithm: c.publicKeyAlgorithm,
-            transports: ["internal"],
+            transports: [...TRANSPORTS],
           }
         : { clientDataJSON: c.clientDataJson, authenticatorData: c.authenticatorData, signature: c.signature, userHandle: c.userHandle };
     return define(create((PKC as typeof PublicKeyCredential).prototype), {
@@ -251,22 +377,22 @@ export function install(win: Win): void {
       type: { value: "public-key", enumerable: true },
       authenticatorAttachment: { value: "platform", enumerable: true },
       response: { value: response, enumerable: true },
-      getClientExtensionResults: method(() => ({})),
+      getClientExtensionResults: method(() => extensionResults(c, credProps, true)),
       toJSON: method(() => ({
         id: c.credentialId,
         rawId: c.credentialId,
         type: "public-key",
         authenticatorAttachment: "platform",
-        clientExtensionResults: {},
+        clientExtensionResults: extensionResults(c, credProps, false),
         response: responseJson,
       })),
     }) as Credential;
   }
 
-  function settle(o: Outcome, fallback: () => Promise<Credential | null>, signal: AbortSignal | undefined): Promise<Credential | null> {
+  function settle(o: Outcome, fallback: () => Promise<Credential | null>, signal: AbortSignal | undefined, credProps = false): Promise<Credential | null> {
     switch (o.outcome) {
       case "credential":
-        return Promise.resolve(credential(o.credential));
+        return Promise.resolve(credential(o.credential, credProps));
       case "fallback":
         return fallback();
       case "error":
@@ -336,7 +462,14 @@ export function install(win: Win): void {
     const opts = createOptions(pk, conditional);
     if (!opts) return fallback();
     const signal = options?.signal ?? undefined;
-    return ask({ kind: "create", id: newId(), options: opts }, signal).then((o) => settle(o, fallback, signal));
+    // credProps: HavenKeys passkeys are always discoverable (rk: true).
+    let credProps = false;
+    try {
+      credProps = (pk.extensions as { credProps?: unknown } | undefined)?.credProps === true;
+    } catch {
+      // A hostile getter: no output.
+    }
+    return ask({ kind: "create", id: newId(), options: opts }, signal).then((o) => settle(o, fallback, signal, credProps));
   }
 
   function wrappedGet(options?: CredentialRequestOptions): Promise<Credential | null> {
@@ -374,8 +507,8 @@ export function install(win: Win): void {
     Object.defineProperty(PKC, "getClientCapabilities", {
       value: () =>
         origCapabilities().then(
-          (caps) => assign({}, caps, PLATFORM),
-          () => assign({}, PLATFORM),
+          (caps) => assign({}, caps, CAPABILITIES),
+          () => assign({}, CAPABILITIES),
         ),
       writable: true,
       configurable: true,
